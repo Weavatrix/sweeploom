@@ -5,11 +5,13 @@ use sweeploom_dev::{cargo_offers, classify_project, inspect, node_offers, python
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
+use crate::widgets::page_title;
 
 pub fn ui_projects(app: &SweepLoomApp, ui: &mut egui::Ui) {
-    ui.heading("Projects");
-    ui.label(
-        "Source Heat and Artifact Heat are independent. A fresh `target` does not make source HOT.",
+    page_title(
+        ui,
+        "Projects",
+        "Source Heat and Artifact Heat are independent. A fresh target does not make source HOT.",
     );
     let Some(report) = &app.inventory else {
         ui.label("Run Explorer scan to discover project markers.");

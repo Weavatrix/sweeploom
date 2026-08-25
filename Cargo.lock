@@ -2717,6 +2717,7 @@ dependencies = [
  "sweeploom-dev",
  "sweeploom-exec",
  "sweeploom-general",
+ "sweeploom-history",
  "sweeploom-network",
  "sweeploom-platform",
  "sweeploom-process",

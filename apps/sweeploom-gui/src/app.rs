@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, RichText};
 
 use crossbeam_channel::Receiver;
-use sweeploom_core::{LiveSession, Receipt};
+use sweeploom_core::{LiveSession, Receipt, SessionId};
 use sweeploom_dev::ReviewRow;
+use sweeploom_history::HistoryStore;
 use sweeploom_network::enrich_network;
 use sweeploom_platform::UserLocations;
 use sweeploom_process::{ProcessSampler, ProcessSnapshotSet, volume_space};
@@ -17,6 +18,8 @@ use sweeploom_storage::InventoryReport;
 use crate::nav::Nav;
 use crate::scan_job::{self, ScanOutcome};
 use crate::screens;
+use crate::sort::Sort;
+use crate::theme;
 use crate::widgets::placeholder;
 
 /// Live UI application.
@@ -26,8 +29,13 @@ pub struct SweepLoomApp {
     last_sample: Instant,
     pub(crate) snapshot: Option<ProcessSnapshotSet>,
     pub(crate) sessions: Vec<LiveSession>,
-    pub(crate) selected_session: Option<usize>,
+    pub(crate) selected_session: Option<SessionId>,
     pub(crate) group_raw: bool,
+    pub(crate) session_sort: Sort,
+    pub(crate) review_sort: Sort,
+    pub(crate) explorer_sort: Sort,
+    pub(crate) process_sort: Sort,
+    pub(crate) history: HistoryStore,
     pub(crate) inventory: Option<InventoryReport>,
     pub(crate) inventory_error: Option<String>,
     pub(crate) scan_root: String,
@@ -45,10 +53,7 @@ pub struct SweepLoomApp {
 impl SweepLoomApp {
     /// Construct and take the first process sample.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
-        let mut style = (*cc.egui_ctx.style()).clone();
-        style.spacing.item_spacing = egui::vec2(8.0, 6.0);
-        cc.egui_ctx.set_style(style);
+        theme::apply(&cc.egui_ctx);
         let locations = UserLocations::current();
         let mut sampler = ProcessSampler::new();
         let (snapshot, sessions) = sample_with(&mut sampler, &locations);
@@ -60,6 +65,11 @@ impl SweepLoomApp {
             sessions,
             selected_session: None,
             group_raw: false,
+            session_sort: Sort::size_desc(),
+            review_sort: Sort::size_desc(),
+            explorer_sort: Sort::size_desc(),
+            process_sort: Sort::size_desc(),
+            history: HistoryStore::default(),
             inventory: None,
             inventory_error: None,
             scan_root: locations.home.display().to_string(),
@@ -73,6 +83,10 @@ impl SweepLoomApp {
             scanning: false,
             scan_rx: None,
         };
+        if let Some(snapshot) = &app.snapshot {
+            app.history
+                .record(&snapshot.processes, snapshot.captured_at);
+        }
         app.rebuild_review();
         app
     }
@@ -84,6 +98,8 @@ impl SweepLoomApp {
         let mut snapshot = self.sampler.refresh(Duration::ZERO);
         snapshot.resolve_parents();
         let _ = enrich_network(&mut snapshot.processes);
+        self.history
+            .record(&snapshot.processes, snapshot.captured_at);
         self.sessions = sessions_from_snapshot(&mut snapshot, &home_roots(&self.locations));
         self.snapshot = Some(snapshot);
         self.last_sample = Instant::now();
@@ -160,24 +176,32 @@ fn home_roots(locations: &UserLocations) -> AttributionRoots {
 
 fn draw_chrome(ctx: &egui::Context, app: &mut SweepLoomApp) {
     egui::TopBottomPanel::top("header").show(ctx, |ui| {
-        ui.add_space(6.0);
+        ui.add_space(10.0);
         ui.horizontal(|ui| {
-            ui.heading(RichText::new("SweepLoom").strong());
-            ui.label(RichText::new("by Weavatrix").weak());
+            ui.heading(RichText::new("SweepLoom").size(26.0).strong());
+            ui.label(
+                RichText::new("by Weavatrix")
+                    .size(15.0)
+                    .color(egui::Color32::from_rgb(168, 174, 186)),
+            );
             ui.separator();
-            ui.label("Reclaim your workstation without losing your workspace");
+            ui.label(
+                RichText::new("Reclaim your workstation without losing your workspace").size(16.0),
+            );
         });
-        ui.add_space(4.0);
+        ui.add_space(8.0);
     });
     egui::SidePanel::left("nav")
         .resizable(false)
-        .exact_width(168.0)
+        .exact_width(196.0)
         .show(ctx, |ui| {
-            ui.add_space(8.0);
+            ui.add_space(12.0);
             for nav in Nav::ALL {
-                if ui.selectable_label(app.nav == nav, nav.label()).clicked() {
+                let label = RichText::new(nav.label()).size(17.0);
+                if ui.selectable_label(app.nav == nav, label).clicked() {
                     app.nav = nav;
                 }
+                ui.add_space(2.0);
             }
         });
     egui::CentralPanel::default().show(ctx, |ui| draw_page(app, ui));
@@ -205,11 +229,7 @@ fn draw_page(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             "Rules",
             "Declarative TOML cleaners. No shell from downloaded rules.",
         ),
-        Nav::History => placeholder(
-            ui,
-            "History",
-            "Observed history only — SweepLoom does not invent activity from before it started.",
-        ),
+        Nav::History => screens::ui_history(app, ui),
         Nav::Settings => screens::ui_settings(app, ui),
     }
 }

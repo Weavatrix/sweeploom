@@ -2,7 +2,11 @@
 
 #![cfg_attr(not(test), warn(missing_docs))]
 
+mod store;
+
 use sweeploom_core::ProcessKey;
+
+pub use store::HistoryStore;
 
 /// One sample in a ring.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -59,6 +63,18 @@ impl<T: Copy> Ring<T> {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.len == 0
+    }
+
+    /// Samples oldest-first. Empty when SweepLoom has not observed this key.
+    #[must_use]
+    pub fn chrono(&self) -> Vec<T> {
+        if self.slots.len() < self.cap {
+            return self.slots.clone();
+        }
+        let mut out = Vec::with_capacity(self.cap);
+        out.extend_from_slice(&self.slots[self.next..]);
+        out.extend_from_slice(&self.slots[..self.next]);
+        out
     }
 }
 

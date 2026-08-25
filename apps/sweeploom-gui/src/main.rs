@@ -5,6 +5,8 @@ mod format;
 mod nav;
 mod scan_job;
 mod screens;
+mod sort;
+mod theme;
 mod widgets;
 
 use eframe::egui;

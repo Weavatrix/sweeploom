@@ -7,14 +7,14 @@ use sweeploom_general::collect_offers;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
+use crate::sort::{Col, header_button};
+use crate::widgets::page_title;
 
 pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    ui.heading("Storage review");
-    ui.label(
-        RichText::new(
-            "SAFE generated/temp can be pre-selected. Downloads stay REVIEW. BLOCKED cannot be cleaned.",
-        )
-        .weak(),
+    page_title(
+        ui,
+        "Storage review",
+        "SAFE generated/temp can be pre-selected. Downloads stay REVIEW. BLOCKED cannot be cleaned.",
     );
     ui.horizontal(|ui| {
         if ui.button("Rebuild review").clicked() {
@@ -59,10 +59,37 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         app.review.len(),
         format_bytes(selected)
     ));
-    let count = app.review.len();
-    for index in 0..count {
+    ui.horizontal(|ui| {
+        ui.label("Sort");
+        header_button(ui, &mut app.review_sort, Col::Name, "Name");
+        header_button(ui, &mut app.review_sort, Col::Size, "Size");
+        header_button(ui, &mut app.review_sort, Col::Status, "Status");
+    });
+    let order = review_order(app);
+    for index in order {
         draw_row(app, ui, index);
     }
+}
+
+fn review_order(app: &SweepLoomApp) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..app.review.len()).collect();
+    order.sort_by(|&left, &right| {
+        let a = &app.review[left];
+        let b = &app.review[right];
+        match app.review_sort.col {
+            Col::Name => a.title.cmp(&b.title),
+            Col::Status => a
+                .candidate
+                .safety
+                .is_blocked()
+                .cmp(&b.candidate.safety.is_blocked()),
+            _ => a.candidate.logical_bytes.cmp(&b.candidate.logical_bytes),
+        }
+    });
+    if app.review_sort.desc {
+        order.reverse();
+    }
+    order
 }
 
 fn draw_row(app: &mut SweepLoomApp, ui: &mut egui::Ui, index: usize) {
@@ -84,13 +111,13 @@ fn draw_row(app: &mut SweepLoomApp, ui: &mut egui::Ui, index: usize) {
             ui.add_enabled(false, egui::Checkbox::new(&mut off, ""));
             ui.colored_label(
                 Color32::from_rgb(240, 160, 80),
-                format!("{title}  {size}  rebuild={rebuild:?}{blocker}"),
+                RichText::new(format!("{title}  {size}  rebuild={rebuild:?}{blocker}")).size(16.0),
             );
         } else {
             if ui.checkbox(&mut selected, "").changed() {
                 app.review[index].selected = selected;
             }
-            ui.label(format!("{title}  {size}  rebuild={rebuild:?}"));
+            ui.label(RichText::new(format!("{title}  {size}  rebuild={rebuild:?}")).size(16.0));
         }
     });
 }

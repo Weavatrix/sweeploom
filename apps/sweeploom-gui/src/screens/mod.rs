@@ -1,5 +1,6 @@
 //! One module per primary surface.
 
+mod history;
 mod overview;
 mod projects;
 mod review;
@@ -8,6 +9,7 @@ mod sessions;
 mod settings;
 mod storage;
 
+pub use history::ui_history;
 pub use overview::ui_overview;
 pub use projects::ui_projects;
 pub use review::ui_review;

@@ -5,11 +5,14 @@ use sweeploom_core::Recommendation;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::widgets::metric_card;
+use crate::widgets::{metric_card, page_title};
 
 pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
-    ui.heading("Overview");
-    ui.add_space(8.0);
+    page_title(
+        ui,
+        "Overview",
+        "Live pressure now. History starts the moment SweepLoom opens.",
+    );
     let memory = app
         .snapshot
         .as_ref()
@@ -65,7 +68,7 @@ pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
         }
     });
     ui.add_space(16.0);
-    ui.label(RichText::new("Top opportunities").strong());
+    ui.label(RichText::new("Top opportunities").size(18.0).strong());
     ui.add_space(6.0);
     draw_opportunities(app, ui);
 }
