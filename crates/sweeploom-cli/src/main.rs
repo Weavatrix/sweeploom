@@ -3,6 +3,7 @@
 mod bytes;
 mod cmd_browser;
 mod cmd_clean;
+mod cmd_companion;
 mod cmd_projects;
 mod cmd_sessions;
 
@@ -20,6 +21,7 @@ fn main() {
     match cmd.as_str() {
         "sessions" => cmd_sessions::run(args),
         "browser" => cmd_browser::run(),
+        "companion-host" => cmd_companion::run(),
         "scan" => cmd_scan(&arg_root(args.next())),
         "projects" => cmd_projects::run(&arg_root(args.next())),
         "clean" => {
@@ -50,6 +52,7 @@ SweepLoom — reclaim your workstation without losing your workspace
 Usage:
   sweeploom sessions [--free-ram GB] [--reduce-cpu PERCENT]
   sweeploom browser
+  sweeploom companion-host
   sweeploom scan [path]
   sweeploom projects [path]
   sweeploom clean [path] [--apply]

@@ -1,8 +1,8 @@
 //! `sweeploom browser` — process-level pressure, no fake tab counts.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use sweeploom_browser::BrowserPressure;
+use sweeploom_browser::{BrowserPressure, load_snapshot};
 use sweeploom_network::enrich_network;
 use sweeploom_platform::UserLocations;
 use sweeploom_process::ProcessSampler;
@@ -21,7 +21,16 @@ pub fn run() {
         current_project: None,
     };
     let sessions = sessions_from_snapshot(&mut snapshot, &roots);
-    let pressure = BrowserPressure::from_live(&sessions, &snapshot.processes);
+    let mut pressure = BrowserPressure::from_live(&sessions, &snapshot.processes);
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|item| u64::try_from(item.as_millis()).unwrap_or(0))
+        .unwrap_or(0);
+    let stored = load_snapshot(&locations.app_data)
+        .ok()
+        .flatten()
+        .filter(|item| item.is_fresh(now_ms));
+    pressure.companion_connected = stored.is_some();
     println!(
         "companion={} hosts={} rss={}",
         if pressure.companion_connected {
@@ -32,6 +41,14 @@ pub fn run() {
         pressure.hosts.len(),
         format_bytes(pressure.rss_bytes())
     );
+    match stored {
+        Some(item) => println!(
+            "tabs={} discard_suggestions={}",
+            item.tabs.tabs.len(),
+            item.tabs.discard_count(now_ms)
+        ),
+        None => println!("tab lastAccessed unavailable without the companion; not shown as zero"),
+    }
     if pressure.hosts.is_empty() {
         println!("no browser process trees");
         return;
@@ -46,5 +63,4 @@ pub fn run() {
             host.cpu_percent
         );
     }
-    println!("tab lastAccessed unavailable without the companion; not shown as zero");
 }

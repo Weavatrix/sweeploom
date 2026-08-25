@@ -52,13 +52,24 @@ impl TabSnapshot {
     }
 }
 
-/// Tabs payload from the extension. Absent until native messaging is wired.
+/// Tabs payload from the extension.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompanionTabs {
     /// Tabs in this browser.
     pub tabs: Vec<TabSnapshot>,
     /// Current tab, if any.
     pub active_tab_id: Option<i64>,
+}
+
+impl CompanionTabs {
+    /// How many tabs the default policy would Discard.
+    #[must_use]
+    pub fn discard_count(&self, now_ms: u64) -> usize {
+        self.tabs
+            .iter()
+            .filter(|tab| tab.suggested_action(now_ms, self.active_tab_id) == TabAction::Discard)
+            .count()
+    }
 }
 
 #[cfg(test)]
@@ -83,5 +94,24 @@ mod tests {
             tab.suggested_action(0, None),
             crate::action::TabAction::Keep
         );
+    }
+
+    #[test]
+    fn discard_count_skips_protected() {
+        let tabs = CompanionTabs {
+            tabs: vec![TabSnapshot {
+                tab_id: 1,
+                window_id: 1,
+                title: "docs".into(),
+                url: "https://example.com".into(),
+                last_accessed_ms: Some(0),
+                pinned: false,
+                audible: false,
+                discarded: false,
+                incognito: false,
+            }],
+            active_tab_id: None,
+        };
+        assert_eq!(tabs.discard_count(14 * 24 * 60 * 60 * 1000), 1);
     }
 }
