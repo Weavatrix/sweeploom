@@ -6,7 +6,7 @@ use std::time::SystemTime;
 
 const MAX_FILES: u32 = 12_000;
 
-/// Sum of `metadata.len()` under `root`. Stops after [`MAX_FILES`] files.
+/// Sum of `metadata.len()` under `root`. Stops after 12_000 files.
 #[must_use]
 pub fn dir_logical_bytes(root: &Path) -> u64 {
     let mut total = 0_u64;
