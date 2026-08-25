@@ -40,47 +40,78 @@ pub struct CargoOffer {
 /// Discover Cargo generated-output offers for one project.
 #[must_use]
 pub fn cargo_offers(project: &Path, processes: &[ProcessSnapshot]) -> Vec<CargoOffer> {
-    let Some(target) = cargo_target_dir(project) else {
-        return Vec::new();
-    };
-    if !target.is_dir() {
-        return Vec::new();
-    }
     let blocker = cargo_blocker(project, processes);
     let blocked = blocker.is_some();
     let mut offers = Vec::new();
+    for target in cargo_target_dirs(project) {
+        if !target.is_dir() {
+            continue;
+        }
+        push_target_offers(&mut offers, project, &target, blocked, blocker);
+    }
+    offers
+}
+
+impl CargoTrim {
+    /// Short UI label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Light => "incremental",
+            Self::Balanced => "debug",
+            Self::Full => "full target",
+        }
+    }
+}
+
+fn cargo_target_dirs(project: &Path) -> Vec<PathBuf> {
+    let Some(primary) =
+        resolve_target_dir(project, std::env::var_os("CARGO_TARGET_DIR").as_deref())
+    else {
+        return Vec::new();
+    };
+    let local = project.join("target");
+    if primary == local {
+        vec![primary]
+    } else {
+        vec![primary, local]
+    }
+}
+
+fn push_target_offers(
+    offers: &mut Vec<CargoOffer>,
+    project: &Path,
+    target: &Path,
+    blocked: bool,
+    blocker: Option<Blocker>,
+) {
     push_offer(
-        &mut offers,
+        offers,
         project,
         &target.join("incremental"),
         CargoTrim::Light,
         RebuildCost::Low,
         blocked,
-        blocker.clone(),
+        blocker,
     );
     push_offer(
-        &mut offers,
+        offers,
         project,
         &target.join("debug"),
         CargoTrim::Balanced,
         RebuildCost::Medium,
         blocked,
-        blocker.clone(),
+        blocker,
     );
     push_offer(
-        &mut offers,
+        offers,
         project,
-        &target,
+        target,
         CargoTrim::Full,
         RebuildCost::High,
         blocked,
         blocker,
     );
-    offers
-}
-
-fn cargo_target_dir(project: &Path) -> Option<PathBuf> {
-    resolve_target_dir(project, std::env::var_os("CARGO_TARGET_DIR").as_deref())
 }
 
 fn resolve_target_dir(project: &Path, custom: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
@@ -112,7 +143,7 @@ fn cargo_blocker(project: &Path, processes: &[ProcessSnapshot]) -> Option<Blocke
     if matches!(git, GitSafety::Unknown) {
         return Some(Blocker::UnknownGitState);
     }
-    git.assessment().blockers.first().cloned()
+    git.assessment().blockers.first().copied()
 }
 
 fn process_blocks(process: &ProcessSnapshot, project: &Path) -> bool {

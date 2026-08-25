@@ -1,8 +1,8 @@
 //! Application state. Screens live in `screens/`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use eframe::egui::{self, ViewportCommand};
 
@@ -14,7 +14,6 @@ use sweeploom_history::HistoryStore;
 use sweeploom_network::enrich_network;
 use sweeploom_platform::UserLocations;
 use sweeploom_process::{ProcessSampler, ProcessSnapshotSet, volume_space};
-use sweeploom_session::sessions_from_snapshot;
 use sweeploom_storage::InventoryReport;
 
 use crate::chrome;
@@ -58,6 +57,8 @@ pub struct SweepLoomApp {
     pub(crate) confirm_planned: bool,
     pub(crate) confirm_browser_discard: bool,
     pub(crate) current_project: Option<ProjectId>,
+    pub(crate) project_roots: Vec<PathBuf>,
+    pub(crate) last_busy: HashMap<ProcessKey, SystemTime>,
     pub(crate) volumes: Vec<(PathBuf, u64, u64)>,
     pub(crate) scanning: bool,
     pub(crate) ai_offers: Option<Vec<AiOffer>>,
@@ -114,6 +115,8 @@ impl SweepLoomApp {
             confirm_planned: false,
             confirm_browser_discard: false,
             current_project: std::env::current_dir().ok().map(ProjectId),
+            project_roots: Vec::new(),
+            last_busy: HashMap::new(),
             volumes: volume_space(),
             scanning: false,
             ai_offers: None,
@@ -124,10 +127,7 @@ impl SweepLoomApp {
             start_hidden,
             scan_rx: None,
         };
-        if let Some(snapshot) = &app.snapshot {
-            app.history
-                .record(&snapshot.processes, snapshot.captured_at);
-        }
+        live::stamp_first(&mut app);
         app.rebuild_review();
         app
     }
@@ -162,6 +162,7 @@ impl SweepLoomApp {
         self.sessions.clear();
         self.planned_keys.clear();
         self.selected_session = None;
+        self.last_busy.clear();
         self.sampler.enter_quiet();
         ctx.send_viewport_cmd(ViewportCommand::CancelClose);
         ctx.send_viewport_cmd(ViewportCommand::Visible(false));
@@ -181,7 +182,13 @@ impl SweepLoomApp {
         self.history
             .record(&snapshot.processes, snapshot.captured_at);
         let roots = live::session_roots(self);
-        self.sessions = sessions_from_snapshot(&mut snapshot, &roots);
+        live::rescore(
+            &mut self.sessions,
+            &mut self.last_busy,
+            &mut snapshot,
+            self.current_project.as_ref(),
+            &roots,
+        );
         let live_keys: HashSet<ProcessKey> = self
             .sessions
             .iter()
@@ -220,6 +227,7 @@ impl SweepLoomApp {
         match outcome {
             Ok((report, rows)) => {
                 let n = rows.len();
+                self.project_roots = report.projects.clone();
                 self.inventory = Some(report);
                 self.review = rows;
                 self.inventory_error = None;

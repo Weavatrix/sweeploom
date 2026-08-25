@@ -10,8 +10,6 @@ use sweeploom_core::{
 /// Inputs the scorer is allowed to consider.
 #[derive(Clone, Copy, Debug)]
 pub struct ForgottenInput {
-    /// Session age.
-    pub age: Duration,
     /// Observed idle duration, if known.
     pub idle: Option<Duration>,
     /// Combined RSS.
@@ -26,8 +24,8 @@ pub struct ForgottenInput {
     pub system_critical: bool,
     /// Known helper / agent / dev-server.
     pub known_dev: bool,
-    /// Looks orphaned (no living user parent).
-    pub orphan: bool,
+    /// Disk read/write was observed in this sample.
+    pub disk_busy: bool,
 }
 
 /// Score a session in place and return it.
@@ -52,10 +50,6 @@ pub fn score_session(
         return scored;
     }
 
-    let age = scored
-        .started_at
-        .and_then(|start| now.duration_since(start).ok())
-        .unwrap_or_default();
     let idle = scored
         .observed_last_activity
         .and_then(|last| now.duration_since(last).ok());
@@ -63,14 +57,17 @@ pub fn score_session(
         (Some(current), Some(project)) => current == project,
         _ => false,
     };
+    let network_bytes = scored.network.byte_rate_available
+        && (scored.network.observed_rx_bytes + scored.network.observed_tx_bytes > 0);
+    let network_fresh = match idle {
+        None => true,
+        Some(idle) => idle < Duration::from_mins_compat(5),
+    };
     let input = ForgottenInput {
-        age,
         idle,
         rss_bytes: scored.rss_bytes,
         cpu_percent: scored.cpu_percent,
-        network_active: scored.network.byte_rate_available
-            && (scored.network.observed_rx_bytes + scored.network.observed_tx_bytes > 0)
-            && idle.is_some_and(|item| item < Duration::from_mins_compat(5)),
+        network_active: network_bytes && network_fresh,
         is_current_project: is_current,
         system_critical: scored.safety.terminate_disabled,
         known_dev: matches!(
@@ -80,8 +77,10 @@ pub fn score_session(
                 | SessionKind::Mcp
                 | SessionKind::DevServer
                 | SessionKind::Build
+                | SessionKind::LanguageServer
+                | SessionKind::TestRunner
         ),
-        orphan: scored.processes.len() == 1 && scored.kind != SessionKind::Unknown,
+        disk_busy: scored.disk.read_bytes + scored.disk.write_bytes > 0,
     };
     apply_policy(&mut scored, input);
     if scored.kind == SessionKind::Browser {
@@ -120,18 +119,25 @@ fn apply_policy(session: &mut LiveSession, input: ForgottenInput) {
         session.recommendation.recommendation = Recommendation::Keep;
         return;
     }
+    if input.cpu_percent > 0.5 || input.disk_busy {
+        session.activity = SessionActivity::Active;
+        session.recommendation.recommendation = Recommendation::Keep;
+        return;
+    }
     if input.network_active {
         session.activity = SessionActivity::NetworkActive;
         session.recommendation.recommendation = Recommendation::Keep;
         return;
     }
-
-    let idle = input.idle.unwrap_or(input.age);
+    let Some(idle) = input.idle else {
+        session.activity = SessionActivity::BackgroundActive;
+        session.recommendation.recommendation = Recommendation::Keep;
+        return;
+    };
     let idle_hours = idle.as_secs() / 3600;
-    if input.orphan && idle > Duration::from_secs(30 * 60) && input.known_dev {
-        session.activity = SessionActivity::LikelyForgotten;
-        session.recommendation.recommendation = Recommendation::StronglyRecommended;
-        session.recommendation.estimated_reclaimable_rss = estimate_reclaim(input.rss_bytes);
+    if input.known_dev && idle < Duration::from_secs(2 * 3600) {
+        session.activity = SessionActivity::BackgroundActive;
+        session.recommendation.recommendation = Recommendation::Keep;
         return;
     }
     if idle_hours >= 2 && input.rss_bytes > 1_000_000_000 {
@@ -220,5 +226,34 @@ mod tests {
         let scored = score_session(&session(8_000_000_000, SessionKind::Browser), now, None);
         assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
         assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
+    }
+
+    #[test]
+    fn unknown_idle_claude_is_keep() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
+        let mut value = session(2_000_000_000, SessionKind::ClaudeCode);
+        value.observed_last_activity = None;
+        let scored = score_session(&value, now, None);
+        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
+    }
+
+    #[test]
+    fn claude_with_cpu_is_keep() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
+        let mut value = session(2_000_000_000, SessionKind::ClaudeCode);
+        value.cpu_percent = 3.0;
+        let scored = score_session(&value, now, None);
+        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
+        assert_eq!(scored.activity, SessionActivity::Active);
+    }
+
+    #[test]
+    fn claude_with_disk_is_keep() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
+        let mut value = session(2_000_000_000, SessionKind::ClaudeCode);
+        value.disk.write_bytes = 4096;
+        let scored = score_session(&value, now, None);
+        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
+        assert_eq!(scored.activity, SessionActivity::Active);
     }
 }

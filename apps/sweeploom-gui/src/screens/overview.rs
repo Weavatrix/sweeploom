@@ -6,9 +6,10 @@ use sweeploom_core::Recommendation;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::widgets::{list_row, metric_card, page_title};
+use crate::nav::Nav;
+use crate::widgets::{list_row_at, metric_card, page_title};
 
-pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
+pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Overview",
@@ -46,7 +47,7 @@ pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
         .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
         .map(|session| session.cpu_percent)
         .sum();
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         metric_card(
             ui,
             "MEMORY",
@@ -55,21 +56,27 @@ pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
         );
         metric_card(
             ui,
-            "RECLAIMABLE SESSIONS",
+            "IDLE SESSIONS",
             &format_bytes(reclaimable),
-            &format!("{stale} stale candidates"),
+            &format!("{stale} idle long enough to consider"),
         );
         metric_card(
             ui,
             "CPU",
             &format!("{cpu:.0}%"),
-            &format!("{stale_cpu:.0}% in forgotten sessions"),
+            &format!("{stale_cpu:.0}% in idle sessions"),
         );
-        let disk = app.inventory.as_ref().map_or_else(
-            || "scan Explorer".to_owned(),
-            |item| format_bytes(item.tree.logical_bytes),
-        );
-        metric_card(ui, "SCANNED DISK", &disk, "Folder Inspector");
+        let disk = if app.review.is_empty() {
+            "open Review".to_owned()
+        } else {
+            format_bytes(
+                app.review
+                    .iter()
+                    .map(|row| row.candidate.logical_bytes)
+                    .sum(),
+            )
+        };
+        metric_card(ui, "REVIEW DISK", &disk, "Generated + temp");
         if let Some((mount, total, avail)) = app.volumes.first() {
             metric_card(
                 ui,
@@ -85,22 +92,26 @@ pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
     draw_opportunities(app, ui);
 }
 
-fn draw_opportunities(app: &SweepLoomApp, ui: &mut egui::Ui) {
+fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut shown = 0_usize;
-    for session in &app.sessions {
-        if session.recommendation.recommendation == Recommendation::Keep {
-            continue;
-        }
+    let sessions: Vec<_> = app
+        .sessions
+        .iter()
+        .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
+        .take(6)
+        .map(|session| {
+            (
+                session.label().to_owned(),
+                format_bytes(session.rss_bytes),
+                session.recommendation.recommendation.label().to_owned(),
+            )
+        })
+        .collect();
+    for (label, rss, rec) in sessions {
         shown += 1;
-        if shown > 8 {
-            break;
+        if list_row_at(ui, &label, &rss, &rec).clicked() {
+            app.nav = Nav::Sessions;
         }
-        list_row(
-            ui,
-            session.label(),
-            &format_bytes(session.rss_bytes),
-            &format!("{:?}", session.recommendation.recommendation),
-        );
     }
     let processes = app
         .snapshot
@@ -110,14 +121,35 @@ fn draw_opportunities(app: &SweepLoomApp, ui: &mut egui::Ui) {
     let pressure = BrowserPressure::from_live(&app.sessions, processes);
     if pressure.rss_bytes() > 0 && shown < 8 {
         shown += 1;
-        list_row(
+        if list_row_at(
             ui,
             "Browser",
             &format_bytes(pressure.rss_bytes()),
             "companion needed for tab discard",
-        );
+        )
+        .clicked()
+        {
+            app.nav = Nav::Browser;
+        }
+    }
+    let review: Vec<_> = app
+        .review
+        .iter()
+        .take(4)
+        .map(|row| {
+            (
+                crate::format::row_caption(&row.title),
+                format_bytes(row.candidate.logical_bytes),
+            )
+        })
+        .collect();
+    for (name, size) in review {
+        shown += 1;
+        if list_row_at(ui, &name, &size, "disk").clicked() {
+            app.nav = Nav::Storage;
+        }
     }
     if shown == 0 {
-        ui.label("No forgotten-session candidates in this sample. Keep watching.");
+        ui.label("No idle sessions. Open Review to list Cargo target / node_modules without an Explorer scan.");
     }
 }

@@ -17,7 +17,7 @@ pub enum SafetyLevel {
 }
 
 /// Why a candidate cannot be auto-acted on.
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Blocker {
     /// A live process has cwd or a command path inside the candidate.
@@ -50,6 +50,29 @@ pub enum Blocker {
     SystemCriticalProcess,
 }
 
+impl Blocker {
+    /// Short UI label. Avoids Debug truncation.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ActiveProcess => "active process",
+            Self::RecentWrite => "recent write",
+            Self::DirtyTrackedFiles => "uncommitted git",
+            Self::UntrackedFiles => "untracked files",
+            Self::UnknownGitState => "git unknown",
+            Self::SymlinkEscape => "symlink escape",
+            Self::ReparsePointEscape => "reparse point",
+            Self::PermissionBoundary => "permission boundary",
+            Self::MountedFilesystemBoundary => "other volume",
+            Self::CandidateChangedAfterPlan => "changed after plan",
+            Self::ProtectedPath => "protected path",
+            Self::UserPinned => "pinned",
+            Self::SharedBuildDirectoryInUse => "shared build in use",
+            Self::SystemCriticalProcess => "system process",
+        }
+    }
+}
+
 /// Non-blocking caution attached to a candidate or session.
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -78,6 +101,20 @@ pub struct SafetyAssessment {
     pub warnings: Vec<Warning>,
     /// How confident the assessment is.
     pub confidence: crate::evidence::Confidence,
+}
+
+impl SafetyLevel {
+    /// Short UI label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Safe => "Safe",
+            Self::LowRisk => "Low risk",
+            Self::Review => "Review",
+            Self::Dangerous => "Dangerous",
+            Self::Blocked => "Blocked",
+        }
+    }
 }
 
 impl SafetyAssessment {

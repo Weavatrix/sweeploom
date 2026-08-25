@@ -6,7 +6,7 @@ use super::session_plan;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::sort::{Col, Sort, header_cell};
-use crate::widgets::page_title;
+use crate::widgets::{page_title, table_scroll_height};
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use sweeploom_core::LiveSession;
@@ -15,7 +15,7 @@ pub fn ui_sessions(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Sessions",
-        "Logical sessions sit on top of the OS process tree. Terminate is never automatic.",
+        "Logical sessions sit on top of the OS process tree. Keep means leave it running. Idle is only after known quiet time, not uptime.",
     );
     session_plan::draw(app, ui);
     ui.checkbox(&mut app.group_raw, "Raw process tree");
@@ -33,10 +33,13 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut planned = std::mem::take(&mut app.planned_keys);
     let order = session_order(&app.sessions, sort);
     let row_count = order.len();
+    let height = table_scroll_height(ui);
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click())
+        .min_scrolled_height(height)
+        .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::auto().at_least(36.0))
         .column(Column::auto().at_least(180.0))
@@ -53,7 +56,7 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             header.col(|ui| header_cell(ui, &mut sort, Col::Procs, "Procs"));
             header.col(|ui| header_cell(ui, &mut sort, Col::Size, "RSS"));
             header.col(|ui| header_cell(ui, &mut sort, Col::Cpu, "CPU"));
-            header.col(|ui| header_cell(ui, &mut sort, Col::Status, "Recommendation"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Status, "Status"));
             header.col(|ui| {
                 ui.strong("Project");
             });
@@ -99,8 +102,10 @@ fn compare_session(left: &LiveSession, right: &LiveSession, sort: Sort) -> std::
             .cpu_percent
             .partial_cmp(&right.cpu_percent)
             .unwrap_or(std::cmp::Ordering::Equal),
-        Col::Status => format!("{:?}", left.recommendation.recommendation)
-            .cmp(&format!("{:?}", right.recommendation.recommendation)),
+        Col::Status => left
+            .recommendation
+            .recommendation
+            .cmp(&right.recommendation.recommendation),
         Col::Size => left.rss_bytes.cmp(&right.rss_bytes),
     }
 }
@@ -122,18 +127,19 @@ fn fill_session_row(
     let procs = session.processes.len().to_string();
     let rss = format_bytes(session.rss_bytes);
     let cpu = format!("{:.1}%", session.cpu_percent);
-    let rec = format!("{:?}", session.recommendation.recommendation);
+    let rec = session.recommendation.recommendation.label().to_owned();
     let project = session
         .project
         .as_ref()
         .map(|item| item.0.display().to_string())
         .unwrap_or_else(|| "Unknown".to_owned());
+    row.set_selected(is_selected);
     row.col(|ui| {
         session_plan::checkbox(ui, session, planned);
     });
     row.col(|ui| {
         if ui
-            .selectable_label(is_selected, RichText::new(label).size(16.0))
+            .add(egui::Label::new(RichText::new(label).size(16.0)).sense(egui::Sense::click()))
             .clicked()
         {
             *selected = Some(id);
@@ -178,9 +184,12 @@ fn ui_process_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         order.reverse();
     }
     let rows = order.len();
+    let height = table_scroll_height(ui);
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
+        .min_scrolled_height(height)
+        .max_scroll_height(height)
         .column(Column::auto().at_least(80.0))
         .column(Column::auto().at_least(180.0))
         .column(Column::auto().at_least(100.0))
@@ -225,11 +234,11 @@ fn ui_process_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
 fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
     ui.label(RichText::new(session.label()).size(20.0).strong());
     ui.label(format!(
-        "RAM {} · CPU {:.1}% · processes {} · {:?}",
+        "RAM {} · CPU {:.1}% · processes {} · {}",
         format_bytes(session.rss_bytes),
         session.cpu_percent,
         session.processes.len(),
-        session.activity
+        session.activity.label()
     ));
     session_observe::draw(app, ui, session);
     if session.safety.terminate_disabled {

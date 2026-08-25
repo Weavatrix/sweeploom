@@ -13,7 +13,7 @@ pub fn ui_browser(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     page_title(
         ui,
         "Browser",
-        "Process trees are always visible. Tab lastAccessed appears only while the companion is fresh.",
+        "Chrome/Edge process trees. Tab lastAccessed needs the companion. npm/node_modules are on Review and Projects, not here.",
     );
     let processes = app
         .snapshot

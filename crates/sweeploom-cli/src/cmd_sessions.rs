@@ -53,14 +53,14 @@ pub fn run(args: impl Iterator<Item = String>) {
             "[ ]"
         };
         println!(
-            "{mark} {:<18} proc={:<3} rss={:<10} cpu={:>5.1}%  disk={}/{}  rec={:?}  {}",
+            "{mark} {:<18} proc={:<3} rss={:<10} cpu={:>5.1}%  disk={}/{}  rec={:<16}  {}",
             session.label(),
             session.processes.len(),
             format_bytes(session.rss_bytes),
             session.cpu_percent,
             format_bytes(session.disk.read_bytes),
             format_bytes(session.disk.write_bytes),
-            session.recommendation.recommendation,
+            session.recommendation.recommendation.label(),
             project
         );
     }

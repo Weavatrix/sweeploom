@@ -7,7 +7,7 @@ use sweeploom_storage::DirectoryNode;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::sort::{Col, Sort, header_cell};
-use crate::widgets::page_title;
+use crate::widgets::{page_title, table_scroll_height};
 
 pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
@@ -51,9 +51,12 @@ fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort) {
     let mut rows = Vec::new();
     collect_rows(root, 0, *sort, &mut rows);
     let row_count = rows.len();
+    let height = table_scroll_height(ui);
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
+        .min_scrolled_height(height)
+        .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::auto().at_least(110.0))
         .column(Column::remainder().at_least(220.0))
@@ -87,7 +90,7 @@ fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort) {
                     ui.label(RichText::new(format!("{indent}{name}")).size(16.0));
                 });
                 row.col(|ui| {
-                    ui.label(format!("{:?}", node.category));
+                    ui.label(node.category.label());
                 });
                 row.col(|ui| {
                     ui.label(node.files.to_string());

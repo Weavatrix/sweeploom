@@ -1,6 +1,7 @@
 //! Hierarchical grouping: project → terminal/agent session → helpers.
 
 use std::collections::{HashMap, HashSet};
+use std::time::SystemTime;
 
 use sweeploom_core::{
     LiveSession, ProcessKey, ProcessSafetyClass, ProcessSnapshot, Recommendation, SessionActivity,
@@ -119,13 +120,21 @@ fn build_session(
         .iter()
         .flat_map(|item| item.network.listening_ports.iter().copied())
         .collect();
+    let disk_busy = snapshots
+        .iter()
+        .any(|item| item.disk_read_delta > 0 || item.disk_write_delta > 0);
+    let observed_last_activity = if cpu_percent > 0.5 || disk_busy {
+        Some(SystemTime::now())
+    } else {
+        None
+    };
     LiveSession {
         id,
         kind,
         project,
         processes: members.to_vec(),
         started_at,
-        observed_last_activity: started_at,
+        observed_last_activity,
         rss_bytes,
         cpu_percent,
         disk: SessionDiskUsage {

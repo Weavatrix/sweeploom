@@ -88,21 +88,34 @@ fn draw_nav(ui: &mut egui::Ui, app: &mut SweepLoomApp) {
 
 fn nav_button(ui: &mut egui::Ui, app: &mut SweepLoomApp, nav: Nav) {
     let selected = app.nav == nav;
-    let text = if selected {
-        RichText::new(nav.label())
-            .size(15.0)
-            .strong()
-            .color(theme::accent())
+    let fill = if selected {
+        if ui.visuals().dark_mode {
+            Color32::from_rgb(58, 48, 36)
+        } else {
+            Color32::from_rgb(245, 232, 210)
+        }
     } else {
-        RichText::new(nav.label()).size(15.0)
+        Color32::TRANSPARENT
     };
-    if ui
-        .add_sized(
-            [ui.available_width(), 32.0],
-            egui::Button::selectable(selected, text),
-        )
-        .clicked()
-    {
+    let text = RichText::new(nav.label()).size(15.0).strong();
+    let inner = egui::Frame::new()
+        .fill(fill)
+        .corner_radius(6)
+        .inner_margin(Margin::symmetric(10, 6))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.label(text);
+        });
+    let response = inner.response.interact(egui::Sense::click());
+    if selected {
+        let rect = response.rect;
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(rect.left_top(), egui::vec2(3.0, rect.height())),
+            0.0,
+            theme::accent(),
+        );
+    }
+    if response.clicked() {
         app.nav = nav;
     }
 }

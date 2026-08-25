@@ -60,6 +60,24 @@ pub enum SessionActivity {
     Unknown,
 }
 
+impl SessionActivity {
+    /// Short UI label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Active => "Active now",
+            Self::BackgroundActive => "Working",
+            Self::Idle => "Idle",
+            Self::SleepingMemoryHeavy => "Idle, heavy RAM",
+            Self::RunawayCpu => "High CPU",
+            Self::NetworkActive => "Network active",
+            Self::LikelyForgotten => "Forgotten",
+            Self::OrphanCandidate => "Orphan helper",
+            Self::Unknown => "Unknown",
+        }
+    }
+}
+
 /// Disk I/O rolled up for a session.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

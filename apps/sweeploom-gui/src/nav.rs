@@ -29,14 +29,14 @@ impl Nav {
     /// Sidebar order.
     pub const ALL: [Self; 10] = [
         Self::Overview,
-        Self::Storage,
         Self::Sessions,
+        Self::History,
+        Self::Storage,
+        Self::Explorer,
         Self::Projects,
         Self::Browser,
-        Self::Explorer,
         Self::Ai,
         Self::Rules,
-        Self::History,
         Self::Settings,
     ];
 

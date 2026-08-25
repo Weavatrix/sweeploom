@@ -5,7 +5,6 @@ use eframe::egui::{self, Color32, CornerRadius, FontFamily, FontId, Stroke, Text
 use crate::prefs::ThemeMode;
 
 const GOLD: Color32 = Color32::from_rgb(196, 140, 64);
-const GOLD_HI: Color32 = Color32::from_rgb(232, 188, 112);
 
 /// SweepLoom gold, used for selected chrome and accents.
 #[must_use]
@@ -68,7 +67,7 @@ fn dark_visuals() -> egui::Visuals {
     visuals.faint_bg_color = Color32::from_rgb(32, 35, 42);
     visuals.widgets.hovered.bg_fill = Color32::from_rgb(40, 44, 54);
     visuals.widgets.active.bg_fill = Color32::from_rgb(50, 54, 66);
-    paint_widgets(&mut visuals, Color32::from_rgb(226, 228, 234));
+    paint_widgets(&mut visuals, Color32::from_rgb(226, 228, 234), true);
     visuals
 }
 
@@ -80,14 +79,18 @@ fn light_visuals() -> egui::Visuals {
     visuals.faint_bg_color = Color32::from_rgb(236, 238, 242);
     visuals.widgets.hovered.bg_fill = Color32::from_rgb(232, 226, 214);
     visuals.widgets.active.bg_fill = Color32::from_rgb(224, 214, 196);
-    paint_widgets(&mut visuals, Color32::from_rgb(32, 36, 42));
+    paint_widgets(&mut visuals, Color32::from_rgb(32, 36, 42), false);
     visuals
 }
 
-fn paint_widgets(visuals: &mut egui::Visuals, text: Color32) {
+fn paint_widgets(visuals: &mut egui::Visuals, text: Color32, dark: bool) {
     visuals.override_text_color = Some(text);
-    visuals.selection.bg_fill = GOLD;
-    visuals.selection.stroke = Stroke::new(1.0_f32, GOLD_HI);
+    visuals.selection.bg_fill = if dark {
+        Color32::from_rgb(58, 48, 36)
+    } else {
+        Color32::from_rgb(245, 232, 210)
+    };
+    visuals.selection.stroke = Stroke::new(1.0_f32, GOLD);
     visuals.hyperlink_color = GOLD;
     visuals.widgets.inactive.corner_radius = CornerRadius::same(8);
     visuals.widgets.hovered.corner_radius = CornerRadius::same(8);

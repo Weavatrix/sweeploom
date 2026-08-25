@@ -15,6 +15,19 @@ pub enum DevKind {
     Other,
 }
 
+impl DevKind {
+    /// Short UI label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Cargo => "Cargo",
+            Self::Node => "Node",
+            Self::Python => "Python",
+            Self::Other => "Other",
+        }
+    }
+}
+
 /// Classify a project directory from its marker files.
 #[must_use]
 pub fn classify_project(root: &Path) -> Vec<DevKind> {

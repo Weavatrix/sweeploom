@@ -58,6 +58,21 @@ impl ActivityState {
     pub fn from_timestamp(when: Option<SystemTime>, now: SystemTime) -> Self {
         Self::from_age(when.and_then(|stamp| now.duration_since(stamp).ok()))
     }
+
+    /// Short UI label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ActiveNow => "Active now",
+            Self::Hot => "Hot",
+            Self::Warm => "Warm",
+            Self::Cool => "Cool",
+            Self::Cold => "Cold",
+            Self::Dormant => "Dormant",
+            Self::Archival => "Archival",
+            Self::Unknown => "Unknown",
+        }
+    }
 }
 
 /// Independent activity signals for a project or candidate.

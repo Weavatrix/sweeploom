@@ -44,7 +44,7 @@ pub fn python_offers(project: &Path, processes: &[ProcessSnapshot]) -> Vec<Pytho
         RebuildCost::Low,
         true,
         blocked,
-        blocker.clone(),
+        blocker,
     );
     for cache in [".pytest_cache", ".mypy_cache", ".ruff_cache"] {
         push_offer(
@@ -54,7 +54,7 @@ pub fn python_offers(project: &Path, processes: &[ProcessSnapshot]) -> Vec<Pytho
             RebuildCost::Low,
             true,
             blocked,
-            blocker.clone(),
+            blocker,
         );
     }
     for env in [".venv", "venv"] {
@@ -65,7 +65,7 @@ pub fn python_offers(project: &Path, processes: &[ProcessSnapshot]) -> Vec<Pytho
             RebuildCost::High,
             false,
             blocked,
-            blocker.clone(),
+            blocker,
         );
     }
     offers
@@ -88,7 +88,7 @@ fn python_blocker(project: &Path, processes: &[ProcessSnapshot]) -> Option<Block
     if matches!(git, GitSafety::Unknown) {
         return Some(Blocker::UnknownGitState);
     }
-    git.assessment().blockers.first().cloned()
+    git.assessment().blockers.first().copied()
 }
 
 fn process_blocks(process: &ProcessSnapshot, project: &Path) -> bool {

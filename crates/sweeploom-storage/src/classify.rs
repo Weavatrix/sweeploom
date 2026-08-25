@@ -19,6 +19,21 @@ pub enum PathCategory {
     Unknown,
 }
 
+impl PathCategory {
+    /// Short UI label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Source => "Source",
+            Self::Generated => "Generated",
+            Self::Dependencies => "Dependencies",
+            Self::Cache => "Cache",
+            Self::UserData => "User data",
+            Self::Unknown => "Unknown",
+        }
+    }
+}
+
 /// Classify a single path component (file or directory name).
 #[must_use]
 pub fn classify_path_component(name: &str) -> PathCategory {

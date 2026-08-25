@@ -24,6 +24,17 @@ impl Recommendation {
             self
         }
     }
+
+    /// Short UI/CLI label. Never says "terminate".
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::StronglyRecommended => "Forgotten",
+            Self::Recommended => "Idle — consider",
+            Self::Optional => "Idle (optional)",
+            Self::Keep => "Keep",
+        }
+    }
 }
 
 #[cfg(test)]

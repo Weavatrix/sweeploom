@@ -12,7 +12,7 @@ pub fn metric_card(ui: &mut egui::Ui, title: &str, value: &str, sub: &str) {
         .corner_radius(CornerRadius::same(10))
         .inner_margin(Margin::same(14))
         .show(ui, |ui| {
-            ui.set_min_width(188.0);
+            ui.set_min_width(160.0);
             ui.set_min_height(88.0);
             ui.label(
                 RichText::new(title)
@@ -50,12 +50,17 @@ pub fn section(
 
 /// One opportunity / history / listing row.
 pub fn list_row(ui: &mut egui::Ui, title: &str, meta: &str, detail: &str) {
-    egui::Frame::default()
+    let _ = list_row_at(ui, title, meta, detail);
+}
+
+/// Clickable listing row. Returns the row response.
+pub fn list_row_at(ui: &mut egui::Ui, title: &str, meta: &str, detail: &str) -> egui::Response {
+    let response = egui::Frame::default()
         .fill(ui.visuals().faint_bg_color)
         .corner_radius(CornerRadius::same(8))
         .inner_margin(Margin::symmetric(12, 8))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(title).strong());
                 if !meta.is_empty() {
                     ui.label(RichText::new(meta).color(theme::muted(ui)));
@@ -64,8 +69,17 @@ pub fn list_row(ui: &mut egui::Ui, title: &str, meta: &str, detail: &str) {
                     ui.label(RichText::new(detail).color(theme::muted(ui)));
                 }
             });
-        });
+        })
+        .response
+        .interact(egui::Sense::click());
     ui.add_space(4.0);
+    response
+}
+
+/// Height that keeps a table scrolling inside the remaining window.
+#[must_use]
+pub fn table_scroll_height(ui: &egui::Ui) -> f32 {
+    ui.available_height().max(180.0)
 }
 
 /// Screen title plus a one-line hint.

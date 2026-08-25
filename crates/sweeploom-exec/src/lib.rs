@@ -77,7 +77,7 @@ pub fn revalidate(entry: &CleanPlanEntry) -> Option<SkipReason> {
     {
         let assessment = sweeploom_dev::inspect(path).assessment();
         if let Some(blocker) = assessment.blockers.first() {
-            return Some(SkipReason::Blocked(blocker.clone()));
+            return Some(SkipReason::Blocked(*blocker));
         }
     }
     None

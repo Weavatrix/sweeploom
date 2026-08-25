@@ -60,7 +60,7 @@ fn node_blocker(project: &Path, processes: &[ProcessSnapshot]) -> Option<Blocker
     if matches!(git, GitSafety::Unknown) {
         return Some(Blocker::UnknownGitState);
     }
-    git.assessment().blockers.first().cloned()
+    git.assessment().blockers.first().copied()
 }
 
 fn process_blocks(process: &ProcessSnapshot, project: &Path) -> bool {

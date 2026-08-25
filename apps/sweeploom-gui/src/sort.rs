@@ -1,5 +1,6 @@
 //! Clickable column sort used by Sessions, Review, and Explorer.
 
+use crate::theme;
 use eframe::egui::{self, RichText};
 
 /// Which column is driving the current order.
@@ -61,8 +62,15 @@ impl Sort {
 
 /// Sortable table header cell. Looks like a column title, not a toolbar button.
 pub fn header_cell(ui: &mut egui::Ui, sort: &mut Sort, col: Col, name: &str) {
-    let text = RichText::new(sort.caption(col, name)).strong();
-    if ui.selectable_label(sort.col == col, text).clicked() {
+    let active = sort.col == col;
+    let mut text = RichText::new(sort.caption(col, name)).strong();
+    if active {
+        text = text.color(theme::accent());
+    }
+    if ui
+        .add(egui::Label::new(text).sense(egui::Sense::click()))
+        .clicked()
+    {
         sort.toggle(col);
     }
 }

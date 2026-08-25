@@ -18,6 +18,21 @@ pub enum RebuildCost {
     Unknown,
 }
 
+impl RebuildCost {
+    /// Short UI label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::Low => "Low",
+            Self::Medium => "Medium",
+            Self::High => "High",
+            Self::VeryHigh => "Very high",
+            Self::Unknown => "Unknown",
+        }
+    }
+}
+
 /// Rebuild assessment attached to a candidate.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

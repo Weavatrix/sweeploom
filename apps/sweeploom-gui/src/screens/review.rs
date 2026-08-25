@@ -6,9 +6,10 @@ use sweeploom_core::DeletionStrategy;
 use sweeploom_exec::{apply_plan, build_plan};
 
 use crate::app::SweepLoomApp;
-use crate::format::format_bytes;
+use crate::format::{format_bytes, row_caption, safety_text, short_path};
 use crate::sort::{Col, Sort, header_cell};
-use crate::widgets::page_title;
+use crate::theme;
+use crate::widgets::{page_title, table_scroll_height};
 use egui_extras::{Column, TableBuilder};
 use sweeploom_dev::ReviewRow;
 
@@ -16,9 +17,9 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Storage review",
-        "Cargo/Node/Python generated output is discovered without walking target. Dirty Git blocks auto-select, not listing.",
+        "Cargo/Node/Python generated output. Stripes are not selection. npm is here, not Browser.",
     );
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         if ui.button("Rebuild review").clicked() {
             app.rebuild_review();
         }
@@ -57,29 +58,49 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .map(|row| row.candidate.logical_bytes)
         .sum();
     ui.label(format!(
-        "{} candidates · {} selected",
+        "{} candidates · {} selected (checkbox, not row stripe)",
         app.review.len(),
         format_bytes(selected)
     ));
     draw_review_table(app, ui);
 }
 
+fn can_select(row: &ReviewRow) -> bool {
+    !row.candidate.safety.is_blocked() && row.candidate.deletion != DeletionStrategy::InspectOnly
+}
+
 fn draw_review_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut sort = app.review_sort;
     let order = review_order(&app.review, sort);
+    let selectable = app.review.iter().filter(|row| can_select(row)).count();
+    let chosen = app
+        .review
+        .iter()
+        .filter(|row| row.selected && can_select(row))
+        .count();
+    let mut all = selectable > 0 && chosen == selectable;
     let row_count = order.len();
+    let height = table_scroll_height(ui);
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
+        .min_scrolled_height(height)
+        .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::auto().at_least(36.0))
         .column(Column::remainder().at_least(280.0))
         .column(Column::auto().at_least(100.0))
         .column(Column::auto().at_least(110.0))
-        .column(Column::auto().at_least(140.0))
+        .column(Column::auto().at_least(160.0))
         .header(32.0, |mut header| {
             header.col(|ui| {
-                ui.strong("");
+                if ui.checkbox(&mut all, "").changed() {
+                    for row in &mut app.review {
+                        if can_select(row) {
+                            row.selected = all;
+                        }
+                    }
+                }
             });
             header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Name"));
             header.col(|ui| header_cell(ui, &mut sort, Col::Size, "Size"));
@@ -89,7 +110,7 @@ fn draw_review_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             });
         })
         .body(|body| {
-            body.rows(28.0, row_count, |mut row| {
+            body.rows(40.0, row_count, |mut row| {
                 let index = order.get(row.index()).copied().unwrap_or(0);
                 fill_review_row(&mut app.review, &mut row, index);
             });
@@ -119,22 +140,16 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
         return;
     };
     let blocked = item.candidate.safety.is_blocked();
-    let title = item.title.clone();
+    let inspect_only = item.candidate.deletion == DeletionStrategy::InspectOnly;
+    let name = row_caption(&item.title);
+    let path = short_path(&item.candidate.path);
     let size = format_bytes(item.candidate.logical_bytes);
-    let rebuild = format!("{:?}", item.candidate.rebuild.cost);
-    let safety = if blocked {
-        item.candidate
-            .safety
-            .blockers
-            .first()
-            .map(|item| format!("BLOCKED {item:?}"))
-            .unwrap_or_else(|| "BLOCKED".to_owned())
-    } else {
-        format!("{:?}", item.candidate.safety.level)
-    };
+    let rebuild = item.candidate.rebuild.cost.label().to_owned();
+    let safety = safety_text(&item.candidate.safety);
     let mut selected = item.selected;
+    row.set_selected(selected);
     row.col(|ui| {
-        if blocked {
+        if blocked || inspect_only {
             let mut off = false;
             ui.add_enabled(false, egui::Checkbox::new(&mut off, ""));
         } else if ui.checkbox(&mut selected, "").changed()
@@ -144,7 +159,10 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
         }
     });
     row.col(|ui| {
-        ui.label(RichText::new(title).size(16.0));
+        ui.vertical(|ui| {
+            ui.label(RichText::new(name).size(15.0).strong());
+            ui.label(RichText::new(path).size(12.0).color(theme::muted(ui)));
+        });
     });
     row.col(|ui| {
         ui.label(&size);
@@ -154,7 +172,7 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
     });
     row.col(|ui| {
         if blocked {
-            ui.colored_label(ui.visuals().warn_fg_color, safety);
+            ui.colored_label(ui.visuals().error_fg_color, safety);
         } else {
             ui.label(safety);
         }
@@ -173,10 +191,20 @@ impl SweepLoomApp {
         let inventory = self
             .inventory
             .as_ref()
-            .map(|item| item.projects.as_slice())
-            .unwrap_or(&[]);
-        self.review = review_extra::all_rows(&root, &self.locations, inventory, processes);
-        self.action_message = Some(format!("{} candidates", self.review.len()));
+            .map(|item| item.projects.clone())
+            .unwrap_or_default();
+        let current = self.current_project.as_ref().map(|item| item.0.clone());
+        let built = review_extra::assemble(
+            &root,
+            &self.locations,
+            &inventory,
+            current.as_deref(),
+            processes,
+        );
+        let n = built.rows.len();
+        self.project_roots = built.projects;
+        self.review = built.rows;
+        self.action_message = Some(format!("{n} candidates"));
     }
 
     /// Pre-select the cheapest SAFE generated rows until `free_gb` is reached.
@@ -194,10 +222,7 @@ impl SweepLoomApp {
             .review
             .iter()
             .enumerate()
-            .filter(|(_, row)| {
-                !row.candidate.safety.is_blocked()
-                    && row.candidate.deletion != DeletionStrategy::InspectOnly
-            })
+            .filter(|(_, row)| can_select(row))
             .map(|(index, _)| index)
             .collect();
         order.sort_by_key(|&index| {
