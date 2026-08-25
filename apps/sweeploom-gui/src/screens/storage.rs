@@ -19,9 +19,7 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         ui.label("Root");
         ui.add(egui::TextEdit::singleline(&mut app.scan_root).desired_width(480.0));
         let scan = if app.scanning { "Scanning…" } else { "Scan" };
-        if ui
-            .add_enabled(!app.scanning, egui::Button::new(scan))
-            .clicked()
+        if crate::widgets::pointer(ui.add_enabled(!app.scanning, egui::Button::new(scan))).clicked()
         {
             app.run_scan();
         }

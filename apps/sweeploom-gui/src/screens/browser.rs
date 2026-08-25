@@ -4,16 +4,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use eframe::egui::RichText;
 use sweeploom_browser::{BrowserPressure, TabAction, TabCommand, load_snapshot, save_apply};
+use sweeploom_core::{LiveSession, SessionKind};
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::widgets::{list_row, page_title};
+use crate::icons::{self, Glyph};
+use crate::widgets::{list_row, page_title, pointer, section};
 
 pub fn ui_browser(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     page_title(
         ui,
         "Browser",
-        "Chrome/Edge process trees. Tab lastAccessed needs the companion. npm/node_modules are on Review and Projects, not here.",
+        "Chrome/Edge/Firefox process trees. Tab lastAccessed needs the companion. npm lives on Projects and Review.",
     );
     let processes = app
         .snapshot
@@ -21,28 +23,65 @@ pub fn ui_browser(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
         .map(|item| item.processes.as_slice())
         .unwrap_or(&[]);
     let pressure = BrowserPressure::from_live(&app.sessions, processes);
-    draw_hosts(ui, &pressure);
+    draw_hosts(ui, &pressure, &app.sessions);
     draw_companion(app, ui);
 }
 
-fn draw_hosts(ui: &mut eframe::egui::Ui, pressure: &BrowserPressure) {
-    if pressure.hosts.is_empty() {
-        ui.label("No browser process trees in this sample.");
-        return;
-    }
-    for host in &pressure.hosts {
-        list_row(
-            ui,
-            host.family,
-            &format!(
-                "{} · {} processes · {:.1}% CPU",
-                format_bytes(host.rss_bytes),
-                host.processes,
-                host.cpu_percent
-            ),
-            "Do not kill the whole browser to reclaim RAM.",
-        );
-    }
+fn draw_hosts(ui: &mut eframe::egui::Ui, pressure: &BrowserPressure, sessions: &[LiveSession]) {
+    section(
+        ui,
+        "Process trees",
+        "Do not kill the whole browser to reclaim RAM. Discard stale tabs through the companion.",
+        |ui| {
+            if pressure.hosts.is_empty() {
+                ui.label("No browser process trees in this sample.");
+                return;
+            }
+            ui.label(
+                RichText::new(format!(
+                    "Combined RSS {} across {} family(ies)",
+                    format_bytes(pressure.rss_bytes()),
+                    pressure.hosts.len()
+                ))
+                .strong(),
+            );
+            ui.add_space(6.0);
+            for host in &pressure.hosts {
+                ui.horizontal(|ui| {
+                    icons::show(ui, Glyph::Browser, 16.0, crate::theme::accent());
+                    ui.label(RichText::new(host.family).size(16.0).strong());
+                });
+                list_row(
+                    ui,
+                    &format_bytes(host.rss_bytes),
+                    &format!(
+                        "{} session(s) · {} processes · {:.1}% CPU",
+                        host.sessions, host.processes, host.cpu_percent
+                    ),
+                    "Keep the tree — terminate is never the browser action",
+                );
+            }
+            ui.add_space(8.0);
+            ui.label(RichText::new("Live sessions").strong());
+            for session in sessions
+                .iter()
+                .filter(|item| item.kind == SessionKind::Browser)
+                .take(12)
+            {
+                list_row(
+                    ui,
+                    session.label(),
+                    &format_bytes(session.rss_bytes),
+                    &format!(
+                        "{:.1}% CPU · {} process(es) · {}",
+                        session.cpu_percent,
+                        session.processes.len(),
+                        session.recommendation.recommendation.label()
+                    ),
+                );
+            }
+        },
+    );
 }
 
 fn draw_companion(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
@@ -50,38 +89,60 @@ fn draw_companion(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     let stored = load_snapshot(&app.locations.app_data).ok().flatten();
     let Some(stored) = stored.filter(|item| item.is_fresh(now)) else {
         app.confirm_browser_discard = false;
-        ui.label(
-            RichText::new(
-                "Companion: not connected. lastAccessed is not shown as zero. Install: sweeploom companion-install. Host binary: sweeploom-companion-host.",
-            )
-            .size(14.0)
-            .weak(),
+        section(
+            ui,
+            "Companion",
+            "lastAccessed is not invented. Install the native host, then the extension.",
+            |ui| {
+                ui.label("1. sweeploom companion-install");
+                ui.label("2. Host binary: sweeploom-companion-host");
+                ui.label("3. Load the SweepLoom companion extension in Chrome or Edge");
+                ui.label(
+                    RichText::new(
+                        "Until the companion is fresh, only process trees above are shown.",
+                    )
+                    .color(crate::theme::muted(ui)),
+                );
+            },
         );
         return;
     };
     let discard = stored.tabs.discard_count(now);
-    ui.label(
-        RichText::new(format!(
-            "Companion: connected  {} tabs  {} Discard suggestions",
-            stored.tabs.tabs.len(),
-            discard
-        ))
-        .size(16.0),
+    section(
+        ui,
+        "Companion",
+        "Connected. Discard is queued; Close is never sent.",
+        |ui| {
+            ui.label(
+                RichText::new(format!(
+                    "{} tabs · {} Discard suggestion(s)",
+                    stored.tabs.tabs.len(),
+                    discard
+                ))
+                .size(16.0)
+                .strong(),
+            );
+            if let Some(message) = &app.action_message {
+                ui.label(message);
+            }
+            draw_discard_confirm(app, ui, &stored, now, discard);
+            for tab in stored.tabs.tabs.iter().take(16) {
+                let heat = tab.heat(now, stored.tabs.active_tab_id);
+                let action = tab.suggested_action(now, stored.tabs.active_tab_id);
+                let mark = if action == TabAction::Discard {
+                    "discard"
+                } else {
+                    "keep"
+                };
+                list_row(
+                    ui,
+                    &tab.title,
+                    &format!("{} · {mark}", heat.label()),
+                    &tab.url,
+                );
+            }
+        },
     );
-    if let Some(message) = &app.action_message {
-        ui.label(message);
-    }
-    draw_discard_confirm(app, ui, &stored, now, discard);
-    for tab in stored.tabs.tabs.iter().take(12) {
-        let heat = tab.heat(now, stored.tabs.active_tab_id);
-        let action = tab.suggested_action(now, stored.tabs.active_tab_id);
-        let mark = if action == TabAction::Discard {
-            "[x]"
-        } else {
-            "[ ]"
-        };
-        ui.label(format!("{mark} {:?}  {}  {}", heat, tab.title, tab.url));
-    }
 }
 
 fn draw_discard_confirm(
@@ -96,17 +157,17 @@ fn draw_discard_confirm(
         return;
     }
     if !app.confirm_browser_discard {
-        if ui.button("Ask companion to Discard suggestions…").clicked() {
+        if pointer(ui.button("Ask companion to Discard suggestions…")).clicked() {
             app.confirm_browser_discard = true;
         }
         return;
     }
     ui.label("Queue Discard only. Close is never sent. Bookmark+Close stays off by default.");
     ui.horizontal(|ui| {
-        if ui.button("Cancel").clicked() {
+        if pointer(ui.button("Cancel")).clicked() {
             app.confirm_browser_discard = false;
         }
-        if ui.button("Queue Discard").clicked() {
+        if pointer(ui.button("Queue Discard")).clicked() {
             queue_discard(app, stored, now);
         }
     });

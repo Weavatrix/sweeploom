@@ -24,9 +24,10 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         }
     }
     ui.horizontal(|ui| {
-        if ui
-            .button(RichText::new("Terminate session").color(ui.visuals().warn_fg_color))
-            .clicked()
+        if crate::widgets::pointer(
+            ui.button(RichText::new("Terminate session").color(ui.visuals().warn_fg_color)),
+        )
+        .clicked()
         {
             app.confirm_terminate = true;
             app.confirm_force = false;
@@ -45,10 +46,10 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         format_bytes(session.rss_bytes)
     ));
     ui.horizontal(|ui| {
-        if ui.button("Cancel").clicked() {
+        if crate::widgets::pointer(ui.button("Cancel")).clicked() {
             app.confirm_terminate = false;
         }
-        if ui.button("Terminate gracefully").clicked() {
+        if crate::widgets::pointer(ui.button("Terminate gracefully")).clicked() {
             apply_stop(app, &session.processes, false);
         }
     });
@@ -76,18 +77,19 @@ pub(crate) fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui) -> bool {
         ),
     );
     if !app.confirm_force {
-        if ui.button("Force kill remaining…").clicked() {
+        if crate::widgets::pointer(ui.button("Force kill remaining…")).clicked() {
             app.confirm_force = true;
         }
         return true;
     }
     ui.horizontal(|ui| {
-        if ui.button("Cancel").clicked() {
+        if crate::widgets::pointer(ui.button("Cancel")).clicked() {
             app.confirm_force = false;
         }
-        if ui
-            .button(RichText::new("Force kill").color(ui.visuals().error_fg_color))
-            .clicked()
+        if crate::widgets::pointer(
+            ui.button(RichText::new("Force kill").color(ui.visuals().error_fg_color)),
+        )
+        .clicked()
         {
             let keys = app.pending_force.clone().unwrap_or_default();
             apply_stop(app, &keys, true);

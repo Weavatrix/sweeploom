@@ -6,8 +6,9 @@ use sweeploom_core::Recommendation;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
+use crate::icons::Glyph;
 use crate::nav::Nav;
-use crate::widgets::{list_row_at, metric_card, page_title};
+use crate::widgets::{self, Metric, list_row_at, page_title};
 
 pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
@@ -15,6 +16,14 @@ pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Overview",
         "Live pressure now. History starts the moment SweepLoom opens.",
     );
+    widgets::metric_grid(ui, &overview_cards(app));
+    ui.add_space(8.0);
+    ui.label(RichText::new("Top opportunities").size(18.0).strong());
+    ui.add_space(6.0);
+    draw_opportunities(app, ui);
+}
+
+fn overview_cards(app: &SweepLoomApp) -> Vec<Metric> {
     let memory = app
         .snapshot
         .as_ref()
@@ -47,49 +56,51 @@ pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
         .map(|session| session.cpu_percent)
         .sum();
-    ui.horizontal_wrapped(|ui| {
-        metric_card(
-            ui,
-            "MEMORY",
-            &format_bytes(memory.used_bytes),
-            &format!("of {}", format_bytes(memory.total_bytes)),
-        );
-        metric_card(
-            ui,
-            "IDLE SESSIONS",
-            &format_bytes(reclaimable),
-            &format!("{stale} idle long enough to consider"),
-        );
-        metric_card(
-            ui,
-            "CPU",
-            &format!("{cpu:.0}%"),
-            &format!("{stale_cpu:.0}% in idle sessions"),
-        );
-        let disk = if app.review.is_empty() {
-            "open Review".to_owned()
-        } else {
-            format_bytes(
-                app.review
-                    .iter()
-                    .map(|row| row.candidate.logical_bytes)
-                    .sum(),
-            )
-        };
-        metric_card(ui, "REVIEW DISK", &disk, "Generated + temp");
-        if let Some((mount, total, avail)) = app.volumes.first() {
-            metric_card(
-                ui,
-                "VOLUME",
-                &format_bytes(*avail),
-                &format!("free of {} on {}", format_bytes(*total), mount.display()),
-            );
-        }
-    });
-    ui.add_space(16.0);
-    ui.label(RichText::new("Top opportunities").size(18.0).strong());
-    ui.add_space(6.0);
-    draw_opportunities(app, ui);
+    let disk = if app.review.is_empty() {
+        "open Review".to_owned()
+    } else {
+        format_bytes(
+            app.review
+                .iter()
+                .map(|row| row.candidate.logical_bytes)
+                .sum(),
+        )
+    };
+    let mut cards = vec![
+        Metric {
+            icon: Glyph::Memory,
+            title: "MEMORY".into(),
+            value: format_bytes(memory.used_bytes),
+            sub: format!("of {}", format_bytes(memory.total_bytes)),
+        },
+        Metric {
+            icon: Glyph::Sessions,
+            title: "IDLE SESSIONS".into(),
+            value: format_bytes(reclaimable),
+            sub: format!("{stale} idle long enough to consider"),
+        },
+        Metric {
+            icon: Glyph::Cpu,
+            title: "CPU".into(),
+            value: format!("{cpu:.0}%"),
+            sub: format!("{stale_cpu:.0}% in idle sessions"),
+        },
+        Metric {
+            icon: Glyph::Disk,
+            title: "REVIEW DISK".into(),
+            value: disk,
+            sub: "Generated + temp".into(),
+        },
+    ];
+    if let Some((mount, total, avail)) = app.volumes.first() {
+        cards.push(Metric {
+            icon: Glyph::Volume,
+            title: "VOLUME".into(),
+            value: format_bytes(*avail),
+            sub: format!("free of {} on {}", format_bytes(*total), mount.display()),
+        });
+    }
+    cards
 }
 
 fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -125,7 +136,7 @@ fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             ui,
             "Browser",
             &format_bytes(pressure.rss_bytes()),
-            "companion needed for tab discard",
+            "open Browser — companion needed for tab discard",
         )
         .clicked()
         {
@@ -145,11 +156,11 @@ fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .collect();
     for (name, size) in review {
         shown += 1;
-        if list_row_at(ui, &name, &size, "disk").clicked() {
+        if list_row_at(ui, &name, &size, "open Review").clicked() {
             app.nav = Nav::Storage;
         }
     }
     if shown == 0 {
-        ui.label("No idle sessions. Open Review to list Cargo target / node_modules without an Explorer scan.");
+        ui.label("No idle sessions. Open Review for Cargo target / node_modules, or Browser for process trees.");
     }
 }

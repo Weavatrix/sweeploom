@@ -6,7 +6,7 @@ use crate::app::SweepLoomApp;
 use crate::autostart;
 use crate::prefs::{SCALE_CHOICES, ThemeMode};
 use crate::tray;
-use crate::widgets::{page_title, section};
+use crate::widgets::{page_title, pointer, section};
 
 pub fn ui_settings(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(ui, "Settings", "Local-only. Telemetry stays off.");
@@ -24,9 +24,7 @@ fn appearance(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             ui.horizontal(|ui| {
                 ui.label("Theme");
                 for mode in [ThemeMode::Auto, ThemeMode::Dark, ThemeMode::Light] {
-                    if ui
-                        .selectable_label(app.prefs.theme == mode, mode.label())
-                        .clicked()
+                    if pointer(ui.selectable_label(app.prefs.theme == mode, mode.label())).clicked()
                     {
                         app.prefs.theme = mode;
                         app.persist_prefs();
@@ -38,7 +36,7 @@ fn appearance(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                 ui.label("Interface size");
                 for (label, scale) in SCALE_CHOICES {
                     let selected = (app.prefs.ui_scale - *scale).abs() < 0.01;
-                    if ui.selectable_label(selected, *label).clicked() {
+                    if pointer(ui.selectable_label(selected, *label)).clicked() {
                         app.prefs.ui_scale = *scale;
                         app.persist_prefs();
                     }

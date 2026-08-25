@@ -17,7 +17,7 @@ pub fn ui_ai(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
         RichText::new("Bounded listing only. File contents and sqlite internals are not opened.")
             .weak(),
     );
-    if ui.button("Refresh listing").clicked() {
+    if crate::widgets::pointer(ui.button("Refresh listing")).clicked() {
         app.ai_offers = None;
     }
     ui.add_space(8.0);

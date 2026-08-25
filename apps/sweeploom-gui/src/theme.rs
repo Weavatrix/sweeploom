@@ -1,6 +1,8 @@
 //! Light, dark, and auto palettes. Accent stays SweepLoom gold.
 
-use eframe::egui::{self, Color32, CornerRadius, FontFamily, FontId, Stroke, TextStyle, Theme};
+use eframe::egui::{
+    self, Color32, CornerRadius, CursorIcon, FontFamily, FontId, Stroke, TextStyle, Theme,
+};
 
 use crate::prefs::ThemeMode;
 
@@ -31,6 +33,7 @@ pub fn apply(ctx: &egui::Context, mode: ThemeMode, scale: f32) {
     style.spacing.indent = 16.0;
     style.spacing.interact_size.y = 28.0;
     style.spacing.scroll.bar_width = 10.0;
+    style.interaction.selectable_labels = false;
     style.text_styles.insert(
         TextStyle::Heading,
         FontId::new(26.0, FontFamily::Proportional),
@@ -97,4 +100,20 @@ fn paint_widgets(visuals: &mut egui::Visuals, text: Color32, dark: bool) {
     visuals.widgets.active.corner_radius = CornerRadius::same(8);
     visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, text);
     visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, text);
+    visuals.widgets.hovered.expansion = 1.0;
+    visuals.widgets.active.expansion = 1.0;
+    visuals.interact_cursor = Some(CursorIcon::PointingHand);
+}
+
+/// Mix two colors. Used for hover/selection motion.
+#[must_use]
+pub fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let mix = |left: u8, right: u8| ((left as f32) * (1.0 - t) + (right as f32) * t) as u8;
+    Color32::from_rgba_unmultiplied(
+        mix(a.r(), b.r()),
+        mix(a.g(), b.g()),
+        mix(a.b(), b.b()),
+        mix(a.a(), b.a()),
+    )
 }

@@ -3,9 +3,11 @@
 use eframe::egui::{self, Color32, Margin, RichText, Stroke};
 
 use crate::app::SweepLoomApp;
+use crate::icons;
 use crate::nav::Nav;
 use crate::screens;
 use crate::theme;
+use crate::widgets;
 
 pub fn draw(ctx: &egui::Context, app: &mut SweepLoomApp) {
     egui::TopBottomPanel::top("header")
@@ -20,12 +22,14 @@ pub fn draw(ctx: &egui::Context, app: &mut SweepLoomApp) {
                 ui.heading(RichText::new("SweepLoom").size(22.0).strong());
                 ui.add_space(6.0);
                 ui.label(RichText::new("Weavatrix").size(13.0).color(theme::accent()));
-                ui.separator();
-                ui.label(
-                    RichText::new("Reclaim the workstation, keep the workspace")
-                        .size(14.0)
-                        .color(theme::muted(ui)),
-                );
+                if ui.available_width() > 420.0 {
+                    ui.separator();
+                    ui.label(
+                        RichText::new("Reclaim the workstation, keep the workspace")
+                            .size(14.0)
+                            .color(theme::muted(ui)),
+                    );
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
                         RichText::new(app.prefs.theme.label())
@@ -55,7 +59,17 @@ pub fn draw(ctx: &egui::Context, app: &mut SweepLoomApp) {
     egui::CentralPanel::default()
         .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(Margin::symmetric(18, 12)))
         .show(ctx, |ui| {
-            draw_page(app, ui);
+            ui.set_width(ui.available_width());
+            if matches!(app.nav, Nav::Sessions | Nav::Storage | Nav::Explorer) {
+                draw_page(app, ui);
+            } else {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        draw_page(app, ui);
+                    });
+            }
         });
 }
 
@@ -88,25 +102,35 @@ fn draw_nav(ui: &mut egui::Ui, app: &mut SweepLoomApp) {
 
 fn nav_button(ui: &mut egui::Ui, app: &mut SweepLoomApp, nav: Nav) {
     let selected = app.nav == nav;
-    let fill = if selected {
-        if ui.visuals().dark_mode {
-            Color32::from_rgb(58, 48, 36)
-        } else {
-            Color32::from_rgb(245, 232, 210)
-        }
+    let t = ui
+        .ctx()
+        .animate_bool_with_time(ui.id().with(nav.label()), selected, 0.14);
+    let pale = if ui.visuals().dark_mode {
+        Color32::from_rgb(58, 48, 36)
     } else {
-        Color32::TRANSPARENT
+        Color32::from_rgb(245, 232, 210)
     };
-    let text = RichText::new(nav.label()).size(15.0).strong();
+    let fill = theme::lerp(Color32::TRANSPARENT, pale, t);
+    let icon = if selected {
+        theme::accent()
+    } else {
+        theme::muted(ui)
+    };
     let inner = egui::Frame::new()
         .fill(fill)
         .corner_radius(6)
         .inner_margin(Margin::symmetric(10, 6))
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            ui.label(text);
+            ui.horizontal(|ui| {
+                icons::show(ui, nav.glyph(), 16.0, icon);
+                ui.add(
+                    egui::Label::new(RichText::new(nav.label()).size(15.0).strong())
+                        .selectable(false),
+                );
+            });
         });
-    let response = inner.response.interact(egui::Sense::click());
+    let response = widgets::pointer(inner.response.interact(egui::Sense::click()));
     if selected {
         let rect = response.rect;
         ui.painter().rect_filled(

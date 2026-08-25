@@ -4,6 +4,7 @@ mod app;
 mod autostart;
 mod chrome;
 mod format;
+mod icons;
 mod live;
 mod nav;
 mod prefs;

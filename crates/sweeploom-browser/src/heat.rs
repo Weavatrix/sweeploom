@@ -21,6 +21,22 @@ pub enum TabHeat {
     Archival,
 }
 
+impl TabHeat {
+    /// Short UI label. Missing lastAccessed stays Warm, never shown as cold.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Active => "Active",
+            Self::Hot => "Hot",
+            Self::Warm => "Warm",
+            Self::Cool => "Cool",
+            Self::Cold => "Cold",
+            Self::Dormant => "Dormant",
+            Self::Archival => "Archival",
+        }
+    }
+}
+
 const HOUR_MS: u64 = 3_600_000;
 const DAY_MS: u64 = 86_400_000;
 

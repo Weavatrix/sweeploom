@@ -138,9 +138,10 @@ fn fill_session_row(
         session_plan::checkbox(ui, session, planned);
     });
     row.col(|ui| {
-        if ui
-            .add(egui::Label::new(RichText::new(label).size(16.0)).sense(egui::Sense::click()))
-            .clicked()
+        if crate::widgets::pointer(
+            ui.add(egui::Button::new(RichText::new(label).size(16.0)).frame(false)),
+        )
+        .clicked()
         {
             *selected = Some(id);
         }

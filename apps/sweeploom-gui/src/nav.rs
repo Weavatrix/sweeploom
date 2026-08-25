@@ -67,4 +67,21 @@ impl Nav {
             Self::Settings => "APP",
         }
     }
+
+    /// Sidebar glyph.
+    #[must_use]
+    pub const fn glyph(self) -> crate::icons::Glyph {
+        match self {
+            Self::Overview => crate::icons::Glyph::Overview,
+            Self::Storage => crate::icons::Glyph::Review,
+            Self::Sessions => crate::icons::Glyph::Sessions,
+            Self::Projects => crate::icons::Glyph::Projects,
+            Self::Browser => crate::icons::Glyph::Browser,
+            Self::Explorer => crate::icons::Glyph::Explorer,
+            Self::Ai => crate::icons::Glyph::Ai,
+            Self::Rules => crate::icons::Glyph::Rules,
+            Self::History => crate::icons::Glyph::History,
+            Self::Settings => crate::icons::Glyph::Settings,
+        }
+    }
 }

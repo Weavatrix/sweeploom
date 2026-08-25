@@ -20,16 +20,16 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Cargo/Node/Python generated output. Stripes are not selection. npm is here, not Browser.",
     );
     ui.horizontal_wrapped(|ui| {
-        if ui.button("Rebuild review").clicked() {
+        if crate::widgets::pointer(ui.button("Rebuild review")).clicked() {
             app.rebuild_review();
         }
-        if ui.button("Clean selected").clicked() {
+        if crate::widgets::pointer(ui.button("Clean selected")).clicked() {
             app.apply_review();
         }
         ui.label("Free at least");
         ui.add(egui::TextEdit::singleline(&mut app.free_gb).desired_width(48.0));
         ui.label("GB");
-        if ui.button("Select to free").clicked() {
+        if crate::widgets::pointer(ui.button("Select to free")).clicked() {
             app.select_to_free();
         }
     });

@@ -16,18 +16,18 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         ui.label("Free");
         ui.add(egui::TextEdit::singleline(&mut app.free_ram_gb).desired_width(40.0));
         ui.label("GB RAM");
-        if ui.button("Select to free RAM").clicked() {
+        if crate::widgets::pointer(ui.button("Select to free RAM")).clicked() {
             app.plan_free_ram();
         }
         ui.separator();
         ui.label("Cut");
         ui.add(egui::TextEdit::singleline(&mut app.reduce_cpu).desired_width(40.0));
         ui.label("% CPU");
-        if ui.button("Select to reduce CPU").clicked() {
+        if crate::widgets::pointer(ui.button("Select to reduce CPU")).clicked() {
             app.plan_reduce_cpu();
         }
         ui.separator();
-        if ui.button("Quiet workstation").clicked() {
+        if crate::widgets::pointer(ui.button("Quiet workstation")).clicked() {
             app.plan_quiet();
         }
     });
@@ -87,9 +87,10 @@ fn set_planned(session: &LiveSession, planned: &mut HashSet<ProcessKey>, on: boo
 
 fn draw_confirm(app: &mut SweepLoomApp, ui: &mut egui::Ui, planned: &[LiveSession]) {
     if !app.confirm_planned {
-        if ui
-            .button(RichText::new("Terminate planned…").color(ui.visuals().warn_fg_color))
-            .clicked()
+        if crate::widgets::pointer(
+            ui.button(RichText::new("Terminate planned…").color(ui.visuals().warn_fg_color)),
+        )
+        .clicked()
         {
             app.confirm_planned = true;
             app.confirm_terminate = false;
@@ -112,10 +113,10 @@ fn draw_confirm(app: &mut SweepLoomApp, ui: &mut egui::Ui, planned: &[LiveSessio
         planned.len()
     ));
     ui.horizontal(|ui| {
-        if ui.button("Cancel").clicked() {
+        if crate::widgets::pointer(ui.button("Cancel")).clicked() {
             app.confirm_planned = false;
         }
-        if ui.button("Terminate gracefully").clicked() {
+        if crate::widgets::pointer(ui.button("Terminate gracefully")).clicked() {
             app.terminate_planned();
         }
     });

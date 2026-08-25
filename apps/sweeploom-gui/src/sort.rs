@@ -1,6 +1,8 @@
 //! Clickable column sort used by Sessions, Review, and Explorer.
 
+use crate::icons::{self, Glyph};
 use crate::theme;
+use crate::widgets;
 use eframe::egui::{self, RichText};
 
 /// Which column is driving the current order.
@@ -46,31 +48,30 @@ impl Sort {
             self.desc = !matches!(col, Col::Name | Col::Status);
         }
     }
-
-    /// Header caption with an arrow when this column is active.
-    #[must_use]
-    pub fn caption(self, col: Col, name: &str) -> String {
-        if self.col != col {
-            name.to_owned()
-        } else if self.desc {
-            format!("{name}  ↓")
-        } else {
-            format!("{name}  ↑")
-        }
-    }
 }
 
 /// Sortable table header cell. Looks like a column title, not a toolbar button.
 pub fn header_cell(ui: &mut egui::Ui, sort: &mut Sort, col: Col, name: &str) {
     let active = sort.col == col;
-    let mut text = RichText::new(sort.caption(col, name)).strong();
+    let mut text = RichText::new(name).strong();
     if active {
         text = text.color(theme::accent());
     }
-    if ui
-        .add(egui::Label::new(text).sense(egui::Sense::click()))
-        .clicked()
-    {
+    let inner = egui::Frame::new().show(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.add(egui::Label::new(text).selectable(false));
+            if active {
+                let glyph = if sort.desc {
+                    Glyph::SortDesc
+                } else {
+                    Glyph::SortAsc
+                };
+                icons::show(ui, glyph, 12.0, theme::accent());
+            }
+        });
+    });
+    if widgets::pointer(inner.response.interact(egui::Sense::click())).clicked() {
         sort.toggle(col);
     }
 }
