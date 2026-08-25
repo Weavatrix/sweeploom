@@ -12,6 +12,7 @@ use crate::cargo::{CargoOffer, CargoTrim, cargo_offers};
 use crate::node::{NodeOffer, node_offers};
 use crate::python::{PythonOffer, python_offers};
 use crate::size::path_mtime;
+use sweeploom_storage::discover_projects;
 
 /// A review row: candidate plus whether the UI pre-selects it.
 #[derive(Clone, Debug)]
@@ -22,6 +23,16 @@ pub struct ReviewRow {
     pub selected: bool,
     /// Human title.
     pub title: String,
+}
+
+/// Discover projects under `root` (skipping generated trees) and collect offers.
+#[must_use]
+pub fn collect_review_from(
+    root: &Path,
+    processes: &[ProcessSnapshot],
+    max_projects: usize,
+) -> Vec<ReviewRow> {
+    collect_review(&discover_projects(root, max_projects), processes)
 }
 
 /// Collect Cargo, Node, and Python offers for discovered projects.

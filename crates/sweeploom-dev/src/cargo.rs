@@ -80,16 +80,23 @@ pub fn cargo_offers(project: &Path, processes: &[ProcessSnapshot]) -> Vec<CargoO
 }
 
 fn cargo_target_dir(project: &Path) -> Option<PathBuf> {
+    resolve_target_dir(project, std::env::var_os("CARGO_TARGET_DIR").as_deref())
+}
+
+fn resolve_target_dir(project: &Path, custom: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
     if !project.join("Cargo.toml").is_file() {
         return None;
     }
-    if let Some(custom) = std::env::var_os("CARGO_TARGET_DIR") {
+    if let Some(custom) = custom {
         let path = PathBuf::from(custom);
-        return Some(if path.is_absolute() {
+        let resolved = if path.is_absolute() {
             path
         } else {
             project.join(path)
-        });
+        };
+        if resolved.starts_with(project) {
+            return Some(resolved);
+        }
     }
     Some(project.join("target"))
 }
@@ -171,6 +178,22 @@ mod tests {
         assert!(offers.iter().any(|item| item.mode == CargoTrim::Balanced));
         assert!(offers.iter().any(|item| item.mode == CargoTrim::Full));
         assert!(offers.iter().all(|item| item.logical_bytes >= 2048));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn custom_target_outside_project_falls_back() {
+        use std::fs;
+        let root = std::env::temp_dir().join(format!("sweeploom-cargo-out-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("Cargo.toml"), "[package]\nname=\"demo\"\n").unwrap();
+        let outside = std::env::temp_dir().join("sweeploom-shared-target");
+        let resolved = resolve_target_dir(&root, Some(outside.as_os_str())).expect("toml");
+        assert_eq!(resolved, root.join("target"));
+        let inside = resolve_target_dir(&root, Some(std::ffi::OsStr::new("custom-target")))
+            .expect("relative");
+        assert_eq!(inside, root.join("custom-target"));
         let _ = fs::remove_dir_all(&root);
     }
 }

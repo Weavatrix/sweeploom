@@ -2,23 +2,15 @@
 
 use std::path::Path;
 
-use sweeploom_dev::{ReviewRow, collect_review};
+use sweeploom_dev::{ReviewRow, collect_review_from};
 use sweeploom_exec::{apply_plan, build_plan};
 use sweeploom_general::collect_offers;
 use sweeploom_platform::UserLocations;
-use sweeploom_storage::{InventoryLimits, scan_inventory};
 
 use crate::bytes::format_bytes;
 
 pub fn run(root: &Path, apply: bool) {
-    let report = match scan_inventory(root, InventoryLimits::default()) {
-        Ok(report) => report,
-        Err(error) => {
-            eprintln!("scan failed: {error}");
-            std::process::exit(1);
-        }
-    };
-    let mut rows = collect_review(&report.projects, &[]);
+    let mut rows = collect_review_from(root, &[], 128);
     let locations = UserLocations::current();
     let include_general = root == locations.home || root == locations.temp;
     if include_general {

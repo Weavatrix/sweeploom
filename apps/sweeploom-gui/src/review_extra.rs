@@ -1,9 +1,33 @@
-//! Review rows that are not project analyzers: temp, Downloads, AI stores.
+//! Review rows: generated project output first, then temp / Downloads / AI.
+
+use std::path::{Path, PathBuf};
 
 use sweeploom_ai::inspect_offers;
-use sweeploom_dev::ReviewRow;
+use sweeploom_core::ProcessSnapshot;
+use sweeploom_dev::{ReviewRow, collect_review};
 use sweeploom_general::collect_offers;
 use sweeploom_platform::UserLocations;
+use sweeploom_storage::{discover_projects_from, review_scan_roots};
+
+/// Build the Review list for `scan_root`.
+#[must_use]
+pub fn all_rows(
+    scan_root: &Path,
+    locations: &UserLocations,
+    inventory_projects: &[PathBuf],
+    processes: &[ProcessSnapshot],
+) -> Vec<ReviewRow> {
+    let mut roots = review_scan_roots(scan_root, &locations.home);
+    for project in inventory_projects {
+        if !roots.iter().any(|item| item == project) {
+            roots.push(project.clone());
+        }
+    }
+    let projects = discover_projects_from(&roots, 48);
+    let mut rows = collect_review(&projects, processes);
+    rows.extend(extra_rows(locations));
+    rows
+}
 
 /// General + AI inspect rows.
 #[must_use]

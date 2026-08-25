@@ -34,7 +34,6 @@ pub fn spawn(
 fn build(root: PathBuf, processes: &[ProcessSnapshot], locations: &UserLocations) -> ScanOutcome {
     let report =
         scan_inventory(&root, InventoryLimits::gui()).map_err(|error| error.to_string())?;
-    let mut rows = sweeploom_dev::collect_review(&report.projects, processes);
-    rows.extend(review_extra::extra_rows(locations));
+    let rows = review_extra::all_rows(&root, locations, &report.projects, processes);
     Ok((report, rows))
 }

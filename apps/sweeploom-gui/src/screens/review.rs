@@ -16,7 +16,7 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Storage review",
-        "SAFE generated/temp can be pre-selected. Downloads stay REVIEW. BLOCKED cannot be cleaned.",
+        "Cargo/Node/Python generated output is discovered without walking target. Dirty Git blocks auto-select, not listing.",
     );
     ui.horizontal(|ui| {
         if ui.button("Rebuild review").clicked() {
@@ -162,19 +162,20 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
 }
 
 impl SweepLoomApp {
-    /// Fill review from general roots plus the last project inventory.
+    /// Fill review from project discovery plus temp / Downloads / AI.
     pub fn rebuild_review(&mut self) {
         let processes = self
             .snapshot
             .as_ref()
             .map(|item| item.processes.as_slice())
             .unwrap_or(&[]);
-        let mut rows = match &self.inventory {
-            Some(report) => sweeploom_dev::collect_review(&report.projects, processes),
-            None => Vec::new(),
-        };
-        rows.extend(review_extra::extra_rows(&self.locations));
-        self.review = rows;
+        let root = std::path::PathBuf::from(self.scan_root.trim());
+        let inventory = self
+            .inventory
+            .as_ref()
+            .map(|item| item.projects.as_slice())
+            .unwrap_or(&[]);
+        self.review = review_extra::all_rows(&root, &self.locations, inventory, processes);
         self.action_message = Some(format!("{} candidates", self.review.len()));
     }
 
