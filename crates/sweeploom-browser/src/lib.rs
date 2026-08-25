@@ -7,6 +7,8 @@
 
 mod action;
 mod heat;
+mod host;
+mod install;
 mod message;
 mod native;
 mod pressure;
@@ -15,6 +17,11 @@ mod tab;
 
 pub use action::{TabAction, suggested_action};
 pub use heat::{TabHeat, heat_from_access};
+pub use host::run_native_host;
+pub use install::{
+    FIREFOX_ADDON_ID, HOST_NAME, chromium_host_json, chromium_origin, firefox_host_json,
+    is_chromium_extension_id,
+};
 pub use message::{ExtensionMessage, HostMessage};
 pub use native::{read_frame, write_frame};
 pub use pressure::{BrowserHost, BrowserPressure, family_from_name};

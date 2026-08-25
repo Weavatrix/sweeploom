@@ -56,7 +56,7 @@ fn draw_companion(app: &SweepLoomApp, ui: &mut eframe::egui::Ui) {
     let Some(stored) = stored.filter(|item| item.is_fresh(now)) else {
         ui.label(
             RichText::new(
-                "Companion: not connected. lastAccessed is not shown as zero. Host: sweeploom companion-host",
+                "Companion: not connected. lastAccessed is not shown as zero. Install: sweeploom companion-install. Host binary: sweeploom-companion-host.",
             )
             .size(14.0)
             .weak(),

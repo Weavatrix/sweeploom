@@ -17,6 +17,10 @@ workspace = true
 name = "sweeploom"
 path = "src/main.rs"
 
+[[bin]]
+name = "sweeploom-companion-host"
+path = "src/bin/companion_host.rs"
+
 [dependencies]
 sweeploom-core = { workspace = true }
 sweeploom-platform = { workspace = true }

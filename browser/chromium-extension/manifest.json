@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "SweepLoom Companion",
+  "version": "0.1.0",
+  "description": "Sends tab lastAccessed to SweepLoom. Never closes tabs by default.",
+  "permissions": ["tabs", "nativeMessaging", "alarms"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

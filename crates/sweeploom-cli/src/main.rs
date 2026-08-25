@@ -4,6 +4,7 @@ mod bytes;
 mod cmd_browser;
 mod cmd_clean;
 mod cmd_companion;
+mod cmd_companion_install;
 mod cmd_projects;
 mod cmd_sessions;
 
@@ -22,6 +23,7 @@ fn main() {
         "sessions" => cmd_sessions::run(args),
         "browser" => cmd_browser::run(),
         "companion-host" => cmd_companion::run(),
+        "companion-install" => cmd_companion_install::run(args),
         "scan" => cmd_scan(&arg_root(args.next())),
         "projects" => cmd_projects::run(&arg_root(args.next())),
         "clean" => {
@@ -53,6 +55,7 @@ Usage:
   sweeploom sessions [--free-ram GB] [--reduce-cpu PERCENT]
   sweeploom browser
   sweeploom companion-host
+  sweeploom companion-install [--chromium-id ID]
   sweeploom scan [path]
   sweeploom projects [path]
   sweeploom clean [path] [--apply]
