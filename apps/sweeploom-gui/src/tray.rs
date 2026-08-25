@@ -2,6 +2,7 @@
 
 /// Commands from the tray menu or icon.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 pub enum TrayCommand {
     /// Show the main window.
     Show,

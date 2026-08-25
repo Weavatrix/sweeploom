@@ -43,6 +43,7 @@ fn startup_path() -> Option<PathBuf> {
     }
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn enable() -> Result<(), String> {
     let path = startup_path().ok_or_else(|| "Startup folder is unavailable.".to_owned())?;
     let exe = std::env::current_exe().map_err(|error| error.to_string())?;
@@ -54,6 +55,7 @@ fn enable() -> Result<(), String> {
     fs::write(&path, body).map_err(|error| error.to_string())
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn disable() -> Result<(), String> {
     let Some(path) = startup_path() else {
         return Ok(());
