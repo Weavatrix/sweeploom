@@ -44,3 +44,24 @@ fn inventory_finds_cargo_project_and_target_bytes() {
     assert!(target.is_some(), "target directory missing");
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn nested_package_json_inside_node_modules_is_not_a_project() {
+    let root = std::env::temp_dir().join(format!("sweeploom-nested-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let nested = root.join("node_modules").join("left-pad");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(root.join("package.json"), "{}\n").unwrap();
+    fs::write(nested.join("package.json"), "{}\n").unwrap();
+    let report = scan_inventory(&root, InventoryLimits::default()).expect("scan");
+    assert!(report.projects.iter().any(|item| paths_match(item, &root)));
+    assert!(
+        report
+            .projects
+            .iter()
+            .all(|item| !item.ends_with("left-pad")),
+        "nested deps must not become projects: {:?}",
+        report.projects
+    );
+    let _ = fs::remove_dir_all(&root);
+}

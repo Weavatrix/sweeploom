@@ -5,15 +5,17 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{self, RichText};
 
+use crossbeam_channel::Receiver;
 use sweeploom_core::{LiveSession, Receipt};
 use sweeploom_dev::ReviewRow;
 use sweeploom_network::enrich_network;
 use sweeploom_platform::UserLocations;
 use sweeploom_process::{ProcessSampler, ProcessSnapshotSet, volume_space};
 use sweeploom_session::{AttributionRoots, sessions_from_snapshot};
-use sweeploom_storage::{InventoryLimits, InventoryReport, scan_inventory};
+use sweeploom_storage::InventoryReport;
 
 use crate::nav::Nav;
+use crate::scan_job::{self, ScanOutcome};
 use crate::screens;
 use crate::widgets::placeholder;
 
@@ -36,6 +38,8 @@ pub struct SweepLoomApp {
     pub(crate) last_receipt: Option<Receipt>,
     pub(crate) free_gb: String,
     pub(crate) volumes: Vec<(PathBuf, u64, u64)>,
+    pub(crate) scanning: bool,
+    scan_rx: Option<Receiver<ScanOutcome>>,
 }
 
 impl SweepLoomApp {
@@ -66,6 +70,8 @@ impl SweepLoomApp {
             last_receipt: None,
             free_gb: "1".to_owned(),
             volumes: volume_space(),
+            scanning: false,
+            scan_rx: None,
         };
         app.rebuild_review();
         app
@@ -84,22 +90,52 @@ impl SweepLoomApp {
     }
 
     pub(crate) fn run_scan(&mut self) {
+        if self.scanning {
+            return;
+        }
         let root = PathBuf::from(self.scan_root.trim());
-        match scan_inventory(&root, InventoryLimits::default()) {
-            Ok(report) => {
+        let processes = self
+            .snapshot
+            .as_ref()
+            .map(|item| item.processes.clone())
+            .unwrap_or_default();
+        self.scanning = true;
+        self.inventory_error = None;
+        self.action_message = Some(format!("Scanning {}…", root.display()));
+        self.scan_rx = Some(scan_job::spawn(root, processes, self.locations.clone()));
+    }
+
+    fn poll_scan(&mut self) {
+        let Some(rx) = &self.scan_rx else {
+            return;
+        };
+        let Ok(outcome) = rx.try_recv() else {
+            return;
+        };
+        self.scan_rx = None;
+        self.scanning = false;
+        match outcome {
+            Ok((report, rows)) => {
+                let n = rows.len();
                 self.inventory = Some(report);
+                self.review = rows;
                 self.inventory_error = None;
-                self.rebuild_review();
+                self.action_message = Some(format!("{n} candidates"));
             }
-            Err(error) => self.inventory_error = Some(error.to_string()),
+            Err(error) => self.inventory_error = Some(error),
         }
     }
 }
 
 impl eframe::App for SweepLoomApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.refresh_live();
-        ctx.request_repaint_after(Duration::from_secs(1));
+        self.poll_scan();
+        if self.scanning {
+            ctx.request_repaint_after(Duration::from_millis(200));
+        } else {
+            self.refresh_live();
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
         draw_chrome(ctx, self);
     }
 }

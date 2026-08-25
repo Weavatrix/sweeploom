@@ -19,12 +19,16 @@ pub fn run(root: &Path, apply: bool) {
         }
     };
     let mut rows = collect_review(&report.projects, &[]);
-    for offer in collect_offers(&UserLocations::current()) {
-        rows.push(ReviewRow {
-            candidate: offer.candidate,
-            selected: offer.selected,
-            title: offer.title,
-        });
+    let locations = UserLocations::current();
+    let include_general = root == locations.home || root == locations.temp;
+    if include_general {
+        for offer in collect_offers(&locations) {
+            rows.push(ReviewRow {
+                candidate: offer.candidate,
+                selected: offer.selected,
+                title: offer.title,
+            });
+        }
     }
     if rows.is_empty() {
         println!("no generated candidates");

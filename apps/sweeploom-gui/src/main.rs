@@ -3,6 +3,7 @@
 mod app;
 mod format;
 mod nav;
+mod scan_job;
 mod screens;
 mod widgets;
 

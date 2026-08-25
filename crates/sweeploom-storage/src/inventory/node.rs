@@ -14,13 +14,28 @@ pub struct InventoryLimits {
     pub max_entries: Option<u64>,
     /// Keep at most this many child rows per directory in the inspector tree.
     pub max_children_per_dir: usize,
+    /// Stop recording project markers after this many roots.
+    pub max_projects: usize,
 }
 
 impl Default for InventoryLimits {
     fn default() -> Self {
         Self {
-            max_entries: Some(2_000_000),
+            max_entries: Some(500_000),
             max_children_per_dir: 64,
+            max_projects: 256,
+        }
+    }
+}
+
+impl InventoryLimits {
+    /// Tighter caps for the interactive GUI so a home scan cannot freeze the UI.
+    #[must_use]
+    pub const fn gui() -> Self {
+        Self {
+            max_entries: Some(80_000),
+            max_children_per_dir: 48,
+            max_projects: 128,
         }
     }
 }

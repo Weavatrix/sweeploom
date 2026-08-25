@@ -11,10 +11,17 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.label("Root");
         ui.add(egui::TextEdit::singleline(&mut app.scan_root).desired_width(480.0));
-        if ui.button("Scan").clicked() {
+        let scan = if app.scanning { "Scanning…" } else { "Scan" };
+        if ui
+            .add_enabled(!app.scanning, egui::Button::new(scan))
+            .clicked()
+        {
             app.run_scan();
         }
     });
+    if app.scanning {
+        ui.label("Walk is running in the background. The window stays interactive.");
+    }
     if let Some(error) = &app.inventory_error {
         ui.colored_label(Color32::from_rgb(240, 120, 120), error);
     }
@@ -51,6 +58,7 @@ fn folder_tree(ui: &mut egui::Ui, node: &DirectoryNode, depth: usize) {
         return;
     }
     egui::CollapsingHeader::new(label)
+        .id_salt(&node.path)
         .default_open(depth < 1)
         .show(ui, |ui| {
             for child in &node.children {

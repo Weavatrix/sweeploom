@@ -40,13 +40,7 @@ pub fn scan_inventory(root: &Path, limits: InventoryLimits) -> Result<InventoryR
             capped = true;
             break;
         }
-        absorb_entry(
-            &mut pending,
-            &mut projects,
-            &entry,
-            limits.max_children_per_dir,
-            &scan_root,
-        );
+        absorb_entry(&mut pending, &mut projects, &entry, limits, &scan_root);
     }
     let tree = pending
         .remove(&scan_root)
@@ -65,29 +59,49 @@ fn absorb_entry(
     pending: &mut BTreeMap<PathBuf, DirectoryNode>,
     projects: &mut Vec<PathBuf>,
     entry: &WalkEntry,
-    max_children: usize,
+    limits: InventoryLimits,
     scan_root: &Path,
 ) {
     let path = entry.path();
     if entry.is_symlink() {
         return;
     }
-    record_project(projects, path);
+    record_project(projects, path, limits.max_projects);
     let mtime = entry_mtime(entry);
     if entry.is_dir() {
-        absorb_directory(pending, path, mtime, max_children, scan_root);
+        absorb_directory(pending, path, mtime, limits.max_children_per_dir, scan_root);
         return;
     }
     absorb_file(pending, path, entry.bytes().unwrap_or(0), mtime);
 }
 
-fn record_project(projects: &mut Vec<PathBuf>, path: &Path) {
-    if is_project_marker(path)
-        && let Some(parent) = path.parent()
-        && !projects.iter().any(|item| item == parent)
-    {
+fn record_project(projects: &mut Vec<PathBuf>, path: &Path, max_projects: usize) {
+    if projects.len() >= max_projects {
+        return;
+    }
+    if !is_project_marker(path) {
+        return;
+    }
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if is_inside_noise(parent) {
+        return;
+    }
+    if !projects.iter().any(|item| item == parent) {
         projects.push(parent.to_path_buf());
     }
+}
+
+fn is_inside_noise(path: &Path) -> bool {
+    path.components().any(|component| {
+        let name = component.as_os_str().to_str().unwrap_or("");
+        name.eq_ignore_ascii_case(".git")
+            || matches!(
+                classify_path_component(name),
+                PathCategory::Generated | PathCategory::Dependencies | PathCategory::Cache
+            )
+    })
 }
 
 fn entry_mtime(entry: &WalkEntry) -> Option<SystemTime> {
