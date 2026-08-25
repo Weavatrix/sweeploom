@@ -1,10 +1,11 @@
 //! User intent. The cleaner learns through policy, not an LLM.
 
 /// Per-candidate or per-project user policy.
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum UserPolicy {
     /// Use the default planner.
+    #[default]
     Default,
     /// Keep this item.
     Keep,
@@ -16,10 +17,4 @@ pub enum UserPolicy {
     AskEveryTime,
     /// Pin the owning project.
     PinProject,
-}
-
-impl Default for UserPolicy {
-    fn default() -> Self {
-        Self::Default
-    }
 }

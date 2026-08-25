@@ -1,7 +1,8 @@
 # SweepLoom architecture
 
 SweepLoom is a local-first workstation resource manager. The full product
-plan lives in [`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md).
+plan lives in [`product/`](product/README.md), split so every file stays
+under 300 lines.
 
 ## License boundary
 

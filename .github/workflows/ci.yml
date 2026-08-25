@@ -30,6 +30,9 @@ jobs:
         with:
           command: check
           arguments: --all-features
+      - name: Architecture budget
+        shell: pwsh
+        run: ./scripts/check-lines.ps1
 
   platform-tests:
     name: Platform tests (${{ matrix.os }})

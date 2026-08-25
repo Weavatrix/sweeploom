@@ -1,6 +1,10 @@
 //! SweepLoom desktop UI.
 
 mod app;
+mod format;
+mod nav;
+mod screens;
+mod widgets;
 
 use eframe::egui;
 
