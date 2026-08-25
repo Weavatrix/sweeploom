@@ -35,8 +35,3 @@ pub fn page_title(ui: &mut egui::Ui, title: &str, hint: &str) {
     );
     ui.add_space(12.0);
 }
-
-/// Placeholder copy for screens that are not P0 yet.
-pub fn placeholder(ui: &mut egui::Ui, title: &str, body: &str) {
-    page_title(ui, title, body);
-}

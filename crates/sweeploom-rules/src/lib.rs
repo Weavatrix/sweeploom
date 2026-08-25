@@ -2,8 +2,12 @@
 
 #![cfg_attr(not(test), warn(missing_docs))]
 
+mod load;
+
 use serde::Deserialize;
 use sweeploom_core::{DeletionStrategy, SafetyLevel};
+
+pub use load::{LoadedRuleFile, load_packs};
 
 /// A loaded rule pack.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]

@@ -30,6 +30,7 @@ sweeploom-general = { workspace = true }
 sweeploom-history = { workspace = true }
 sweeploom-ai = { workspace = true }
 sweeploom-browser = { workspace = true }
+sweeploom-rules = { workspace = true }
 crossbeam-channel = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }

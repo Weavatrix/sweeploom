@@ -21,7 +21,6 @@ use crate::scan_job::{self, ScanOutcome};
 use crate::screens;
 use crate::sort::Sort;
 use crate::theme;
-use crate::widgets::placeholder;
 
 /// Live UI application.
 pub struct SweepLoomApp {
@@ -256,11 +255,7 @@ fn draw_page(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         Nav::Projects => screens::ui_projects(app, ui),
         Nav::Browser => screens::ui_browser(app, ui),
         Nav::Ai => screens::ui_ai(app, ui),
-        Nav::Rules => placeholder(
-            ui,
-            "Rules",
-            "Declarative TOML cleaners. No shell from downloaded rules.",
-        ),
+        Nav::Rules => screens::ui_rules(app, ui),
         Nav::History => screens::ui_history(app, ui),
         Nav::Settings => screens::ui_settings(app, ui),
     }
