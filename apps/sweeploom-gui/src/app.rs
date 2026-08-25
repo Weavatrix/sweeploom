@@ -249,11 +249,7 @@ fn draw_page(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         Nav::Storage => screens::ui_review(app, ui),
         Nav::Explorer => screens::ui_storage(app, ui),
         Nav::Projects => screens::ui_projects(app, ui),
-        Nav::Browser => placeholder(
-            ui,
-            "Browser",
-            "Optional companion for lastAccessed / Discard / Bookmark+Close.",
-        ),
+        Nav::Browser => screens::ui_browser(app, ui),
         Nav::Ai => screens::ui_ai(app, ui),
         Nav::Rules => placeholder(
             ui,

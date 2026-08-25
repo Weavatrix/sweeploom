@@ -84,6 +84,10 @@ pub fn score_session(
         orphan: scored.processes.len() == 1 && scored.kind != SessionKind::Unknown,
     };
     apply_policy(&mut scored, input);
+    if scored.kind == SessionKind::Browser {
+        scored.recommendation.recommendation = Recommendation::Keep;
+        scored.recommendation.estimated_reclaimable_rss = 0;
+    }
     scored
 }
 
@@ -208,5 +212,13 @@ mod tests {
         let scored = score_session(&value, now, None);
         assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
         assert!(scored.safety.terminate_disabled);
+    }
+
+    #[test]
+    fn browser_tree_is_never_auto_reclaimed() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
+        let scored = score_session(&session(8_000_000_000, SessionKind::Browser), now, None);
+        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
+        assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
     }
 }

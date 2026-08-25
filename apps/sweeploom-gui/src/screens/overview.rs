@@ -1,6 +1,7 @@
 //! Overview pressure cards and top opportunities.
 
 use eframe::egui::{self, RichText};
+use sweeploom_browser::BrowserPressure;
 use sweeploom_core::Recommendation;
 
 use crate::app::SweepLoomApp;
@@ -104,6 +105,19 @@ fn draw_opportunities(app: &SweepLoomApp, ui: &mut egui::Ui) {
                 .map(|item| item.0.display().to_string())
                 .unwrap_or_default(),
             session.recommendation.recommendation
+        ));
+    }
+    let processes = app
+        .snapshot
+        .as_ref()
+        .map(|item| item.processes.as_slice())
+        .unwrap_or(&[]);
+    let pressure = BrowserPressure::from_live(&app.sessions, processes);
+    if pressure.rss_bytes() > 0 && shown < 8 {
+        shown += 1;
+        ui.label(format!(
+            "• Browser  {}  companion needed for tab discard",
+            format_bytes(pressure.rss_bytes())
         ));
     }
     if shown == 0 {

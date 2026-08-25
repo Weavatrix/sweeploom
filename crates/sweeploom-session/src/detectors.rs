@@ -240,5 +240,9 @@ mod tests {
             .map(|item| item.kind),
             Some(SessionKind::DevServer)
         );
+        assert_eq!(
+            classify_process(&process("chrome.exe", &["chrome"])).map(|item| item.kind),
+            Some(SessionKind::Browser)
+        );
     }
 }

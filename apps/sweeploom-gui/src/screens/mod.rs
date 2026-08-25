@@ -1,6 +1,7 @@
 //! One module per primary surface.
 
 mod ai;
+mod browser;
 mod history;
 mod overview;
 mod projects;
@@ -12,6 +13,7 @@ mod settings;
 mod storage;
 
 pub use ai::ui_ai;
+pub use browser::ui_browser;
 pub use history::ui_history;
 pub use overview::ui_overview;
 pub use projects::ui_projects;

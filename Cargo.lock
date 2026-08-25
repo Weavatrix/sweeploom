@@ -2888,6 +2888,7 @@ name = "sweeploom-cli"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "sweeploom-browser",
  "sweeploom-core",
  "sweeploom-dev",
  "sweeploom-exec",
@@ -2941,6 +2942,7 @@ dependencies = [
  "egui",
  "egui_extras",
  "sweeploom-ai",
+ "sweeploom-browser",
  "sweeploom-core",
  "sweeploom-dev",
  "sweeploom-exec",

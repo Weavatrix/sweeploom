@@ -1,6 +1,6 @@
 //! Least-pain session selection. Never terminates; the user still confirms.
 
-use sweeploom_core::{LiveSession, Recommendation, SessionId};
+use sweeploom_core::{LiveSession, Recommendation, SessionId, SessionKind};
 
 /// True when a session may be offered for RAM/CPU reclaim.
 #[must_use]
@@ -8,6 +8,7 @@ pub fn is_reclaim_candidate(session: &LiveSession) -> bool {
     !session.safety.terminate_disabled
         && !session.safety.assessment.is_blocked()
         && session.recommendation.recommendation != Recommendation::Keep
+        && session.kind != SessionKind::Browser
 }
 
 /// Pick forgotten sessions until estimated reclaimable RSS reaches `target_bytes`.
@@ -171,5 +172,13 @@ mod tests {
         ];
         let ids = plan_reduce_cpu(&sessions, 7.0);
         assert_eq!(ids, vec![SessionId(2)]);
+    }
+
+    #[test]
+    fn ram_plan_skips_browser_trees() {
+        let mut browser = session(4, Recommendation::Recommended, 9_000_000_000, 0.0, false);
+        browser.kind = SessionKind::Browser;
+        let ids = plan_free_ram(&[browser], 1_000_000_000);
+        assert!(ids.is_empty());
     }
 }
