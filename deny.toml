@@ -28,11 +28,19 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "OpenSSL",
+    # clipboard-win / error-code (egui-winit → arboard)
+    "BSL-1.0",
+    # epaint_default_fonts bundled faces
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
 ]
 confidence-threshold = 0.8
 
 [advisories]
 yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is a transitive egui/ab_glyph dep; no safe upgrade until eframe moves off it" },
+]
 
 [sources]
 unknown-registry = "deny"
