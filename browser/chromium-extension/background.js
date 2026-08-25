@@ -20,6 +20,11 @@ function connect() {
     port = null;
   });
   port.postMessage({ type: "hello", version: VERSION });
+  port.onMessage.addListener((message) => {
+    if (message && message.type === "apply" && Array.isArray(message.actions)) {
+      void applyActions(message.actions);
+    }
+  });
   return port;
 }
 
@@ -93,3 +98,48 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 void sendTabs();
+
+async function applyActions(actions) {
+  for (const item of actions) {
+    if (!item || typeof item.tab_id !== "number") {
+      continue;
+    }
+    if (item.action === "discard") {
+      try {
+        await chrome.tabs.discard(item.tab_id);
+      } catch (_error) {
+        /* tab gone */
+      }
+    } else if (item.action === "bookmark_and_close") {
+      await bookmarkAndClose(item.tab_id);
+    }
+  }
+}
+
+async function bookmarkAndClose(tabId) {
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch (_error) {
+    return;
+  }
+  if (!tab || tab.pinned || tab.audible || tab.incognito) {
+    return;
+  }
+  const url = tab.url || "";
+  if (
+    !url ||
+    url.startsWith("chrome:") ||
+    url.startsWith("about:") ||
+    url.startsWith("moz-extension:")
+  ) {
+    return;
+  }
+  const created = await chrome.bookmarks.create({
+    title: tab.title || url,
+    url,
+  });
+  if (created && created.id) {
+    await chrome.tabs.remove(tabId);
+  }
+}

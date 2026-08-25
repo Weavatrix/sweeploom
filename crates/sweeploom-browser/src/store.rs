@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::apply::take_apply;
 use crate::message::{ExtensionMessage, HostMessage};
 use crate::tab::CompanionTabs;
 
@@ -78,10 +79,17 @@ pub fn handle_extension_json(raw: &[u8], app_data: &Path) -> Result<Vec<u8>, Str
                 active_tab_id,
             };
             match save_snapshot(app_data, body) {
-                Ok(()) => HostMessage::Ack {
-                    ok: true,
-                    detail: "tabs stored".into(),
-                },
+                Ok(()) => {
+                    let actions = take_apply(app_data).unwrap_or_default();
+                    if actions.is_empty() {
+                        HostMessage::Ack {
+                            ok: true,
+                            detail: "tabs stored".into(),
+                        }
+                    } else {
+                        HostMessage::Apply { actions }
+                    }
+                }
                 Err(error) => HostMessage::Ack {
                     ok: false,
                     detail: error.to_string(),
@@ -121,6 +129,28 @@ mod tests {
         let stored = load_snapshot(&dir).unwrap().expect("file");
         assert!(stored.tabs.tabs.is_empty());
         assert!(stored.is_fresh(stored.written_unix_ms));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tabs_reply_includes_queued_discard() {
+        let dir = std::env::temp_dir().join(format!("sweeploom-apply-tabs-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        crate::save_apply(
+            &dir,
+            vec![crate::TabCommand {
+                tab_id: 9,
+                action: crate::TabAction::Discard,
+            }],
+        )
+        .unwrap();
+        let reply =
+            handle_extension_json(br#"{"type":"tabs","tabs":[],"active_tab_id":null}"#, &dir)
+                .unwrap();
+        let text = String::from_utf8(reply).unwrap();
+        assert!(text.contains("apply"));
+        assert!(text.contains("discard"));
+        assert!(!crate::apply_path(&dir).is_file());
         let _ = fs::remove_dir_all(&dir);
     }
 

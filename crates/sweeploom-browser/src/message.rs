@@ -2,7 +2,17 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::action::TabAction;
 use crate::tab::{CompanionTabs, TabSnapshot};
+
+/// One tab action the host may ask the extension to perform.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TabCommand {
+    /// Browser tab id.
+    pub tab_id: i64,
+    /// Discard or bookmark-and-close. Close is never queued.
+    pub action: TabAction,
+}
 
 /// Message from the WebExtension.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,6 +46,12 @@ pub enum HostMessage {
         ok: bool,
         /// Human detail for the extension console.
         detail: String,
+    },
+    /// Apply queued reclaim actions. Empty queue stays an ack.
+    #[serde(rename = "apply")]
+    Apply {
+        /// Actions the extension should perform now.
+        actions: Vec<TabCommand>,
     },
 }
 

@@ -7,6 +7,7 @@ use crate::tab::TabSnapshot;
 
 /// Safe action. Discard is the default memory reclaim.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TabAction {
     /// Leave the tab.
     Keep,
