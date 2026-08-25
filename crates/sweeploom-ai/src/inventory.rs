@@ -155,11 +155,14 @@ fn relative_sample(root: &Path, path: &Path) -> Option<String> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     fn unique_root() -> PathBuf {
+        static SEQ: AtomicU64 = AtomicU64::new(0);
         std::env::temp_dir().join(format!(
-            "sweeploom-ai-{}-{}",
+            "sweeploom-ai-{}-{}-{}",
             std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|item| item.as_nanos())
@@ -171,7 +174,7 @@ mod tests {
     fn counts_files_from_metadata_only() {
         let root = unique_root();
         fs::create_dir_all(root.join("a")).unwrap();
-        fs::write(root.join("a/hello.txt"), b"abcd").unwrap();
+        fs::write(root.join("a").join("hello.txt"), b"abcd").unwrap();
         fs::write(root.join("note.md"), b"xy").unwrap();
         let listed = list_store(&root, Limits::default());
         fs::remove_dir_all(&root).ok();
