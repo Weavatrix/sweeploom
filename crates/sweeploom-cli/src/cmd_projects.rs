@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use sweeploom_dev::{cargo_offers, classify_project, inspect, node_offers};
+use sweeploom_dev::{cargo_offers, classify_project, inspect, node_offers, python_offers};
 use sweeploom_storage::{InventoryLimits, scan_inventory};
 
 use crate::bytes::format_bytes;
@@ -38,6 +38,15 @@ pub fn run(root: &Path) {
         for offer in node_offers(project, &[]) {
             println!(
                 "  node_modules\t{}\trebuild={:?}{}",
+                format_bytes(offer.logical_bytes),
+                offer.rebuild,
+                if offer.blocked { "\tBLOCKED" } else { "" }
+            );
+        }
+        for offer in python_offers(project, &[]) {
+            println!(
+                "  python {}\t{}\trebuild={:?}{}",
+                offer.label,
                 format_bytes(offer.logical_bytes),
                 offer.rebuild,
                 if offer.blocked { "\tBLOCKED" } else { "" }

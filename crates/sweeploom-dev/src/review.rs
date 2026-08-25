@@ -4,11 +4,13 @@ use std::path::Path;
 
 use sweeploom_core::{
     ActivityEvidence, Candidate, CandidateId, CandidateKind, CandidateOwner, DeletionStrategy,
-    Evidence, ProcessSnapshot, ProjectId, RebuildAssessment, SafetyAssessment, UserPolicy,
+    Evidence, ProcessSnapshot, ProjectId, RebuildAssessment, RebuildCost, SafetyAssessment,
+    UserPolicy,
 };
 
 use crate::cargo::{CargoOffer, CargoTrim, cargo_offers};
 use crate::node::{NodeOffer, node_offers};
+use crate::python::{PythonOffer, python_offers};
 use crate::size::path_mtime;
 
 /// A review row: candidate plus whether the UI pre-selects it.
@@ -22,7 +24,7 @@ pub struct ReviewRow {
     pub title: String,
 }
 
-/// Collect Cargo and Node offers for discovered projects.
+/// Collect Cargo, Node, and Python offers for discovered projects.
 #[must_use]
 pub fn collect_review(
     projects: &[impl AsRef<Path>],
@@ -38,6 +40,10 @@ pub fn collect_review(
         }
         for offer in node_offers(project, processes) {
             rows.push(node_row(offer, id));
+            id += 1;
+        }
+        for offer in python_offers(project, processes) {
+            rows.push(python_row(offer, id));
             id += 1;
         }
     }
@@ -97,6 +103,39 @@ fn node_row(offer: NodeOffer, id: u64) -> ReviewRow {
             user_policy: UserPolicy::Default,
         },
         selected: false,
+        title,
+    }
+}
+
+fn python_row(offer: PythonOffer, id: u64) -> ReviewRow {
+    let title = format!("Python {} · {}", offer.label, offer.path.display());
+    let safety = safety_of(offer.blocked, offer.blocker);
+    let activity = generated_activity(&offer.path);
+    let kind = if offer.rebuild == RebuildCost::High {
+        CandidateKind::DependencyTree
+    } else {
+        CandidateKind::BuildArtifact
+    };
+    ReviewRow {
+        candidate: Candidate {
+            id: CandidateId(id),
+            kind,
+            owner: CandidateOwner::Project(ProjectId(offer.project)),
+            path: offer.path,
+            logical_bytes: offer.logical_bytes,
+            allocated_bytes: None,
+            file_count: 0,
+            activity,
+            safety,
+            rebuild: RebuildAssessment {
+                cost: offer.rebuild,
+                observed_duration_ms: None,
+            },
+            deletion: DeletionStrategy::PermanentGenerated,
+            evidence: vec![Evidence::exact("python-generated", title.clone())],
+            user_policy: UserPolicy::Default,
+        },
+        selected: offer.preselect,
         title,
     }
 }

@@ -1,7 +1,7 @@
 //! Projects with Source/Artifact Heat and Git safety from Weavatrix Git.
 
 use eframe::egui;
-use sweeploom_dev::{cargo_offers, classify_project, inspect, node_offers};
+use sweeploom_dev::{cargo_offers, classify_project, inspect, node_offers, python_offers};
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
@@ -44,6 +44,15 @@ pub fn ui_projects(app: &SweepLoomApp, ui: &mut egui::Ui) {
         for offer in node_offers(project, processes) {
             ui.label(format!(
                 "  node_modules  {}  rebuild={:?}{}",
+                format_bytes(offer.logical_bytes),
+                offer.rebuild,
+                if offer.blocked { "  BLOCKED" } else { "" }
+            ));
+        }
+        for offer in python_offers(project, processes) {
+            ui.label(format!(
+                "  python {}  {}  rebuild={:?}{}",
+                offer.label,
                 format_bytes(offer.logical_bytes),
                 offer.rebuild,
                 if offer.blocked { "  BLOCKED" } else { "" }
