@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, RichText};
 
 use crossbeam_channel::Receiver;
+use sweeploom_ai::AiOffer;
 use sweeploom_core::{LiveSession, ProcessKey, ProjectId, Receipt, SessionId};
 use sweeploom_dev::ReviewRow;
 use sweeploom_history::HistoryStore;
@@ -55,6 +56,7 @@ pub struct SweepLoomApp {
     pub(crate) current_project: Option<ProjectId>,
     pub(crate) volumes: Vec<(PathBuf, u64, u64)>,
     pub(crate) scanning: bool,
+    pub(crate) ai_offers: Option<Vec<AiOffer>>,
     scan_rx: Option<Receiver<ScanOutcome>>,
 }
 
@@ -97,6 +99,7 @@ impl SweepLoomApp {
             current_project: std::env::current_dir().ok().map(ProjectId),
             volumes: volume_space(),
             scanning: false,
+            ai_offers: None,
             scan_rx: None,
         };
         if let Some(snapshot) = &app.snapshot {

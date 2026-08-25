@@ -1,6 +1,7 @@
 //! SweepLoom CLI. GUI is the primary surface; this is for scripts and agents.
 
 mod bytes;
+mod cmd_ai;
 mod cmd_browser;
 mod cmd_clean;
 mod cmd_companion;
@@ -21,6 +22,7 @@ fn main() {
     let cmd = args.next().unwrap_or_else(|| "help".to_owned());
     match cmd.as_str() {
         "sessions" => cmd_sessions::run(args),
+        "ai" => cmd_ai::run(),
         "browser" => cmd_browser::run(),
         "companion-host" => cmd_companion::run(),
         "companion-install" => cmd_companion_install::run(args),
@@ -53,6 +55,7 @@ SweepLoom — reclaim your workstation without losing your workspace
 
 Usage:
   sweeploom sessions [--free-ram GB] [--reduce-cpu PERCENT] [--quiet]
+  sweeploom ai
   sweeploom browser
   sweeploom companion-host
   sweeploom companion-install [--chromium-id ID]

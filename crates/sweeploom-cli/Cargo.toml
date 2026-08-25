@@ -32,4 +32,5 @@ sweeploom-dev = { workspace = true }
 sweeploom-exec = { workspace = true }
 sweeploom-general = { workspace = true }
 sweeploom-browser = { workspace = true }
+sweeploom-ai = { workspace = true }
 serde_json = { workspace = true }
