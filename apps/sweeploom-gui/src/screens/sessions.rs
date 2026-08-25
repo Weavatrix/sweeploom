@@ -1,6 +1,7 @@
 //! Logical session table and raw process tree.
 
 use super::session_actions;
+use super::session_observe;
 use super::session_plan;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
@@ -230,46 +231,7 @@ fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSess
         session.processes.len(),
         session.activity
     ));
-    if let Some(key) = session.processes.first()
-        && let Some(hist) = app.history.get(*key)
-    {
-        let samples = hist.fast.chrono();
-        if let (Some(first), Some(last)) = (samples.first(), samples.last()) {
-            ui.label(format!(
-                "Observed {} → {} RSS over {} samples",
-                format_bytes(first.rss_bytes),
-                format_bytes(last.rss_bytes),
-                samples.len()
-            ));
-        }
-    }
-    if session.network.connections_available {
-        if session.network.listening_ports.is_empty() {
-            ui.label("Listening ports: none observed");
-        } else {
-            ui.label(format!(
-                "Listening ports: {}",
-                session
-                    .network
-                    .listening_ports
-                    .iter()
-                    .map(u16::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-        }
-    } else {
-        ui.label("Listening ports unavailable on this OS (not shown as zero).");
-    }
-    if session.network.byte_rate_available {
-        ui.label(format!(
-            "Observed TCP  rx {}  tx {}  since SweepLoom started watching",
-            format_bytes(session.network.observed_rx_bytes),
-            format_bytes(session.network.observed_tx_bytes)
-        ));
-    } else {
-        ui.label("Per-process TCP bytes unavailable (not shown as zero).");
-    }
+    session_observe::draw(app, ui, session);
     if session.safety.terminate_disabled {
         ui.colored_label(
             Color32::from_rgb(240, 160, 80),

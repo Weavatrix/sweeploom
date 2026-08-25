@@ -26,7 +26,7 @@ impl HistoryStore {
                 .by_key
                 .entry(process.key)
                 .or_insert_with(|| ProcessHistory::new(process.key));
-            entry.fast.push(Sample {
+            entry.push(Sample {
                 at_unix_ms: at,
                 cpu_percent: process.cpu_percent,
                 rss_bytes: process.rss_bytes,
@@ -81,6 +81,35 @@ mod tests {
         assert_eq!(store.len(), 1);
         store.record(&[], UNIX_EPOCH);
         assert!(store.is_empty());
+    }
+
+    #[test]
+    fn one_second_samples_do_not_fill_slow() {
+        use std::time::Duration;
+        let mut store = HistoryStore::default();
+        let key = ProcessKey::new(1, Some(UNIX_EPOCH));
+        for sec in 0..5 {
+            store.record(&[dummy(key, 10)], UNIX_EPOCH + Duration::from_secs(sec));
+        }
+        let hist = store.get(key).unwrap();
+        assert_eq!(hist.fast.len(), 5);
+        assert_eq!(hist.slow.len(), 1);
+    }
+
+    #[test]
+    fn slow_ring_keeps_minute_samples() {
+        use std::time::Duration;
+        let mut store = HistoryStore::default();
+        let key = ProcessKey::new(1, Some(UNIX_EPOCH));
+        for minute in 0..3 {
+            store.record(
+                &[dummy(key, 10)],
+                UNIX_EPOCH + Duration::from_secs(minute * 60),
+            );
+        }
+        let hist = store.get(key).unwrap();
+        assert_eq!(hist.fast.len(), 3);
+        assert_eq!(hist.slow.len(), 3);
     }
 
     fn dummy(key: ProcessKey, rss: u64) -> ProcessSnapshot {

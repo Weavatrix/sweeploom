@@ -1,6 +1,7 @@
 //! Observed process history. Never invented from before SweepLoom started.
 
 use eframe::egui::RichText;
+use sweeploom_history::summarize_cpu;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
@@ -24,26 +25,31 @@ pub fn ui_history(app: &SweepLoomApp, ui: &mut eframe::egui::Ui) {
         let Some(hist) = app.history.get(process.key) else {
             continue;
         };
-        let samples = hist.fast.chrono();
-        if samples.is_empty() {
+        let fast = hist.fast.chrono();
+        let Some(last) = fast.last() else {
             continue;
-        }
-        let peak = samples.iter().map(|item| item.rss_bytes).max().unwrap_or(0);
-        let cpu = samples
-            .iter()
-            .map(|item| item.cpu_percent)
-            .fold(0.0_f32, f32::max);
+        };
+        let peak = fast.iter().map(|item| item.rss_bytes).max().unwrap_or(0);
+        let cpu = summarize_cpu(&fast, &hist.slow.chrono(), last.at_unix_ms);
         ui.label(
             RichText::new(format!(
-                "{}  pid {}  now {}  peak {}  cpu max {:.1}%  samples {}",
+                "{}  pid {}  now {}  peak {}  cpu {:.1}%  {}  samples {}",
                 process.name,
                 process.pid,
                 format_bytes(process.rss_bytes),
                 format_bytes(peak),
-                cpu,
-                samples.len()
+                cpu.now,
+                avg_short(cpu.avg_5m),
+                fast.len()
             ))
             .size(16.0),
         );
+    }
+}
+
+fn avg_short(value: Option<f32>) -> String {
+    match value {
+        Some(cpu) => format!("5m {cpu:.1}%"),
+        None => "5m unavailable".to_owned(),
     }
 }

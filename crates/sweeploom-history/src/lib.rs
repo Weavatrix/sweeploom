@@ -3,10 +3,12 @@
 #![cfg_attr(not(test), warn(missing_docs))]
 
 mod store;
+mod summary;
 
 use sweeploom_core::ProcessKey;
 
 pub use store::HistoryStore;
+pub use summary::{CpuSummary, summarize_cpu};
 
 /// One sample in a ring.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -85,6 +87,9 @@ pub struct ProcessHistory {
     pub key: ProcessKey,
     /// ~1s samples, 10 minutes.
     pub fast: Ring<Sample>,
+    /// ~1m samples, 1 hour.
+    pub slow: Ring<Sample>,
+    slow_at_ms: u64,
 }
 
 impl ProcessHistory {
@@ -94,6 +99,17 @@ impl ProcessHistory {
         Self {
             key,
             fast: Ring::new(600),
+            slow: Ring::new(60),
+            slow_at_ms: 0,
+        }
+    }
+
+    /// Record one sample. The slow ring keeps at most one point per minute.
+    pub(crate) fn push(&mut self, sample: Sample) {
+        self.fast.push(sample);
+        if self.slow.is_empty() || sample.at_unix_ms.saturating_sub(self.slow_at_ms) >= 60_000 {
+            self.slow.push(sample);
+            self.slow_at_ms = sample.at_unix_ms;
         }
     }
 }
