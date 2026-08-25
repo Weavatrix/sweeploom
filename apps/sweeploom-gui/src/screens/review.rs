@@ -1,9 +1,9 @@
 //! Review generated cleanup, then apply after revalidation.
 
+use crate::review_extra;
 use eframe::egui::{self, Color32, RichText};
 use sweeploom_core::DeletionStrategy;
 use sweeploom_exec::{apply_plan, build_plan};
-use sweeploom_general::collect_offers;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
@@ -173,13 +173,7 @@ impl SweepLoomApp {
             Some(report) => sweeploom_dev::collect_review(&report.projects, processes),
             None => Vec::new(),
         };
-        for offer in collect_offers(&self.locations) {
-            rows.push(sweeploom_dev::ReviewRow {
-                candidate: offer.candidate,
-                selected: offer.selected,
-                title: offer.title,
-            });
-        }
+        rows.extend(review_extra::extra_rows(&self.locations));
         self.review = rows;
         self.action_message = Some(format!("{} candidates", self.review.len()));
     }

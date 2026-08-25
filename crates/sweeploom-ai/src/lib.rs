@@ -2,9 +2,13 @@
 
 #![cfg_attr(not(test), warn(missing_docs))]
 
+mod offers;
+
 use std::path::PathBuf;
 
 use sweeploom_platform::UserLocations;
+
+pub use offers::inspect_offers;
 
 /// Known on-disk AI session roots. Presence does not mean it is safe to delete.
 #[derive(Clone, Debug, PartialEq, Eq)]

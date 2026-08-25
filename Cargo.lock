@@ -2940,6 +2940,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+ "sweeploom-ai",
  "sweeploom-core",
  "sweeploom-dev",
  "sweeploom-exec",

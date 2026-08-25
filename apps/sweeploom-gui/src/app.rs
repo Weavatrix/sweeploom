@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, RichText};
 
 use crossbeam_channel::Receiver;
-use sweeploom_core::{LiveSession, Receipt, SessionId};
+use sweeploom_core::{LiveSession, ProcessKey, Receipt, SessionId};
 use sweeploom_dev::ReviewRow;
 use sweeploom_history::HistoryStore;
 use sweeploom_network::enrich_network;
@@ -41,6 +41,8 @@ pub struct SweepLoomApp {
     pub(crate) scan_root: String,
     pub(crate) locations: UserLocations,
     pub(crate) confirm_terminate: bool,
+    pub(crate) confirm_force: bool,
+    pub(crate) pending_force: Option<Vec<ProcessKey>>,
     pub(crate) action_message: Option<String>,
     pub(crate) review: Vec<ReviewRow>,
     pub(crate) last_receipt: Option<Receipt>,
@@ -75,6 +77,8 @@ impl SweepLoomApp {
             scan_root: locations.home.display().to_string(),
             locations,
             confirm_terminate: false,
+            confirm_force: false,
+            pending_force: None,
             action_message: None,
             review: Vec::new(),
             last_receipt: None,
@@ -100,7 +104,8 @@ impl SweepLoomApp {
         let _ = enrich_network(&mut snapshot.processes);
         self.history
             .record(&snapshot.processes, snapshot.captured_at);
-        self.sessions = sessions_from_snapshot(&mut snapshot, &home_roots(&self.locations));
+        let roots = session_roots(self);
+        self.sessions = sessions_from_snapshot(&mut snapshot, &roots);
         self.snapshot = Some(snapshot);
         self.last_sample = Instant::now();
     }
@@ -163,13 +168,28 @@ fn sample_with(
     let mut snapshot = sampler.refresh(Duration::from_millis(200));
     snapshot.resolve_parents();
     let _ = enrich_network(&mut snapshot.processes);
-    let sessions = sessions_from_snapshot(&mut snapshot, &home_roots(locations));
+    let sessions = sessions_from_snapshot(&mut snapshot, &home_only(locations));
     (snapshot, sessions)
 }
 
-fn home_roots(locations: &UserLocations) -> AttributionRoots {
+fn home_only(locations: &UserLocations) -> AttributionRoots {
     AttributionRoots {
         projects: vec![locations.home.clone()],
+        current_project: None,
+    }
+}
+
+fn session_roots(app: &SweepLoomApp) -> AttributionRoots {
+    let mut projects = vec![app.locations.home.clone()];
+    if let Some(report) = &app.inventory {
+        for project in &report.projects {
+            if !projects.iter().any(|item| item == project) {
+                projects.push(project.clone());
+            }
+        }
+    }
+    AttributionRoots {
+        projects,
         current_project: None,
     }
 }
@@ -219,11 +239,7 @@ fn draw_page(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             "Browser",
             "Optional companion for lastAccessed / Discard / Bookmark+Close.",
         ),
-        Nav::Ai => placeholder(
-            ui,
-            "AI",
-            "Inspect-first Claude/Codex storage. Search-before-delete is later.",
-        ),
+        Nav::Ai => screens::ui_ai(app, ui),
         Nav::Rules => placeholder(
             ui,
             "Rules",

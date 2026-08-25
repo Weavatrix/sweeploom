@@ -7,8 +7,9 @@ use std::thread;
 use crossbeam_channel::{Receiver, unbounded};
 use sweeploom_core::ProcessSnapshot;
 use sweeploom_dev::ReviewRow;
-use sweeploom_general::collect_offers;
 use sweeploom_platform::UserLocations;
+
+use crate::review_extra;
 use sweeploom_storage::{InventoryLimits, InventoryReport, scan_inventory};
 
 /// Result of a background Explorer scan plus Review rebuild.
@@ -34,12 +35,6 @@ fn build(root: PathBuf, processes: &[ProcessSnapshot], locations: &UserLocations
     let report =
         scan_inventory(&root, InventoryLimits::gui()).map_err(|error| error.to_string())?;
     let mut rows = sweeploom_dev::collect_review(&report.projects, processes);
-    for offer in collect_offers(locations) {
-        rows.push(ReviewRow {
-            candidate: offer.candidate,
-            selected: offer.selected,
-            title: offer.title,
-        });
-    }
+    rows.extend(review_extra::extra_rows(locations));
     Ok((report, rows))
 }

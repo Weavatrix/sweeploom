@@ -3,7 +3,9 @@
 use eframe::egui::{self, Color32, RichText};
 use sweeploom_core::LiveSession;
 use sweeploom_dev::inspect;
-use sweeploom_process::{SysinfoProcessControl, stop_session_gracefully};
+use sweeploom_process::{
+    SysinfoProcessControl, force_stop_session, still_running, stop_session_gracefully,
+};
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
@@ -21,12 +23,16 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
             );
         }
     }
+    if draw_force(app, ui, session) {
+        return;
+    }
     ui.horizontal(|ui| {
         if ui
             .button(RichText::new("Terminate session").color(Color32::from_rgb(240, 180, 120)))
             .clicked()
         {
             app.confirm_terminate = true;
+            app.confirm_force = false;
         }
     });
     if !app.confirm_terminate {
@@ -46,18 +52,70 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
             app.confirm_terminate = false;
         }
         if ui.button("Terminate gracefully").clicked() {
-            apply_stop(app, session);
+            apply_stop(app, session, false);
         }
     });
 }
 
-fn apply_stop(app: &mut SweepLoomApp, session: &LiveSession) {
-    let control = SysinfoProcessControl::new();
-    app.action_message = Some(
-        match stop_session_gracefully(&session.processes, &control) {
-            Ok(()) => format!("Asked {} processes to stop.", session.processes.len()),
-            Err(error) => format!("Stop failed: {error}"),
-        },
+fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) -> bool {
+    let Some(pending) = &app.pending_force else {
+        return false;
+    };
+    let live = app
+        .snapshot
+        .as_ref()
+        .map(|item| still_running(pending, &item.processes))
+        .unwrap_or_default();
+    if live.is_empty() {
+        app.pending_force = None;
+        app.confirm_force = false;
+        return false;
+    }
+    ui.colored_label(
+        Color32::from_rgb(240, 160, 80),
+        format!(
+            "{} process(es) still live after graceful stop. Force-kill is never automatic.",
+            live.len()
+        ),
     );
+    if !app.confirm_force {
+        if ui.button("Force kill remaining…").clicked() {
+            app.confirm_force = true;
+        }
+        return true;
+    }
+    ui.horizontal(|ui| {
+        if ui.button("Cancel").clicked() {
+            app.confirm_force = false;
+        }
+        if ui
+            .button(RichText::new("Force kill").color(Color32::from_rgb(240, 120, 80)))
+            .clicked()
+        {
+            apply_stop(app, session, true);
+        }
+    });
+    true
+}
+
+fn apply_stop(app: &mut SweepLoomApp, session: &LiveSession, force: bool) {
+    let control = SysinfoProcessControl::new();
+    let keys = app
+        .pending_force
+        .clone()
+        .unwrap_or_else(|| session.processes.clone());
+    app.action_message = Some(if force {
+        match force_stop_session(&keys, &control) {
+            Ok(()) => format!("Force-killed {} process key(s).", keys.len()),
+            Err(error) => format!("Force kill failed: {error}"),
+        }
+    } else {
+        match stop_session_gracefully(&keys, &control) {
+            Ok(()) => format!("Asked {} processes to stop.", keys.len()),
+            Err(error) => format!("Stop failed: {error}"),
+        }
+    });
+    app.pending_force = Some(keys);
     app.confirm_terminate = false;
+    app.confirm_force = false;
 }
