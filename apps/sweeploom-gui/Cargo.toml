@@ -39,4 +39,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
-tray-icon = { version = "0.21", default-features = false }
+tray-icon = { version = "0.24", default-features = false }
