@@ -6,6 +6,7 @@ mod overview;
 mod projects;
 mod review;
 mod session_actions;
+mod session_plan;
 mod sessions;
 mod settings;
 mod storage;

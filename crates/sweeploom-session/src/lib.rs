@@ -9,11 +9,13 @@ mod attribution;
 mod detectors;
 mod forgotten;
 mod group;
+mod plan;
 
 pub use attribution::{AttributionRoots, attribute_projects};
 pub use detectors::{SessionDetector, SessionEvidence, builtin_detectors, classify_process};
 pub use forgotten::{ForgottenInput, score_session};
 pub use group::group_sessions;
+pub use plan::{is_reclaim_candidate, plan_free_ram, plan_reduce_cpu};
 
 use sweeploom_core::{LiveSession, ProcessSnapshot};
 use sweeploom_process::ProcessSnapshotSet;

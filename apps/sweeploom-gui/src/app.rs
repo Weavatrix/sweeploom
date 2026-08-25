@@ -1,5 +1,6 @@
 //! Application state. Screens live in `screens/`.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -47,6 +48,10 @@ pub struct SweepLoomApp {
     pub(crate) review: Vec<ReviewRow>,
     pub(crate) last_receipt: Option<Receipt>,
     pub(crate) free_gb: String,
+    pub(crate) free_ram_gb: String,
+    pub(crate) reduce_cpu: String,
+    pub(crate) planned_keys: HashSet<ProcessKey>,
+    pub(crate) confirm_planned: bool,
     pub(crate) volumes: Vec<(PathBuf, u64, u64)>,
     pub(crate) scanning: bool,
     scan_rx: Option<Receiver<ScanOutcome>>,
@@ -83,6 +88,10 @@ impl SweepLoomApp {
             review: Vec::new(),
             last_receipt: None,
             free_gb: "1".to_owned(),
+            free_ram_gb: "2".to_owned(),
+            reduce_cpu: "10".to_owned(),
+            planned_keys: HashSet::new(),
+            confirm_planned: false,
             volumes: volume_space(),
             scanning: false,
             scan_rx: None,
@@ -106,6 +115,12 @@ impl SweepLoomApp {
             .record(&snapshot.processes, snapshot.captured_at);
         let roots = session_roots(self);
         self.sessions = sessions_from_snapshot(&mut snapshot, &roots);
+        let live: HashSet<ProcessKey> = self
+            .sessions
+            .iter()
+            .flat_map(|session| session.processes.iter().copied())
+            .collect();
+        self.planned_keys.retain(|key| live.contains(key));
         self.snapshot = Some(snapshot);
         self.last_sample = Instant::now();
     }

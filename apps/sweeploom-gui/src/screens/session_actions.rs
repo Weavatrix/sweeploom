@@ -23,9 +23,6 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
             );
         }
     }
-    if draw_force(app, ui, session) {
-        return;
-    }
     ui.horizontal(|ui| {
         if ui
             .button(RichText::new("Terminate session").color(Color32::from_rgb(240, 180, 120)))
@@ -52,12 +49,12 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
             app.confirm_terminate = false;
         }
         if ui.button("Terminate gracefully").clicked() {
-            apply_stop(app, session, false);
+            apply_stop(app, &session.processes, false);
         }
     });
 }
 
-fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) -> bool {
+pub(crate) fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui) -> bool {
     let Some(pending) = &app.pending_force else {
         return false;
     };
@@ -92,30 +89,28 @@ fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) 
             .button(RichText::new("Force kill").color(Color32::from_rgb(240, 120, 80)))
             .clicked()
         {
-            apply_stop(app, session, true);
+            let keys = app.pending_force.clone().unwrap_or_default();
+            apply_stop(app, &keys, true);
         }
     });
     true
 }
 
-fn apply_stop(app: &mut SweepLoomApp, session: &LiveSession, force: bool) {
+fn apply_stop(app: &mut SweepLoomApp, keys: &[sweeploom_core::ProcessKey], force: bool) {
     let control = SysinfoProcessControl::new();
-    let keys = app
-        .pending_force
-        .clone()
-        .unwrap_or_else(|| session.processes.clone());
     app.action_message = Some(if force {
-        match force_stop_session(&keys, &control) {
+        match force_stop_session(keys, &control) {
             Ok(()) => format!("Force-killed {} process key(s).", keys.len()),
             Err(error) => format!("Force kill failed: {error}"),
         }
     } else {
-        match stop_session_gracefully(&keys, &control) {
+        match stop_session_gracefully(keys, &control) {
             Ok(()) => format!("Asked {} processes to stop.", keys.len()),
             Err(error) => format!("Stop failed: {error}"),
         }
     });
-    app.pending_force = Some(keys);
+    app.pending_force = Some(keys.to_vec());
     app.confirm_terminate = false;
     app.confirm_force = false;
+    app.confirm_planned = false;
 }

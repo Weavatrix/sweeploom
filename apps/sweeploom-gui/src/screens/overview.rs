@@ -39,6 +39,12 @@ pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
         .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
         .map(|session| session.recommendation.estimated_reclaimable_rss)
         .sum::<u64>();
+    let stale_cpu: f32 = app
+        .sessions
+        .iter()
+        .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
+        .map(|session| session.cpu_percent)
+        .sum();
     ui.horizontal(|ui| {
         metric_card(
             ui,
@@ -52,7 +58,12 @@ pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
             &format_bytes(reclaimable),
             &format!("{stale} stale candidates"),
         );
-        metric_card(ui, "CPU", &format!("{cpu:.0}%"), "background load now");
+        metric_card(
+            ui,
+            "CPU",
+            &format!("{cpu:.0}%"),
+            &format!("{stale_cpu:.0}% in forgotten sessions"),
+        );
         let disk = app.inventory.as_ref().map_or_else(
             || "scan Explorer".to_owned(),
             |item| format_bytes(item.tree.logical_bytes),

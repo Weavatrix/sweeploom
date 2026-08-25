@@ -1,6 +1,7 @@
 //! Logical session table and raw process tree.
 
 use super::session_actions;
+use super::session_plan;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::sort::{Col, Sort, header_cell};
@@ -15,6 +16,7 @@ pub fn ui_sessions(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Sessions",
         "Logical sessions sit on top of the OS process tree. Terminate is never automatic.",
     );
+    session_plan::draw(app, ui);
     ui.checkbox(&mut app.group_raw, "Raw process tree");
     ui.add_space(8.0);
     if app.group_raw {
@@ -27,6 +29,7 @@ pub fn ui_sessions(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
 fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut sort = app.session_sort;
     let mut selected = app.selected_session;
+    let mut planned = std::mem::take(&mut app.planned_keys);
     let order = session_order(&app.sessions, sort);
     let row_count = order.len();
     TableBuilder::new(ui)
@@ -34,6 +37,7 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .resizable(true)
         .sense(egui::Sense::click())
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        .column(Column::auto().at_least(36.0))
         .column(Column::auto().at_least(180.0))
         .column(Column::auto().at_least(80.0))
         .column(Column::auto().at_least(100.0))
@@ -41,6 +45,9 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .column(Column::auto().at_least(160.0))
         .column(Column::remainder())
         .header(32.0, |mut header| {
+            header.col(|ui| {
+                ui.strong("");
+            });
             header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Session"));
             header.col(|ui| header_cell(ui, &mut sort, Col::Procs, "Procs"));
             header.col(|ui| header_cell(ui, &mut sort, Col::Size, "RSS"));
@@ -53,9 +60,17 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .body(|body| {
             body.rows(28.0, row_count, |mut row| {
                 let index = order.get(row.index()).copied().unwrap_or(row.index());
-                fill_session_row(&app.sessions, selected, &mut row, index, &mut selected);
+                fill_session_row(
+                    &app.sessions,
+                    &mut planned,
+                    selected,
+                    &mut row,
+                    index,
+                    &mut selected,
+                );
             });
         });
+    app.planned_keys = planned;
     app.session_sort = sort;
     app.selected_session = selected;
     if let Some(id) = app.selected_session
@@ -91,6 +106,7 @@ fn compare_session(left: &LiveSession, right: &LiveSession, sort: Sort) -> std::
 
 fn fill_session_row(
     sessions: &[LiveSession],
+    planned: &mut std::collections::HashSet<sweeploom_core::ProcessKey>,
     selected_id: Option<sweeploom_core::SessionId>,
     row: &mut egui_extras::TableRow<'_, '_>,
     index: usize,
@@ -111,6 +127,9 @@ fn fill_session_row(
         .as_ref()
         .map(|item| item.0.display().to_string())
         .unwrap_or_else(|| "Unknown".to_owned());
+    row.col(|ui| {
+        session_plan::checkbox(ui, session, planned);
+    });
     row.col(|ui| {
         if ui
             .selectable_label(is_selected, RichText::new(label).size(16.0))
