@@ -56,4 +56,15 @@ impl Nav {
             Self::Settings => "Settings",
         }
     }
+
+    /// Sidebar section heading.
+    #[must_use]
+    pub const fn section(self) -> &'static str {
+        match self {
+            Self::Overview | Self::Sessions | Self::History => "LIVE",
+            Self::Storage | Self::Explorer | Self::Projects => "DISK",
+            Self::Browser | Self::Ai | Self::Rules => "WORKSPACE",
+            Self::Settings => "APP",
+        }
+    }
 }

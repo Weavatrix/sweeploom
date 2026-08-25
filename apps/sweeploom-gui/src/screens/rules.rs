@@ -2,11 +2,10 @@
 
 use std::path::PathBuf;
 
-use eframe::egui::RichText;
 use sweeploom_rules::load_packs;
 
 use crate::app::SweepLoomApp;
-use crate::widgets::page_title;
+use crate::widgets::{list_row, page_title};
 
 pub fn ui_rules(app: &SweepLoomApp, ui: &mut eframe::egui::Ui) {
     page_title(
@@ -20,34 +19,26 @@ pub fn ui_rules(app: &SweepLoomApp, ui: &mut eframe::egui::Ui) {
         return;
     }
     for file in files {
-        ui.label(
-            RichText::new(file.path.display().to_string())
-                .size(14.0)
-                .weak(),
-        );
         match file.pack {
             Ok(pack) => {
-                ui.label(format!(
-                    "schema {}  {} cleaner(s)",
-                    pack.schema,
-                    pack.cleaner.len()
-                ));
+                list_row(
+                    ui,
+                    &file.path.display().to_string(),
+                    &format!("schema {} · {} cleaner(s)", pack.schema, pack.cleaner.len()),
+                    "",
+                );
                 for rule in pack.cleaner {
                     let label = rule.label.as_deref().unwrap_or(&rule.id);
-                    ui.label(format!(
-                        "{}  {}  risk={:?}  {:?}",
-                        rule.id,
+                    list_row(
+                        ui,
+                        &rule.id,
                         label,
-                        rule.safety_level(),
-                        rule.deletion_strategy()
-                    ));
+                        &format!("{:?} · {:?}", rule.safety_level(), rule.deletion_strategy()),
+                    );
                 }
             }
             Err(error) => {
-                ui.colored_label(
-                    eframe::egui::Color32::from_rgb(240, 160, 80),
-                    format!("not loaded: {error}"),
-                );
+                ui.colored_label(ui.visuals().warn_fg_color, format!("not loaded: {error}"));
             }
         }
         ui.add_space(10.0);

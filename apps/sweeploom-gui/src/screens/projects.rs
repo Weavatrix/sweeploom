@@ -5,7 +5,7 @@ use sweeploom_dev::{cargo_offers, classify_project, inspect, node_offers, python
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::widgets::page_title;
+use crate::widgets::{list_row, page_title};
 
 pub fn ui_projects(app: &SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
@@ -25,40 +25,52 @@ pub fn ui_projects(app: &SweepLoomApp, ui: &mut egui::Ui) {
         .unwrap_or(&[]);
     for project in &report.projects {
         let (source, artifact) = report.project_heat(project, now);
-        ui.separator();
-        ui.label(project.display().to_string());
-        ui.label(format!(
-            "kind={:?}  source={:?}  artifact={:?}  git={}",
-            classify_project(project),
-            source,
-            artifact,
-            inspect(project).label()
-        ));
+        list_row(
+            ui,
+            &project.display().to_string(),
+            &format!(
+                "{:?} · source {:?} · artifact {:?}",
+                classify_project(project),
+                source,
+                artifact
+            ),
+            inspect(project).label(),
+        );
         for offer in cargo_offers(project, processes) {
-            ui.label(format!(
-                "  cargo {:?}  {}  rebuild={:?}{}",
-                offer.mode,
-                format_bytes(offer.logical_bytes),
-                offer.rebuild,
-                if offer.blocked { "  BLOCKED" } else { "" }
-            ));
+            list_row(
+                ui,
+                &format!("cargo {:?}", offer.mode),
+                &format_bytes(offer.logical_bytes),
+                &format!(
+                    "rebuild={:?}{}",
+                    offer.rebuild,
+                    if offer.blocked { " · blocked" } else { "" }
+                ),
+            );
         }
         for offer in node_offers(project, processes) {
-            ui.label(format!(
-                "  node_modules  {}  rebuild={:?}{}",
-                format_bytes(offer.logical_bytes),
-                offer.rebuild,
-                if offer.blocked { "  BLOCKED" } else { "" }
-            ));
+            list_row(
+                ui,
+                "node_modules",
+                &format_bytes(offer.logical_bytes),
+                &format!(
+                    "rebuild={:?}{}",
+                    offer.rebuild,
+                    if offer.blocked { " · blocked" } else { "" }
+                ),
+            );
         }
         for offer in python_offers(project, processes) {
-            ui.label(format!(
-                "  python {}  {}  rebuild={:?}{}",
-                offer.label,
-                format_bytes(offer.logical_bytes),
-                offer.rebuild,
-                if offer.blocked { "  BLOCKED" } else { "" }
-            ));
+            list_row(
+                ui,
+                &format!("python {}", offer.label),
+                &format_bytes(offer.logical_bytes),
+                &format!(
+                    "rebuild={:?}{}",
+                    offer.rebuild,
+                    if offer.blocked { " · blocked" } else { "" }
+                ),
+            );
         }
     }
 }

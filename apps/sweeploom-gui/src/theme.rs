@@ -1,51 +1,97 @@
-//! Dark theme with readable type. SweepLoom is not a dense dashboard.
+//! Light, dark, and auto palettes. Accent stays SweepLoom gold.
 
-use eframe::egui::{self, Color32, CornerRadius, FontFamily, FontId, Stroke, TextStyle};
+use eframe::egui::{self, Color32, CornerRadius, FontFamily, FontId, Stroke, TextStyle, Theme};
 
-/// Apply fonts, spacing, and a quieter dark palette.
-pub fn apply(ctx: &egui::Context) {
-    let mut visuals = egui::Visuals::dark();
-    visuals.dark_mode = true;
-    visuals.window_fill = Color32::from_rgb(16, 18, 22);
-    visuals.panel_fill = Color32::from_rgb(20, 22, 28);
-    visuals.extreme_bg_color = Color32::from_rgb(12, 13, 16);
-    visuals.faint_bg_color = Color32::from_rgb(28, 31, 38);
-    visuals.override_text_color = Some(Color32::from_rgb(230, 232, 236));
-    visuals.selection.bg_fill = Color32::from_rgb(196, 140, 64);
-    visuals.selection.stroke = Stroke::new(1.0_f32, Color32::from_rgb(240, 196, 120));
-    visuals.widgets.noninteractive.fg_stroke =
-        Stroke::new(1.0_f32, Color32::from_rgb(210, 214, 220));
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, Color32::from_rgb(220, 224, 230));
-    visuals.widgets.hovered.bg_fill = Color32::from_rgb(42, 46, 56);
-    visuals.widgets.active.bg_fill = Color32::from_rgb(52, 56, 68);
-    visuals.widgets.inactive.corner_radius = CornerRadius::same(6);
-    visuals.widgets.hovered.corner_radius = CornerRadius::same(6);
-    visuals.widgets.active.corner_radius = CornerRadius::same(6);
+use crate::prefs::ThemeMode;
+
+const GOLD: Color32 = Color32::from_rgb(196, 140, 64);
+const GOLD_HI: Color32 = Color32::from_rgb(232, 188, 112);
+
+/// SweepLoom gold, used for selected chrome and accents.
+#[must_use]
+pub const fn accent() -> Color32 {
+    GOLD
+}
+
+/// Apply fonts, spacing, and the resolved palette.
+pub fn apply(ctx: &egui::Context, mode: ThemeMode, scale: f32) {
+    ctx.set_pixels_per_point(scale.clamp(0.8, 1.6));
+    let dark = match mode {
+        ThemeMode::Dark => true,
+        ThemeMode::Light => false,
+        ThemeMode::Auto => ctx.system_theme() != Some(Theme::Light),
+    };
     let mut style = (*ctx.style()).clone();
-    style.visuals = visuals;
-    style.spacing.item_spacing = egui::vec2(12.0, 10.0);
-    style.spacing.button_padding = egui::vec2(14.0, 8.0);
-    style.spacing.indent = 18.0;
-    style.spacing.interact_size.y = 30.0;
-    style.spacing.scroll.bar_width = 12.0;
+    style.visuals = if dark {
+        dark_visuals()
+    } else {
+        light_visuals()
+    };
+    style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+    style.spacing.button_padding = egui::vec2(12.0, 7.0);
+    style.spacing.indent = 16.0;
+    style.spacing.interact_size.y = 28.0;
+    style.spacing.scroll.bar_width = 10.0;
     style.text_styles.insert(
         TextStyle::Heading,
-        FontId::new(28.0, FontFamily::Proportional),
+        FontId::new(26.0, FontFamily::Proportional),
     );
     style
         .text_styles
-        .insert(TextStyle::Body, FontId::new(17.0, FontFamily::Proportional));
+        .insert(TextStyle::Body, FontId::new(16.0, FontFamily::Proportional));
     style.text_styles.insert(
         TextStyle::Button,
-        FontId::new(16.5, FontFamily::Proportional),
+        FontId::new(15.5, FontFamily::Proportional),
     );
     style.text_styles.insert(
         TextStyle::Small,
-        FontId::new(14.0, FontFamily::Proportional),
+        FontId::new(13.0, FontFamily::Proportional),
     );
     style.text_styles.insert(
         TextStyle::Monospace,
-        FontId::new(15.0, FontFamily::Monospace),
+        FontId::new(14.5, FontFamily::Monospace),
     );
     ctx.set_style(style);
+}
+
+/// Secondary label color that follows the active theme.
+#[must_use]
+pub fn muted(ui: &egui::Ui) -> Color32 {
+    ui.visuals().weak_text_color()
+}
+
+fn dark_visuals() -> egui::Visuals {
+    let mut visuals = egui::Visuals::dark();
+    visuals.window_fill = Color32::from_rgb(18, 20, 24);
+    visuals.panel_fill = Color32::from_rgb(22, 24, 30);
+    visuals.extreme_bg_color = Color32::from_rgb(14, 15, 18);
+    visuals.faint_bg_color = Color32::from_rgb(32, 35, 42);
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(40, 44, 54);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(50, 54, 66);
+    paint_widgets(&mut visuals, Color32::from_rgb(226, 228, 234));
+    visuals
+}
+
+fn light_visuals() -> egui::Visuals {
+    let mut visuals = egui::Visuals::light();
+    visuals.window_fill = Color32::from_rgb(244, 245, 248);
+    visuals.panel_fill = Color32::from_rgb(252, 252, 254);
+    visuals.extreme_bg_color = Color32::from_rgb(232, 234, 238);
+    visuals.faint_bg_color = Color32::from_rgb(236, 238, 242);
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(232, 226, 214);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(224, 214, 196);
+    paint_widgets(&mut visuals, Color32::from_rgb(32, 36, 42));
+    visuals
+}
+
+fn paint_widgets(visuals: &mut egui::Visuals, text: Color32) {
+    visuals.override_text_color = Some(text);
+    visuals.selection.bg_fill = GOLD;
+    visuals.selection.stroke = Stroke::new(1.0_f32, GOLD_HI);
+    visuals.hyperlink_color = GOLD;
+    visuals.widgets.inactive.corner_radius = CornerRadius::same(8);
+    visuals.widgets.hovered.corner_radius = CornerRadius::same(8);
+    visuals.widgets.active.corner_radius = CornerRadius::same(8);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, text);
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, text);
 }

@@ -6,7 +6,7 @@ use sweeploom_core::Recommendation;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::widgets::{metric_card, page_title};
+use crate::widgets::{list_row, metric_card, page_title};
 
 pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
@@ -95,17 +95,12 @@ fn draw_opportunities(app: &SweepLoomApp, ui: &mut egui::Ui) {
         if shown > 8 {
             break;
         }
-        ui.label(format!(
-            "• {}  {}  {}  {:?}",
+        list_row(
+            ui,
             session.label(),
-            format_bytes(session.rss_bytes),
-            session
-                .project
-                .as_ref()
-                .map(|item| item.0.display().to_string())
-                .unwrap_or_default(),
-            session.recommendation.recommendation
-        ));
+            &format_bytes(session.rss_bytes),
+            &format!("{:?}", session.recommendation.recommendation),
+        );
     }
     let processes = app
         .snapshot
@@ -115,10 +110,12 @@ fn draw_opportunities(app: &SweepLoomApp, ui: &mut egui::Ui) {
     let pressure = BrowserPressure::from_live(&app.sessions, processes);
     if pressure.rss_bytes() > 0 && shown < 8 {
         shown += 1;
-        ui.label(format!(
-            "• Browser  {}  companion needed for tab discard",
-            format_bytes(pressure.rss_bytes())
-        ));
+        list_row(
+            ui,
+            "Browser",
+            &format_bytes(pressure.rss_bytes()),
+            "companion needed for tab discard",
+        );
     }
     if shown == 0 {
         ui.label("No forgotten-session candidates in this sample. Keep watching.");

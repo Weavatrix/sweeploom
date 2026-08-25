@@ -7,7 +7,7 @@ use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::sort::{Col, Sort, header_cell};
 use crate::widgets::page_title;
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use sweeploom_core::LiveSession;
 
@@ -234,7 +234,7 @@ fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSess
     session_observe::draw(app, ui, session);
     if session.safety.terminate_disabled {
         ui.colored_label(
-            Color32::from_rgb(240, 160, 80),
+            ui.visuals().warn_fg_color,
             "Terminate disabled (system-critical).",
         );
     }

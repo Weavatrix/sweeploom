@@ -1,6 +1,6 @@
 //! Explicit session terminate. Never automatic. Git dirty is a warning.
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use sweeploom_core::LiveSession;
 use sweeploom_dev::inspect;
 use sweeploom_process::{
@@ -18,14 +18,14 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         let git = inspect(&project.0);
         if git.assessment().is_blocked() {
             ui.colored_label(
-                Color32::from_rgb(240, 160, 80),
+                ui.visuals().warn_fg_color,
                 "WARNING: project has Git changes. Stopping the session does not discard them.",
             );
         }
     }
     ui.horizontal(|ui| {
         if ui
-            .button(RichText::new("Terminate session").color(Color32::from_rgb(240, 180, 120)))
+            .button(RichText::new("Terminate session").color(ui.visuals().warn_fg_color))
             .clicked()
         {
             app.confirm_terminate = true;
@@ -69,7 +69,7 @@ pub(crate) fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui) -> bool {
         return false;
     }
     ui.colored_label(
-        Color32::from_rgb(240, 160, 80),
+        ui.visuals().warn_fg_color,
         format!(
             "{} process(es) still live after graceful stop. Force-kill is never automatic.",
             live.len()
@@ -86,7 +86,7 @@ pub(crate) fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui) -> bool {
             app.confirm_force = false;
         }
         if ui
-            .button(RichText::new("Force kill").color(Color32::from_rgb(240, 120, 80)))
+            .button(RichText::new("Force kill").color(ui.visuals().error_fg_color))
             .clicked()
         {
             let keys = app.pending_force.clone().unwrap_or_default();

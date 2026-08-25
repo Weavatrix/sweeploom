@@ -77,30 +77,56 @@ impl ProcessSampler {
             self.warmed = true;
         }
         self.system.refresh_specifics(refresh_kind());
-        let captured_at = SystemTime::now();
-        let mut previous_disk = HashMap::new();
-        let mut processes = Vec::with_capacity(self.system.processes().len());
-        for (pid, process) in self.system.processes() {
-            let snapshot = convert(pid, process, &self.previous_disk);
-            previous_disk.insert(
-                snapshot.key,
-                (
-                    process.disk_usage().total_read_bytes,
-                    process.disk_usage().total_written_bytes,
-                ),
-            );
-            processes.push(snapshot);
-        }
-        self.previous_disk = previous_disk;
-        let total_rss_bytes = processes.iter().map(|item| item.rss_bytes).sum();
-        ProcessSnapshotSet {
-            captured_at,
-            processes,
-            memory: host_memory(&self.system),
-            cpu: host_cpu(&self.system),
-            total_rss_bytes,
-        }
+        collect_snapshot(&self.system, &mut self.previous_disk)
     }
+
+    /// Refresh host CPU/RAM only. Does not walk the process table.
+    pub fn pump_quiet(&mut self) {
+        self.system.refresh_specifics(quiet_kind());
+    }
+
+    /// Drop process rows so a hidden tray watch stays cheap.
+    pub fn enter_quiet(&mut self) {
+        self.system = System::new();
+        self.previous_disk.clear();
+        self.warmed = false;
+        self.pump_quiet();
+    }
+}
+
+fn collect_snapshot(
+    system: &System,
+    previous_disk: &mut HashMap<ProcessKey, (u64, u64)>,
+) -> ProcessSnapshotSet {
+    let captured_at = SystemTime::now();
+    let mut next_disk = HashMap::new();
+    let mut processes = Vec::with_capacity(system.processes().len());
+    for (pid, process) in system.processes() {
+        let snapshot = convert(pid, process, previous_disk);
+        next_disk.insert(
+            snapshot.key,
+            (
+                process.disk_usage().total_read_bytes,
+                process.disk_usage().total_written_bytes,
+            ),
+        );
+        processes.push(snapshot);
+    }
+    *previous_disk = next_disk;
+    let total_rss_bytes = processes.iter().map(|item| item.rss_bytes).sum();
+    ProcessSnapshotSet {
+        captured_at,
+        processes,
+        memory: host_memory(system),
+        cpu: host_cpu(system),
+        total_rss_bytes,
+    }
+}
+
+fn quiet_kind() -> RefreshKind {
+    RefreshKind::nothing()
+        .with_memory(MemoryRefreshKind::nothing().with_ram())
+        .with_cpu(sysinfo::CpuRefreshKind::nothing().with_cpu_usage())
 }
 
 fn refresh_kind() -> RefreshKind {

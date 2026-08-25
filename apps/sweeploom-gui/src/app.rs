@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, ViewportCommand};
 
 use crossbeam_channel::Receiver;
 use sweeploom_ai::AiOffer;
@@ -14,20 +14,24 @@ use sweeploom_history::HistoryStore;
 use sweeploom_network::enrich_network;
 use sweeploom_platform::UserLocations;
 use sweeploom_process::{ProcessSampler, ProcessSnapshotSet, volume_space};
-use sweeploom_session::{AttributionRoots, sessions_from_snapshot};
+use sweeploom_session::sessions_from_snapshot;
 use sweeploom_storage::InventoryReport;
 
+use crate::chrome;
+use crate::live;
 use crate::nav::Nav;
+use crate::prefs::Prefs;
 use crate::scan_job::{self, ScanOutcome};
-use crate::screens;
 use crate::sort::Sort;
 use crate::theme;
+use crate::tray::{self, TrayCommand, TrayIconHandle};
 
 /// Live UI application.
 pub struct SweepLoomApp {
     pub(crate) nav: Nav,
     sampler: ProcessSampler,
     last_sample: Instant,
+    last_quiet: Instant,
     pub(crate) snapshot: Option<ProcessSnapshotSet>,
     pub(crate) sessions: Vec<LiveSession>,
     pub(crate) selected_session: Option<SessionId>,
@@ -57,20 +61,33 @@ pub struct SweepLoomApp {
     pub(crate) volumes: Vec<(PathBuf, u64, u64)>,
     pub(crate) scanning: bool,
     pub(crate) ai_offers: Option<Vec<AiOffer>>,
+    pub(crate) prefs: Prefs,
+    pub(crate) hidden: bool,
+    pub(crate) tray: Option<TrayIconHandle>,
+    force_quit: bool,
+    start_hidden: bool,
     scan_rx: Option<Receiver<ScanOutcome>>,
 }
 
 impl SweepLoomApp {
     /// Construct and take the first process sample.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        theme::apply(&cc.egui_ctx);
+    pub fn new(cc: &eframe::CreationContext<'_>, start_hidden: bool) -> Self {
         let locations = UserLocations::current();
+        let prefs = Prefs::load(&locations.app_config.join("prefs.json"));
+        theme::apply(&cc.egui_ctx, prefs.theme, prefs.ui_scale);
+        tray::install_wake(cc.egui_ctx.clone());
         let mut sampler = ProcessSampler::new();
-        let (snapshot, sessions) = sample_with(&mut sampler, &locations);
+        let (snapshot, sessions) = live::sample_with(&mut sampler, &locations);
+        let tray = if prefs.tray_enabled {
+            tray::create()
+        } else {
+            None
+        };
         let mut app = Self {
             nav: Nav::Overview,
             sampler,
             last_sample: Instant::now(),
+            last_quiet: Instant::now(),
             snapshot: Some(snapshot),
             sessions,
             selected_session: None,
@@ -100,6 +117,11 @@ impl SweepLoomApp {
             volumes: volume_space(),
             scanning: false,
             ai_offers: None,
+            prefs,
+            hidden: false,
+            tray,
+            force_quit: false,
+            start_hidden,
             scan_rx: None,
         };
         if let Some(snapshot) = &app.snapshot {
@@ -110,23 +132,62 @@ impl SweepLoomApp {
         app
     }
 
+    pub(crate) fn persist_prefs(&self) {
+        self.prefs
+            .save(&self.locations.app_config.join("prefs.json"));
+    }
+
+    pub(crate) fn sync_tray(&mut self) {
+        if self.prefs.tray_enabled && tray::is_supported() {
+            if self.tray.is_none() {
+                self.tray = tray::create();
+            }
+        } else {
+            self.tray = None;
+        }
+    }
+
+    pub(crate) fn leave_background(&mut self, ctx: &egui::Context) {
+        self.hidden = false;
+        ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(ViewportCommand::Focus);
+        self.refresh_now();
+    }
+
+    fn enter_background(&mut self, ctx: &egui::Context) {
+        self.hidden = true;
+        self.history = HistoryStore::default();
+        self.ai_offers = None;
+        self.snapshot = None;
+        self.sessions.clear();
+        self.planned_keys.clear();
+        self.selected_session = None;
+        self.sampler.enter_quiet();
+        ctx.send_viewport_cmd(ViewportCommand::CancelClose);
+        ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+    }
+
     pub(crate) fn refresh_live(&mut self) {
         if self.last_sample.elapsed() < Duration::from_secs(1) {
             return;
         }
+        self.refresh_now();
+    }
+
+    fn refresh_now(&mut self) {
         let mut snapshot = self.sampler.refresh(Duration::ZERO);
         snapshot.resolve_parents();
         let _ = enrich_network(&mut snapshot.processes);
         self.history
             .record(&snapshot.processes, snapshot.captured_at);
-        let roots = session_roots(self);
+        let roots = live::session_roots(self);
         self.sessions = sessions_from_snapshot(&mut snapshot, &roots);
-        let live: HashSet<ProcessKey> = self
+        let live_keys: HashSet<ProcessKey> = self
             .sessions
             .iter()
             .flat_map(|session| session.processes.iter().copied())
             .collect();
-        self.planned_keys.retain(|key| live.contains(key));
+        self.planned_keys.retain(|key| live_keys.contains(key));
         self.snapshot = Some(snapshot);
         self.last_sample = Instant::now();
     }
@@ -172,96 +233,46 @@ impl SweepLoomApp {
 impl eframe::App for SweepLoomApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_scan();
+        if self.start_hidden {
+            self.start_hidden = false;
+            self.enter_background(ctx);
+        }
+        self.handle_tray(ctx);
+        if self.hidden {
+            if self.last_quiet.elapsed() >= Duration::from_secs(60) {
+                self.sampler.pump_quiet();
+                self.last_quiet = Instant::now();
+            }
+            ctx.request_repaint_after(Duration::from_secs(60));
+            return;
+        }
+        theme::apply(ctx, self.prefs.theme, self.prefs.ui_scale);
         if self.scanning {
             ctx.request_repaint_after(Duration::from_millis(200));
         } else {
             self.refresh_live();
             ctx.request_repaint_after(Duration::from_secs(1));
         }
-        draw_chrome(ctx, self);
+        chrome::draw(ctx, self);
     }
 }
 
-fn sample_with(
-    sampler: &mut ProcessSampler,
-    locations: &UserLocations,
-) -> (ProcessSnapshotSet, Vec<LiveSession>) {
-    let mut snapshot = sampler.refresh(Duration::from_millis(200));
-    snapshot.resolve_parents();
-    let _ = enrich_network(&mut snapshot.processes);
-    let sessions = sessions_from_snapshot(
-        &mut snapshot,
-        &home_only(locations, std::env::current_dir().ok().map(ProjectId)),
-    );
-    (snapshot, sessions)
-}
-
-fn home_only(locations: &UserLocations, current_project: Option<ProjectId>) -> AttributionRoots {
-    AttributionRoots {
-        projects: vec![locations.home.clone()],
-        current_project,
-    }
-}
-
-fn session_roots(app: &SweepLoomApp) -> AttributionRoots {
-    let mut projects = vec![app.locations.home.clone()];
-    if let Some(report) = &app.inventory {
-        for project in &report.projects {
-            if !projects.iter().any(|item| item == project) {
-                projects.push(project.clone());
+impl SweepLoomApp {
+    fn handle_tray(&mut self, ctx: &egui::Context) {
+        if let Some(handle) = &self.tray
+            && let Some(command) = tray::poll(handle)
+        {
+            match command {
+                TrayCommand::Show => self.leave_background(ctx),
+                TrayCommand::Quit => {
+                    self.force_quit = true;
+                    ctx.send_viewport_cmd(ViewportCommand::Close);
+                }
             }
         }
-    }
-    AttributionRoots {
-        projects,
-        current_project: app.current_project.clone(),
-    }
-}
-
-fn draw_chrome(ctx: &egui::Context, app: &mut SweepLoomApp) {
-    egui::TopBottomPanel::top("header").show(ctx, |ui| {
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            ui.heading(RichText::new("SweepLoom").size(26.0).strong());
-            ui.label(
-                RichText::new("by Weavatrix")
-                    .size(15.0)
-                    .color(egui::Color32::from_rgb(168, 174, 186)),
-            );
-            ui.separator();
-            ui.label(
-                RichText::new("Reclaim your workstation without losing your workspace").size(16.0),
-            );
-        });
-        ui.add_space(8.0);
-    });
-    egui::SidePanel::left("nav")
-        .resizable(false)
-        .exact_width(196.0)
-        .show(ctx, |ui| {
-            ui.add_space(12.0);
-            for nav in Nav::ALL {
-                let label = RichText::new(nav.label()).size(17.0);
-                if ui.selectable_label(app.nav == nav, label).clicked() {
-                    app.nav = nav;
-                }
-                ui.add_space(2.0);
-            }
-        });
-    egui::CentralPanel::default().show(ctx, |ui| draw_page(app, ui));
-}
-
-fn draw_page(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    match app.nav {
-        Nav::Overview => screens::ui_overview(app, ui),
-        Nav::Sessions => screens::ui_sessions(app, ui),
-        Nav::Storage => screens::ui_review(app, ui),
-        Nav::Explorer => screens::ui_storage(app, ui),
-        Nav::Projects => screens::ui_projects(app, ui),
-        Nav::Browser => screens::ui_browser(app, ui),
-        Nav::Ai => screens::ui_ai(app, ui),
-        Nav::Rules => screens::ui_rules(app, ui),
-        Nav::History => screens::ui_history(app, ui),
-        Nav::Settings => screens::ui_settings(app, ui),
+        let close = ctx.input(|input| input.viewport().close_requested());
+        if close && !self.force_quit && self.prefs.tray_enabled && self.tray.is_some() {
+            self.enter_background(ctx);
+        }
     }
 }

@@ -7,7 +7,7 @@ use sweeploom_browser::{BrowserPressure, TabAction, TabCommand, load_snapshot, s
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::widgets::page_title;
+use crate::widgets::{list_row, page_title};
 
 pub fn ui_browser(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     page_title(
@@ -31,22 +31,17 @@ fn draw_hosts(ui: &mut eframe::egui::Ui, pressure: &BrowserPressure) {
         return;
     }
     for host in &pressure.hosts {
-        ui.label(
-            RichText::new(format!(
-                "{}  {}  {} processes  {:.1}% CPU",
-                host.family,
+        list_row(
+            ui,
+            host.family,
+            &format!(
+                "{} · {} processes · {:.1}% CPU",
                 format_bytes(host.rss_bytes),
                 host.processes,
                 host.cpu_percent
-            ))
-            .size(16.0),
+            ),
+            "Do not kill the whole browser to reclaim RAM.",
         );
-        ui.label(
-            RichText::new("Do not kill the whole browser to reclaim RAM.")
-                .size(14.0)
-                .weak(),
-        );
-        ui.add_space(8.0);
     }
 }
 

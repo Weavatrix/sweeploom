@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use sweeploom_core::{LiveSession, ProcessKey};
 use sweeploom_session::{plan_free_ram, plan_quiet_workstation, plan_reduce_cpu};
 
@@ -88,7 +88,7 @@ fn set_planned(session: &LiveSession, planned: &mut HashSet<ProcessKey>, on: boo
 fn draw_confirm(app: &mut SweepLoomApp, ui: &mut egui::Ui, planned: &[LiveSession]) {
     if !app.confirm_planned {
         if ui
-            .button(RichText::new("Terminate planned…").color(Color32::from_rgb(240, 180, 120)))
+            .button(RichText::new("Terminate planned…").color(ui.visuals().warn_fg_color))
             .clicked()
         {
             app.confirm_planned = true;
@@ -103,7 +103,7 @@ fn draw_confirm(app: &mut SweepLoomApp, ui: &mut egui::Ui, planned: &[LiveSessio
             .is_some_and(|project| inspect(&project.0).assessment().is_blocked())
     }) {
         ui.colored_label(
-            Color32::from_rgb(240, 160, 80),
+            ui.visuals().warn_fg_color,
             "WARNING: a planned project has Git changes. Stopping does not discard them.",
         );
     }

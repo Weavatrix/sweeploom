@@ -1,11 +1,10 @@
 //! Observed process history. Never invented from before SweepLoom started.
 
-use eframe::egui::RichText;
 use sweeploom_history::summarize_cpu;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::widgets::page_title;
+use crate::widgets::{list_row, page_title};
 
 pub fn ui_history(app: &SweepLoomApp, ui: &mut eframe::egui::Ui) {
     page_title(
@@ -31,18 +30,21 @@ pub fn ui_history(app: &SweepLoomApp, ui: &mut eframe::egui::Ui) {
         };
         let peak = fast.iter().map(|item| item.rss_bytes).max().unwrap_or(0);
         let cpu = summarize_cpu(&fast, &hist.slow.chrono(), last.at_unix_ms);
-        ui.label(
-            RichText::new(format!(
-                "{}  pid {}  now {}  peak {}  cpu {:.1}%  {}  samples {}",
-                process.name,
+        list_row(
+            ui,
+            &process.name,
+            &format!(
+                "pid {} · {} · peak {}",
                 process.pid,
                 format_bytes(process.rss_bytes),
-                format_bytes(peak),
+                format_bytes(peak)
+            ),
+            &format!(
+                "cpu {:.1}% · {} · {} samples",
                 cpu.now,
                 avg_short(cpu.avg_5m),
                 fast.len()
-            ))
-            .size(16.0),
+            ),
         );
     }
 }

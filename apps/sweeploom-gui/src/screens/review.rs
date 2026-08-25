@@ -1,7 +1,7 @@
 //! Review generated cleanup, then apply after revalidation.
 
 use crate::review_extra;
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use sweeploom_core::DeletionStrategy;
 use sweeploom_exec::{apply_plan, build_plan};
 
@@ -154,7 +154,7 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
     });
     row.col(|ui| {
         if blocked {
-            ui.colored_label(Color32::from_rgb(240, 160, 80), safety);
+            ui.colored_label(ui.visuals().warn_fg_color, safety);
         } else {
             ui.label(safety);
         }

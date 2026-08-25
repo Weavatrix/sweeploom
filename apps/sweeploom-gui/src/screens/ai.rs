@@ -5,7 +5,7 @@ use sweeploom_ai::{AiOffer, inspect_offers};
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::widgets::page_title;
+use crate::widgets::{list_row, page_title};
 
 pub fn ui_ai(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     page_title(
@@ -37,23 +37,24 @@ pub fn ui_ai(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
 }
 
 fn draw_offer(ui: &mut eframe::egui::Ui, offer: &AiOffer) {
-    ui.label(RichText::new(&offer.title).size(16.0));
-    let cap = if offer.capped { " · walk capped" } else { "" };
-    ui.label(
-        RichText::new(format!(
-            "{} · {} files{cap} · inspect-only · not selected",
+    let cap = if offer.capped {
+        "walk capped"
+    } else {
+        "inspect-only"
+    };
+    let samples = if offer.samples.is_empty() {
+        String::new()
+    } else {
+        format!("samples: {}", offer.samples.join(", "))
+    };
+    list_row(
+        ui,
+        &offer.title,
+        &format!(
+            "{} · {} files · {cap} · not selected",
             format_bytes(offer.candidate.logical_bytes),
             offer.candidate.file_count
-        ))
-        .size(14.0)
-        .weak(),
+        ),
+        &samples,
     );
-    if !offer.samples.is_empty() {
-        ui.label(
-            RichText::new(format!("samples: {}", offer.samples.join(", ")))
-                .size(13.0)
-                .weak(),
-        );
-    }
-    ui.add_space(8.0);
 }

@@ -1,6 +1,6 @@
 //! Storage scan and Folder Inspector tree.
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 use sweeploom_storage::DirectoryNode;
 
@@ -30,7 +30,7 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         ui.label("Walk is running in the background. The window stays interactive.");
     }
     if let Some(error) = &app.inventory_error {
-        ui.colored_label(Color32::from_rgb(240, 120, 120), error);
+        ui.colored_label(ui.visuals().error_fg_color, error);
     }
     if let Some(report) = &app.inventory {
         ui.label(format!(
