@@ -31,6 +31,7 @@ pub fn build_plan(candidates: &[Candidate], requested_free_bytes: Option<u64>) -
                 SafetyPrecondition::PathKindUnchanged,
                 SafetyPrecondition::NoNewerWrites,
                 SafetyPrecondition::NoSymlinkEscape,
+                SafetyPrecondition::GitStateUnchanged,
             ],
         })
         .collect::<Vec<_>>();
@@ -65,6 +66,15 @@ pub fn revalidate(entry: &CleanPlanEntry) -> Option<SkipReason> {
         && modified > expected
     {
         return Some(SkipReason::Changed);
+    }
+    if entry
+        .required_safety
+        .contains(&SafetyPrecondition::GitStateUnchanged)
+    {
+        let assessment = sweeploom_dev::inspect(path).assessment();
+        if let Some(blocker) = assessment.blockers.first() {
+            return Some(SkipReason::Blocked(blocker.clone()));
+        }
     }
     None
 }

@@ -12,6 +12,45 @@ mod inventory;
 pub use classify::{PathCategory, classify_path_component, is_project_marker, is_source_extension};
 pub use inventory::{DirectoryNode, InventoryLimits, InventoryReport, scan_inventory};
 
+use weavatrix_scan::{IgnorePolicy, ScanOptions, StandardSkips};
+
+/// Scan options for generated/artifact discovery.
+///
+/// Repository ignore and standard skips are off so `target` and `node_modules`
+/// remain visible. Implemented with Weavatrix Scan helpers, not a local fork.
+#[must_use]
+pub fn artifact_scan_options() -> ScanOptions {
+    ScanOptions::default()
+        .metadata_only()
+        .with_ignore_policy(IgnorePolicy::none())
+        .with_standard_skips(StandardSkips::Disabled)
+}
+
+/// Scan options for Source Heat. Generated trees stay ignored.
+#[must_use]
+pub fn source_heat_scan_options() -> ScanOptions {
+    ScanOptions::default()
+        .metadata_only()
+        .with_ignore_policy(IgnorePolicy::repository())
+        .with_standard_skips(StandardSkips::Enabled)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use weavatrix_scan::StandardSkips;
+
+    #[test]
+    fn artifact_scan_uses_weavatrix_none_policy() {
+        let options = artifact_scan_options();
+        assert!(!options.ignore_policy.git_ignore);
+        assert_eq!(options.standard_skips, StandardSkips::Disabled);
+        let source = source_heat_scan_options();
+        assert!(source.ignore_policy.git_ignore);
+        assert_eq!(source.standard_skips, StandardSkips::Enabled);
+    }
+}
+
 /// Project marker files used for discovery.
 pub const PROJECT_MARKERS: &[&str] = &[
     "Cargo.toml",

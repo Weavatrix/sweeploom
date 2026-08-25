@@ -16,3 +16,4 @@ workspace = true
 [dependencies]
 sweeploom-core = { workspace = true }
 sweeploom-platform = { workspace = true }
+sweeploom-dev = { workspace = true }

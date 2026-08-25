@@ -3,6 +3,10 @@
 
 #![cfg_attr(not(test), warn(missing_docs))]
 
+mod git;
+
+pub use git::{GitSafety, inspect};
+
 use std::path::Path;
 
 /// Kind of developer project discovered from markers.

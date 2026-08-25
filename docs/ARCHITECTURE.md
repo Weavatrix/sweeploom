@@ -8,7 +8,9 @@ plan lives in [`PRODUCT_ARCHITECTURE.md`](PRODUCT_ARCHITECTURE.md).
 | Code | License |
 | --- | --- |
 | SweepLoom (`Weavatrix/sweeploom`) | MPL-2.0 |
-| Weavatrix crates (`weavatrix-scan`, `weavatrix-git`, …) | MIT — **do not change** |
+| Weavatrix crates (`weavatrix-scan`, `weavatrix-git`, …) | MIT — **do not relicense** |
+
+Missing Git/scan APIs are implemented in those crates and consumed here.
 
 SweepLoom depends on Weavatrix libraries. It does not vendor, fork, or
 relicense them.

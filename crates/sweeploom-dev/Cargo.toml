@@ -16,3 +16,4 @@ workspace = true
 [dependencies]
 sweeploom-core = { workspace = true }
 sweeploom-storage = { workspace = true }
+weavatrix-git = { workspace = true }
