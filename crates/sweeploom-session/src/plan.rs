@@ -1,6 +1,6 @@
 //! Least-pain session selection. Never terminates; the user still confirms.
 
-use sweeploom_core::{LiveSession, Recommendation, SessionId, SessionKind};
+use sweeploom_core::{LiveSession, ProjectId, Recommendation, SessionId, SessionKind};
 
 /// True when a session may be offered for RAM/CPU reclaim.
 #[must_use]
@@ -63,6 +63,34 @@ pub fn plan_reduce_cpu(sessions: &[LiveSession], target_percent: f32) -> Vec<Ses
         ids.push(sessions[index].id);
     }
     ids
+}
+
+/// Forgotten dev sessions for a quiet workstation. Protects the current project
+/// and never includes browser trees or system-critical processes.
+#[must_use]
+pub fn plan_quiet_workstation(
+    sessions: &[LiveSession],
+    current_project: Option<&ProjectId>,
+) -> Vec<SessionId> {
+    sessions
+        .iter()
+        .filter(|session| is_quiet_candidate(session, current_project))
+        .map(|session| session.id)
+        .collect()
+}
+
+fn is_quiet_candidate(session: &LiveSession, current_project: Option<&ProjectId>) -> bool {
+    if !is_reclaim_candidate(session) {
+        return false;
+    }
+    match session.recommendation.recommendation {
+        Recommendation::StronglyRecommended | Recommendation::Recommended => {}
+        Recommendation::Optional | Recommendation::Keep => return false,
+    }
+    !matches!(
+        (current_project, session.project.as_ref()),
+        (Some(current), Some(project)) if current == project
+    )
 }
 
 fn ram_order(left: &LiveSession, right: &LiveSession) -> std::cmp::Ordering {
@@ -180,5 +208,20 @@ mod tests {
         browser.kind = SessionKind::Browser;
         let ids = plan_free_ram(&[browser], 1_000_000_000);
         assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn quiet_skips_current_project_browser_and_optional() {
+        let mut current = session(1, Recommendation::Recommended, 1, 1.0, false);
+        current.project = Some(ProjectId(std::path::PathBuf::from("/work/now")));
+        let mut browser = session(2, Recommendation::Recommended, 1, 1.0, false);
+        browser.kind = SessionKind::Browser;
+        let optional = session(3, Recommendation::Optional, 1, 1.0, false);
+        let forgotten = session(4, Recommendation::Recommended, 1, 1.0, false);
+        let ids = plan_quiet_workstation(
+            &[current, browser, optional, forgotten],
+            Some(&ProjectId(std::path::PathBuf::from("/work/now"))),
+        );
+        assert_eq!(ids, vec![SessionId(4)]);
     }
 }

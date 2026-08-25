@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, RichText};
 
 use crossbeam_channel::Receiver;
-use sweeploom_core::{LiveSession, ProcessKey, Receipt, SessionId};
+use sweeploom_core::{LiveSession, ProcessKey, ProjectId, Receipt, SessionId};
 use sweeploom_dev::ReviewRow;
 use sweeploom_history::HistoryStore;
 use sweeploom_network::enrich_network;
@@ -52,6 +52,7 @@ pub struct SweepLoomApp {
     pub(crate) reduce_cpu: String,
     pub(crate) planned_keys: HashSet<ProcessKey>,
     pub(crate) confirm_planned: bool,
+    pub(crate) current_project: Option<ProjectId>,
     pub(crate) volumes: Vec<(PathBuf, u64, u64)>,
     pub(crate) scanning: bool,
     scan_rx: Option<Receiver<ScanOutcome>>,
@@ -92,6 +93,7 @@ impl SweepLoomApp {
             reduce_cpu: "10".to_owned(),
             planned_keys: HashSet::new(),
             confirm_planned: false,
+            current_project: std::env::current_dir().ok().map(ProjectId),
             volumes: volume_space(),
             scanning: false,
             scan_rx: None,
@@ -183,14 +185,17 @@ fn sample_with(
     let mut snapshot = sampler.refresh(Duration::from_millis(200));
     snapshot.resolve_parents();
     let _ = enrich_network(&mut snapshot.processes);
-    let sessions = sessions_from_snapshot(&mut snapshot, &home_only(locations));
+    let sessions = sessions_from_snapshot(
+        &mut snapshot,
+        &home_only(locations, std::env::current_dir().ok().map(ProjectId)),
+    );
     (snapshot, sessions)
 }
 
-fn home_only(locations: &UserLocations) -> AttributionRoots {
+fn home_only(locations: &UserLocations, current_project: Option<ProjectId>) -> AttributionRoots {
     AttributionRoots {
         projects: vec![locations.home.clone()],
-        current_project: None,
+        current_project,
     }
 }
 
@@ -205,7 +210,7 @@ fn session_roots(app: &SweepLoomApp) -> AttributionRoots {
     }
     AttributionRoots {
         projects,
-        current_project: None,
+        current_project: app.current_project.clone(),
     }
 }
 

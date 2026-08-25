@@ -52,7 +52,7 @@ fn print_help() {
 SweepLoom — reclaim your workstation without losing your workspace
 
 Usage:
-  sweeploom sessions [--free-ram GB] [--reduce-cpu PERCENT]
+  sweeploom sessions [--free-ram GB] [--reduce-cpu PERCENT] [--quiet]
   sweeploom browser
   sweeploom companion-host
   sweeploom companion-install [--chromium-id ID]

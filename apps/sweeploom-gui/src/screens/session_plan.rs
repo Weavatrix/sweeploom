@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use eframe::egui::{self, Color32, RichText};
 use sweeploom_core::{LiveSession, ProcessKey};
-use sweeploom_session::{plan_free_ram, plan_reduce_cpu};
+use sweeploom_session::{plan_free_ram, plan_quiet_workstation, plan_reduce_cpu};
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
@@ -25,6 +25,10 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         ui.label("% CPU");
         if ui.button("Select to reduce CPU").clicked() {
             app.plan_reduce_cpu();
+        }
+        ui.separator();
+        if ui.button("Quiet workstation").clicked() {
+            app.plan_quiet();
         }
     });
     let planned: Vec<LiveSession> = app
@@ -129,6 +133,15 @@ impl SweepLoomApp {
     pub fn plan_reduce_cpu(&mut self) {
         let target: f32 = self.reduce_cpu.trim().parse().unwrap_or(0.0);
         apply_ids(self, plan_reduce_cpu(&self.sessions, target), target <= 0.0);
+    }
+
+    /// Pre-select forgotten sessions, protecting the current project and browsers.
+    pub fn plan_quiet(&mut self) {
+        apply_ids(
+            self,
+            plan_quiet_workstation(&self.sessions, self.current_project.as_ref()),
+            false,
+        );
     }
 
     /// Ask planned sessions to stop. Force-kill remains a second confirm.
