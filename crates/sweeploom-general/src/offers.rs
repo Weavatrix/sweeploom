@@ -83,6 +83,7 @@ fn offer_from_entry(
     match root.id {
         "user-temp" => temp_offer(root, path, logical.max(1), modified, age, id),
         "downloads" => download_offer(path, logical.max(1), modified, age, id),
+        "crash-dumps" => dump_offer(path, logical.max(1), modified, age, id),
         _ => None,
     }
 }
@@ -112,6 +113,37 @@ fn temp_offer(
         selected,
         format!("Temp · {}", path.display()),
         "general-temp",
+    ))
+}
+
+fn dump_offer(
+    path: &Path,
+    logical: u64,
+    modified: Option<SystemTime>,
+    age: Option<Duration>,
+    id: CandidateId,
+) -> Option<GeneralOffer> {
+    let name = path
+        .file_name()
+        .and_then(|item| item.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !name.ends_with(".dmp") {
+        return None;
+    }
+    let stale = age.is_some_and(|item| item >= TEMP_AGE);
+    Some(build(
+        id,
+        CandidateKind::CrashDump,
+        path,
+        logical,
+        modified,
+        SafetyAssessment::safe(),
+        DeletionStrategy::PermanentGenerated,
+        RebuildCost::None,
+        stale,
+        format!("Crash dump · {}", path.display()),
+        "general-crash-dump",
     ))
 }
 

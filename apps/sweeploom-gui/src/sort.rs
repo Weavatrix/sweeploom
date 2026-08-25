@@ -59,13 +59,10 @@ impl Sort {
     }
 }
 
-/// Draw a header button. Returns true when the sort changed.
-pub fn header_button(ui: &mut egui::Ui, sort: &mut Sort, col: Col, name: &str) -> bool {
+/// Sortable table header cell. Looks like a column title, not a toolbar button.
+pub fn header_cell(ui: &mut egui::Ui, sort: &mut Sort, col: Col, name: &str) {
     let text = RichText::new(sort.caption(col, name)).strong();
-    if ui.button(text).clicked() {
+    if ui.selectable_label(sort.col == col, text).clicked() {
         sort.toggle(col);
-        true
-    } else {
-        false
     }
 }

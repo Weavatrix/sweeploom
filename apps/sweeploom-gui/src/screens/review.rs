@@ -7,8 +7,10 @@ use sweeploom_general::collect_offers;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::sort::{Col, header_button};
+use crate::sort::{Col, Sort, header_cell};
 use crate::widgets::page_title;
+use egui_extras::{Column, TableBuilder};
+use sweeploom_dev::ReviewRow;
 
 pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
@@ -59,65 +61,102 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         app.review.len(),
         format_bytes(selected)
     ));
-    ui.horizontal(|ui| {
-        ui.label("Sort");
-        header_button(ui, &mut app.review_sort, Col::Name, "Name");
-        header_button(ui, &mut app.review_sort, Col::Size, "Size");
-        header_button(ui, &mut app.review_sort, Col::Status, "Status");
-    });
-    let order = review_order(app);
-    for index in order {
-        draw_row(app, ui, index);
-    }
+    draw_review_table(app, ui);
 }
 
-fn review_order(app: &SweepLoomApp) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..app.review.len()).collect();
+fn draw_review_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
+    let mut sort = app.review_sort;
+    let order = review_order(&app.review, sort);
+    let row_count = order.len();
+    TableBuilder::new(ui)
+        .striped(true)
+        .resizable(true)
+        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        .column(Column::auto().at_least(36.0))
+        .column(Column::remainder().at_least(280.0))
+        .column(Column::auto().at_least(100.0))
+        .column(Column::auto().at_least(110.0))
+        .column(Column::auto().at_least(140.0))
+        .header(32.0, |mut header| {
+            header.col(|ui| {
+                ui.strong("");
+            });
+            header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Name"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Size, "Size"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Status, "Rebuild"));
+            header.col(|ui| {
+                ui.strong("Safety");
+            });
+        })
+        .body(|body| {
+            body.rows(28.0, row_count, |mut row| {
+                let index = order.get(row.index()).copied().unwrap_or(0);
+                fill_review_row(&mut app.review, &mut row, index);
+            });
+        });
+    app.review_sort = sort;
+}
+
+fn review_order(rows: &[ReviewRow], sort: Sort) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..rows.len()).collect();
     order.sort_by(|&left, &right| {
-        let a = &app.review[left];
-        let b = &app.review[right];
-        match app.review_sort.col {
+        let a = &rows[left];
+        let b = &rows[right];
+        match sort.col {
             Col::Name => a.title.cmp(&b.title),
-            Col::Status => a
-                .candidate
-                .safety
-                .is_blocked()
-                .cmp(&b.candidate.safety.is_blocked()),
+            Col::Status => a.candidate.rebuild.cost.cmp(&b.candidate.rebuild.cost),
             _ => a.candidate.logical_bytes.cmp(&b.candidate.logical_bytes),
         }
     });
-    if app.review_sort.desc {
+    if sort.desc {
         order.reverse();
     }
     order
 }
 
-fn draw_row(app: &mut SweepLoomApp, ui: &mut egui::Ui, index: usize) {
-    let blocked = app.review[index].candidate.safety.is_blocked();
-    let title = app.review[index].title.clone();
-    let size = format_bytes(app.review[index].candidate.logical_bytes);
-    let rebuild = app.review[index].candidate.rebuild.cost;
-    let blocker = app.review[index]
-        .candidate
-        .safety
-        .blockers
-        .first()
-        .map(|item| format!("  BLOCKED {item:?}"))
-        .unwrap_or_default();
-    let mut selected = app.review[index].selected;
-    ui.horizontal(|ui| {
+fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '_>, index: usize) {
+    let Some(item) = rows.get(index) else {
+        return;
+    };
+    let blocked = item.candidate.safety.is_blocked();
+    let title = item.title.clone();
+    let size = format_bytes(item.candidate.logical_bytes);
+    let rebuild = format!("{:?}", item.candidate.rebuild.cost);
+    let safety = if blocked {
+        item.candidate
+            .safety
+            .blockers
+            .first()
+            .map(|item| format!("BLOCKED {item:?}"))
+            .unwrap_or_else(|| "BLOCKED".to_owned())
+    } else {
+        format!("{:?}", item.candidate.safety.level)
+    };
+    let mut selected = item.selected;
+    row.col(|ui| {
         if blocked {
             let mut off = false;
             ui.add_enabled(false, egui::Checkbox::new(&mut off, ""));
-            ui.colored_label(
-                Color32::from_rgb(240, 160, 80),
-                RichText::new(format!("{title}  {size}  rebuild={rebuild:?}{blocker}")).size(16.0),
-            );
+        } else if ui.checkbox(&mut selected, "").changed()
+            && let Some(item) = rows.get_mut(index)
+        {
+            item.selected = selected;
+        }
+    });
+    row.col(|ui| {
+        ui.label(RichText::new(title).size(16.0));
+    });
+    row.col(|ui| {
+        ui.label(&size);
+    });
+    row.col(|ui| {
+        ui.label(&rebuild);
+    });
+    row.col(|ui| {
+        if blocked {
+            ui.colored_label(Color32::from_rgb(240, 160, 80), safety);
         } else {
-            if ui.checkbox(&mut selected, "").changed() {
-                app.review[index].selected = selected;
-            }
-            ui.label(RichText::new(format!("{title}  {size}  rebuild={rebuild:?}")).size(16.0));
+            ui.label(safety);
         }
     });
 }

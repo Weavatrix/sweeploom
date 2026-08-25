@@ -16,3 +16,6 @@ workspace = true
 [dependencies]
 sweeploom-core = { workspace = true }
 sweeploom-platform = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+netstat2 = "0.11"

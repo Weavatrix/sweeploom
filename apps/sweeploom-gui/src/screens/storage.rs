@@ -1,11 +1,12 @@
 //! Storage scan and Folder Inspector tree.
 
 use eframe::egui::{self, Color32, RichText};
+use egui_extras::{Column, TableBuilder};
 use sweeploom_storage::DirectoryNode;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::sort::{Col, Sort, header_button};
+use crate::sort::{Col, Sort, header_cell};
 use crate::widgets::page_title;
 
 pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -39,50 +40,81 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             format_bytes(report.tree.logical_bytes),
             if report.capped { " · capped" } else { "" }
         ));
-        ui.horizontal(|ui| {
-            ui.label("Sort children");
-            header_button(ui, &mut app.explorer_sort, Col::Size, "Size");
-            header_button(ui, &mut app.explorer_sort, Col::Name, "Name");
-        });
         ui.add_space(8.0);
-        folder_tree(ui, &report.tree, 0, app.explorer_sort);
+        folder_table(ui, &report.tree, &mut app.explorer_sort);
     } else {
         ui.label("Scan a folder to open the inspector. Symlinks are not followed.");
     }
 }
 
-fn folder_tree(ui: &mut egui::Ui, node: &DirectoryNode, depth: usize, sort: Sort) {
-    if depth > 6 {
-        return;
-    }
-    let name = node
-        .path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or(".");
-    let label = format!(
-        "{}  {name}  {:?}",
-        format_bytes(node.logical_bytes),
-        node.category
-    );
-    if node.children.is_empty() {
-        ui.label(RichText::new(label).size(16.0));
-        return;
-    }
-    egui::CollapsingHeader::new(RichText::new(label).size(16.0))
-        .id_salt(&node.path)
-        .default_open(depth < 1)
-        .show(ui, |ui| {
-            let mut children: Vec<&DirectoryNode> = node.children.iter().collect();
-            children.sort_by(|left, right| match sort.col {
-                Col::Name => left.path.file_name().cmp(&right.path.file_name()),
-                _ => left.logical_bytes.cmp(&right.logical_bytes),
+fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort) {
+    let mut rows = Vec::new();
+    collect_rows(root, 0, *sort, &mut rows);
+    let row_count = rows.len();
+    TableBuilder::new(ui)
+        .striped(true)
+        .resizable(true)
+        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        .column(Column::auto().at_least(110.0))
+        .column(Column::remainder().at_least(220.0))
+        .column(Column::auto().at_least(120.0))
+        .column(Column::auto().at_least(80.0))
+        .header(32.0, |mut header| {
+            header.col(|ui| header_cell(ui, sort, Col::Size, "Size"));
+            header.col(|ui| header_cell(ui, sort, Col::Name, "Name"));
+            header.col(|ui| {
+                ui.strong("Category");
             });
-            if sort.desc {
-                children.reverse();
-            }
-            for child in children {
-                folder_tree(ui, child, depth + 1, sort);
-            }
+            header.col(|ui| {
+                ui.strong("Files");
+            });
+        })
+        .body(|body| {
+            body.rows(26.0, row_count, |mut row| {
+                let Some((depth, node)) = rows.get(row.index()) else {
+                    return;
+                };
+                let name = node
+                    .path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or(".");
+                let indent = "    ".repeat(*depth);
+                row.col(|ui| {
+                    ui.label(format_bytes(node.logical_bytes));
+                });
+                row.col(|ui| {
+                    ui.label(RichText::new(format!("{indent}{name}")).size(16.0));
+                });
+                row.col(|ui| {
+                    ui.label(format!("{:?}", node.category));
+                });
+                row.col(|ui| {
+                    ui.label(node.files.to_string());
+                });
+            });
         });
+}
+
+fn collect_rows<'a>(
+    node: &'a DirectoryNode,
+    depth: usize,
+    sort: Sort,
+    out: &mut Vec<(usize, &'a DirectoryNode)>,
+) {
+    if depth > 5 {
+        return;
+    }
+    let mut children: Vec<&DirectoryNode> = node.children.iter().collect();
+    children.sort_by(|left, right| match sort.col {
+        Col::Name => left.path.file_name().cmp(&right.path.file_name()),
+        _ => left.logical_bytes.cmp(&right.logical_bytes),
+    });
+    if sort.desc {
+        children.reverse();
+    }
+    for child in children {
+        out.push((depth, child));
+        collect_rows(child, depth + 1, sort, out);
+    }
 }

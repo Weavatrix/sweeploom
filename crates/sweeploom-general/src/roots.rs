@@ -30,7 +30,25 @@ pub fn default_roots(locations: &UserLocations) -> Vec<GeneralRoot> {
             auto_select_allowed: false,
         });
     }
+    if let Some(dumps) = crash_dumps_dir() {
+        roots.push(GeneralRoot {
+            id: "crash-dumps",
+            path: dumps,
+            auto_select_allowed: true,
+        });
+    }
     roots
+}
+
+fn crash_dumps_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        std::env::var_os("LOCALAPPDATA").map(|root| PathBuf::from(root).join("CrashDumps"))
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
 }
 
 #[cfg(test)]

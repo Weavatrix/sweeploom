@@ -41,14 +41,14 @@ pub fn enrich_network(processes: &mut [sweeploom_core::ProcessSnapshot]) -> Netw
 /// Current platform capability.
 #[must_use]
 pub fn current_capability() -> NetworkCapability {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     {
         NetworkCapability {
             connections: true,
             byte_rates: false,
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         NetworkCapability::unknown()
     }
@@ -77,7 +77,11 @@ fn load_pid_endpoints() -> HashMap<u32, Vec<Endpoint>> {
     {
         linux::load()
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    {
+        windows::load()
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         HashMap::new()
     }
@@ -89,6 +93,9 @@ fn load_pid_endpoints() -> HashMap<u32, Vec<Endpoint>> {
 pub fn endpoints_for(_key: ProcessKey) -> Vec<Endpoint> {
     Vec::new()
 }
+
+#[cfg(windows)]
+mod windows;
 
 #[cfg(target_os = "linux")]
 mod linux {

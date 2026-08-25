@@ -3,7 +3,7 @@
 use super::session_actions;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::sort::{Col, header_button};
+use crate::sort::{Col, Sort, header_cell};
 use crate::widgets::page_title;
 use eframe::egui::{self, Color32, RichText};
 use egui_extras::{Column, TableBuilder};
@@ -25,19 +25,14 @@ pub fn ui_sessions(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
 }
 
 fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.label("Sort");
-        header_button(ui, &mut app.session_sort, Col::Name, "Name");
-        header_button(ui, &mut app.session_sort, Col::Size, "RSS");
-        header_button(ui, &mut app.session_sort, Col::Cpu, "CPU");
-        header_button(ui, &mut app.session_sort, Col::Procs, "Procs");
-        header_button(ui, &mut app.session_sort, Col::Status, "Status");
-    });
-    let order = session_order(app);
+    let mut sort = app.session_sort;
+    let mut selected = app.selected_session;
+    let order = session_order(&app.sessions, sort);
     let row_count = order.len();
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
+        .sense(egui::Sense::click())
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::auto().at_least(180.0))
         .column(Column::auto().at_least(80.0))
@@ -45,26 +40,24 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .column(Column::auto().at_least(80.0))
         .column(Column::auto().at_least(160.0))
         .column(Column::remainder())
-        .header(30.0, |mut header| {
-            for title in [
-                "Session",
-                "Procs",
-                "RSS",
-                "CPU",
-                "Recommendation",
-                "Project",
-            ] {
-                header.col(|ui| {
-                    ui.strong(title);
-                });
-            }
+        .header(32.0, |mut header| {
+            header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Session"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Procs, "Procs"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Size, "RSS"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Cpu, "CPU"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Status, "Recommendation"));
+            header.col(|ui| {
+                ui.strong("Project");
+            });
         })
         .body(|body| {
             body.rows(28.0, row_count, |mut row| {
                 let index = order.get(row.index()).copied().unwrap_or(row.index());
-                fill_session_row(app, &mut row, index);
+                fill_session_row(&app.sessions, selected, &mut row, index, &mut selected);
             });
         });
+    app.session_sort = sort;
+    app.selected_session = selected;
     if let Some(id) = app.selected_session
         && let Some(session) = app.sessions.iter().find(|item| item.id == id).cloned()
     {
@@ -73,21 +66,17 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     }
 }
 
-fn session_order(app: &SweepLoomApp) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..app.sessions.len()).collect();
-    order.sort_by(|&left, &right| compare_session(&app.sessions[left], &app.sessions[right], app));
-    if app.session_sort.desc {
+fn session_order(sessions: &[LiveSession], sort: Sort) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..sessions.len()).collect();
+    order.sort_by(|&left, &right| compare_session(&sessions[left], &sessions[right], sort));
+    if sort.desc {
         order.reverse();
     }
     order
 }
 
-fn compare_session(
-    left: &LiveSession,
-    right: &LiveSession,
-    app: &SweepLoomApp,
-) -> std::cmp::Ordering {
-    match app.session_sort.col {
+fn compare_session(left: &LiveSession, right: &LiveSession, sort: Sort) -> std::cmp::Ordering {
+    match sort.col {
         Col::Name => left.label().cmp(right.label()),
         Col::Procs => left.processes.len().cmp(&right.processes.len()),
         Col::Cpu => left
@@ -100,11 +89,17 @@ fn compare_session(
     }
 }
 
-fn fill_session_row(app: &mut SweepLoomApp, row: &mut egui_extras::TableRow<'_, '_>, index: usize) {
-    let Some(session) = app.sessions.get(index) else {
+fn fill_session_row(
+    sessions: &[LiveSession],
+    selected_id: Option<sweeploom_core::SessionId>,
+    row: &mut egui_extras::TableRow<'_, '_>,
+    index: usize,
+    selected: &mut Option<sweeploom_core::SessionId>,
+) {
+    let Some(session) = sessions.get(index) else {
         return;
     };
-    let selected = app.selected_session == Some(session.id);
+    let is_selected = selected_id == Some(session.id);
     let id = session.id;
     let label = session.label().to_owned();
     let procs = session.processes.len().to_string();
@@ -118,10 +113,10 @@ fn fill_session_row(app: &mut SweepLoomApp, row: &mut egui_extras::TableRow<'_, 
         .unwrap_or_else(|| "Unknown".to_owned());
     row.col(|ui| {
         if ui
-            .selectable_label(selected, RichText::new(label).size(16.0))
+            .selectable_label(is_selected, RichText::new(label).size(16.0))
             .clicked()
         {
-            app.selected_session = Some(id);
+            *selected = Some(id);
         }
     });
     row.col(|ui| {
@@ -142,20 +137,15 @@ fn fill_session_row(app: &mut SweepLoomApp, row: &mut egui_extras::TableRow<'_, 
 }
 
 fn ui_process_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.label("Sort");
-        header_button(ui, &mut app.process_sort, Col::Name, "Name");
-        header_button(ui, &mut app.process_sort, Col::Size, "RSS");
-        header_button(ui, &mut app.process_sort, Col::Cpu, "CPU");
-    });
     let Some(snapshot) = &app.snapshot else {
         return;
     };
+    let mut sort = app.process_sort;
     let mut order: Vec<usize> = (0..snapshot.processes.len()).collect();
     order.sort_by(|&left, &right| {
         let a = &snapshot.processes[left];
         let b = &snapshot.processes[right];
-        match app.process_sort.col {
+        match sort.col {
             Col::Name => a.name.cmp(&b.name),
             Col::Cpu => a
                 .cpu_percent
@@ -164,7 +154,7 @@ fn ui_process_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             _ => a.rss_bytes.cmp(&b.rss_bytes),
         }
     });
-    if app.process_sort.desc {
+    if sort.desc {
         order.reverse();
     }
     let rows = order.len();
@@ -176,12 +166,16 @@ fn ui_process_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .column(Column::auto().at_least(100.0))
         .column(Column::auto().at_least(80.0))
         .column(Column::remainder())
-        .header(30.0, |mut header| {
-            for title in ["PID", "Process", "RSS", "CPU", "Command"] {
-                header.col(|ui| {
-                    ui.strong(title);
-                });
-            }
+        .header(32.0, |mut header| {
+            header.col(|ui| {
+                ui.strong("PID");
+            });
+            header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Process"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Size, "RSS"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Cpu, "CPU"));
+            header.col(|ui| {
+                ui.strong("Command");
+            });
         })
         .body(|body| {
             body.rows(26.0, rows, |mut row| {
@@ -205,6 +199,7 @@ fn ui_process_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                 }
             });
         });
+    app.process_sort = sort;
 }
 
 fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
