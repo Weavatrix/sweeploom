@@ -1,12 +1,10 @@
 //! Logical session table and raw process tree.
 
-use eframe::egui::{self, Color32, RichText};
-use egui_extras::{Column, TableBuilder};
-use sweeploom_core::LiveSession;
-use sweeploom_process::ProcessSnapshotSet;
-
+use super::session_actions;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
+use eframe::egui::{self, Color32, RichText};
+use egui_extras::{Column, TableBuilder};
 
 pub fn ui_sessions(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
@@ -59,11 +57,9 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                 fill_session_row(app, &mut row);
             });
         });
-    if let Some(index) = app.selected_session
-        && let Some(session) = app.sessions.get(index)
-    {
+    if let Some(index) = app.selected_session {
         ui.separator();
-        session_details(ui, session, app.snapshot.as_ref());
+        session_details(app, ui, index);
     }
 }
 
@@ -149,11 +145,10 @@ pub fn ui_process_table(app: &SweepLoomApp, ui: &mut egui::Ui) {
         });
 }
 
-fn session_details(
-    ui: &mut egui::Ui,
-    session: &LiveSession,
-    snapshot: Option<&ProcessSnapshotSet>,
-) {
+fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, index: usize) {
+    let Some(session) = app.sessions.get(index).cloned() else {
+        return;
+    };
     ui.label(RichText::new(session.label()).strong());
     ui.label(format!(
         "RAM {} · CPU {:.1}% · processes {} · {:?}",
@@ -168,17 +163,17 @@ fn session_details(
             "Terminate disabled (system-critical).",
         );
     }
-    let Some(snapshot) = snapshot else {
-        return;
-    };
-    for key in &session.processes {
-        if let Some(process) = snapshot.processes.iter().find(|item| item.key == *key) {
-            ui.monospace(format!(
-                "pid {}  {}  {}",
-                process.pid,
-                format_bytes(process.rss_bytes),
-                process.name
-            ));
+    if let Some(snapshot) = &app.snapshot {
+        for key in &session.processes {
+            if let Some(process) = snapshot.processes.iter().find(|item| item.key == *key) {
+                ui.monospace(format!(
+                    "pid {}  {}  {}",
+                    process.pid,
+                    format_bytes(process.rss_bytes),
+                    process.name
+                ));
+            }
         }
     }
+    session_actions::draw(app, ui, &session);
 }

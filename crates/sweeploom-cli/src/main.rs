@@ -1,5 +1,8 @@
 //! SweepLoom CLI. GUI is the primary surface; this is for scripts and agents.
 
+mod bytes;
+mod cmd_projects;
+
 use std::env;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -10,18 +13,15 @@ use sweeploom_process::ProcessSampler;
 use sweeploom_session::{AttributionRoots, sessions_from_snapshot};
 use sweeploom_storage::{InventoryLimits, scan_inventory};
 
+use bytes::format_bytes;
+
 fn main() {
     let mut args = env::args().skip(1);
     let cmd = args.next().unwrap_or_else(|| "help".to_owned());
     match cmd.as_str() {
         "sessions" => cmd_sessions(),
-        "scan" => {
-            let root = args
-                .next()
-                .map(PathBuf::from)
-                .unwrap_or_else(|| UserLocations::current().home);
-            cmd_scan(&root);
-        }
+        "scan" => cmd_scan(&arg_root(args.next())),
+        "projects" => cmd_projects::run(&arg_root(args.next())),
         "help" | "--help" | "-h" => print_help(),
         other => {
             eprintln!("unknown command: {other}");
@@ -29,6 +29,11 @@ fn main() {
             std::process::exit(2);
         }
     }
+}
+
+fn arg_root(arg: Option<String>) -> PathBuf {
+    arg.map(PathBuf::from)
+        .unwrap_or_else(|| UserLocations::current().home)
 }
 
 fn print_help() {
@@ -39,6 +44,7 @@ SweepLoom — reclaim your workstation without losing your workspace
 Usage:
   sweeploom sessions
   sweeploom scan [path]
+  sweeploom projects [path]
 "
     );
 }
@@ -102,21 +108,5 @@ fn cmd_scan(root: &std::path::Path) {
             eprintln!("scan failed: {error}");
             std::process::exit(1);
         }
-    }
-}
-
-fn format_bytes(bytes: u64) -> String {
-    const KIB: f64 = 1024.0;
-    const MIB: f64 = 1024.0 * 1024.0;
-    const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
-    let value = bytes as f64;
-    if value >= GIB {
-        format!("{:.1} GB", value / GIB)
-    } else if value >= MIB {
-        format!("{:.1} MB", value / MIB)
-    } else if value >= KIB {
-        format!("{:.1} KB", value / KIB)
-    } else {
-        format!("{bytes} B")
     }
 }

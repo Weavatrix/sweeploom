@@ -2662,11 +2662,13 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "sweeploom-core",
+ "sweeploom-dev",
  "sweeploom-network",
  "sweeploom-platform",
  "sweeploom-process",
  "sweeploom-session",
  "sweeploom-storage",
+ "weavatrix-git",
 ]
 
 [[package]]
@@ -2711,6 +2713,7 @@ dependencies = [
  "egui",
  "egui_extras",
  "sweeploom-core",
+ "sweeploom-dev",
  "sweeploom-network",
  "sweeploom-platform",
  "sweeploom-process",
@@ -3282,8 +3285,8 @@ dependencies = [
 
 [[package]]
 name = "weavatrix-git"
-version = "0.3.2"
-source = "git+https://github.com/Weavatrix/weavatrix-git?rev=cfb2536#cfb25364f2a4def26a61f3eadfed5f7b973a551c"
+version = "0.3.3"
+source = "git+https://github.com/Weavatrix/weavatrix-git?rev=122cb70f1e715705cbb0859b8e43faca867fc7e6#122cb70f1e715705cbb0859b8e43faca867fc7e6"
 
 [[package]]
 name = "weavatrix-scan"

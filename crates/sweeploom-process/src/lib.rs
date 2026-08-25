@@ -4,10 +4,12 @@
 
 mod classify;
 mod control;
+mod session_stop;
 mod snapshot;
 
 pub use classify::classify_process;
 pub use control::SysinfoProcessControl;
+pub use session_stop::stop_session_gracefully;
 pub use snapshot::{
     HostCpu, HostMemory, ProcessSampler, ProcessSnapshotSet, host_cpu, host_memory, volume_space,
 };
@@ -16,10 +18,7 @@ use sweeploom_core::{ProcessKey, ProcessSnapshot};
 
 /// Look up a live snapshot by key, refusing PID reuse.
 #[must_use]
-pub fn find_process<'a>(
-    processes: &'a [ProcessSnapshot],
-    key: ProcessKey,
-) -> Option<&'a ProcessSnapshot> {
+pub fn find_process(processes: &[ProcessSnapshot], key: ProcessKey) -> Option<&ProcessSnapshot> {
     processes.iter().find(|process| process.key == key)
 }
 

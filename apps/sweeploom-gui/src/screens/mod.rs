@@ -2,6 +2,7 @@
 
 mod overview;
 mod projects;
+mod session_actions;
 mod sessions;
 mod settings;
 mod storage;

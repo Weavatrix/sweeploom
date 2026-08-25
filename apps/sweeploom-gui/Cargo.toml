@@ -24,6 +24,7 @@ sweeploom-process = { workspace = true }
 sweeploom-session = { workspace = true }
 sweeploom-storage = { workspace = true }
 sweeploom-network = { workspace = true }
+sweeploom-dev = { workspace = true }
 crossbeam-channel = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }

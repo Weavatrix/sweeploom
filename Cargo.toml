@@ -44,7 +44,7 @@ sweeploom-browser = { path = "crates/sweeploom-browser" }
 sweeploom-history = { path = "crates/sweeploom-history" }
 
 weavatrix-scan = { git = "https://github.com/Weavatrix/weavatrix-scan", rev = "d3c8bc5", default-features = false }
-weavatrix-git = { git = "https://github.com/Weavatrix/weavatrix-git", rev = "cfb2536", default-features = false }
+weavatrix-git = { git = "https://github.com/Weavatrix/weavatrix-git", rev = "122cb70f1e715705cbb0859b8e43faca867fc7e6", default-features = false }
 
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

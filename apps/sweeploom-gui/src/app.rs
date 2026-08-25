@@ -29,6 +29,8 @@ pub struct SweepLoomApp {
     pub(crate) inventory_error: Option<String>,
     pub(crate) scan_root: String,
     pub(crate) locations: UserLocations,
+    pub(crate) confirm_terminate: bool,
+    pub(crate) action_message: Option<String>,
 }
 
 impl SweepLoomApp {
@@ -53,6 +55,8 @@ impl SweepLoomApp {
             inventory_error: None,
             scan_root: locations.home.display().to_string(),
             locations,
+            confirm_terminate: false,
+            action_message: None,
         }
     }
 
