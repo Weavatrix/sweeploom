@@ -10,8 +10,18 @@ rust-version.workspace = true
 publish.workspace = true
 description = "Capability-gated process connection and listener inventory"
 
-[lints]
-workspace = true
+# Workspace rust.unsafe_code is forbid and cannot be overridden. This crate
+# is the only FFI surface for TCP ESTATS byte counters.
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = "allow"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
 
 [dependencies]
 sweeploom-core = { workspace = true }
@@ -19,3 +29,8 @@ sweeploom-platform = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 netstat2 = "0.11"
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Networking_WinSock",
+] }

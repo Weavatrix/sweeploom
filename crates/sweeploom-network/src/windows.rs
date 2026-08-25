@@ -1,4 +1,4 @@
-//! Owner-PID sockets via `netstat2` (IPHLPAPI). Byte rates stay unavailable.
+//! Owner-PID sockets via `netstat2` (IPHLPAPI). Bytes come from `windows_estats`.
 
 use std::collections::HashMap;
 

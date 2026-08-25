@@ -18,7 +18,7 @@ pub fn run(args: impl Iterator<Item = String>) {
     let mut sampler = ProcessSampler::new();
     let mut snapshot = sampler.refresh(Duration::from_millis(200));
     snapshot.resolve_parents();
-    let _capability = enrich_network(&mut snapshot.processes);
+    let capability = enrich_network(&mut snapshot.processes);
     let locations = UserLocations::current();
     let current_project = std::env::current_dir().ok().map(ProjectId);
     let roots = AttributionRoots {
@@ -27,10 +27,12 @@ pub fn run(args: impl Iterator<Item = String>) {
     };
     let sessions = sessions_from_snapshot(&mut snapshot, &roots);
     println!(
-        "processes={} sessions={} rss_total={}",
+        "processes={} sessions={} rss_total={} net_conn={} net_bytes={}",
         snapshot.processes.len(),
         sessions.len(),
-        format_bytes(snapshot.total_rss_bytes)
+        format_bytes(snapshot.total_rss_bytes),
+        capability.connections,
+        capability.byte_rates
     );
     let planned = planned_ids(
         &sessions,

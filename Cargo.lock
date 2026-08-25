@@ -2971,6 +2971,7 @@ dependencies = [
  "netstat2",
  "sweeploom-core",
  "sweeploom-platform",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

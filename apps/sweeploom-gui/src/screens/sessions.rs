@@ -261,6 +261,15 @@ fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSess
     } else {
         ui.label("Listening ports unavailable on this OS (not shown as zero).");
     }
+    if session.network.byte_rate_available {
+        ui.label(format!(
+            "Observed TCP  rx {}  tx {}  since SweepLoom started watching",
+            format_bytes(session.network.observed_rx_bytes),
+            format_bytes(session.network.observed_tx_bytes)
+        ));
+    } else {
+        ui.label("Per-process TCP bytes unavailable (not shown as zero).");
+    }
     if session.safety.terminate_disabled {
         ui.colored_label(
             Color32::from_rgb(240, 160, 80),
