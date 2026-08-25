@@ -35,6 +35,19 @@ pub fn source_heat_scan_options() -> ScanOptions {
         .with_standard_skips(StandardSkips::Enabled)
 }
 
+/// Project marker files used for discovery.
+pub const PROJECT_MARKERS: &[&str] = &[
+    "Cargo.toml",
+    "package.json",
+    "pyproject.toml",
+    "go.mod",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "Package.swift",
+    "CMakeLists.txt",
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -50,16 +63,3 @@ mod tests {
         assert_eq!(source.standard_skips, StandardSkips::Enabled);
     }
 }
-
-/// Project marker files used for discovery.
-pub const PROJECT_MARKERS: &[&str] = &[
-    "Cargo.toml",
-    "package.json",
-    "pyproject.toml",
-    "go.mod",
-    "pom.xml",
-    "build.gradle",
-    "build.gradle.kts",
-    "Package.swift",
-    "CMakeLists.txt",
-];

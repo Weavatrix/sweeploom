@@ -51,7 +51,7 @@ pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
         );
         metric_card(ui, "CPU", &format!("{cpu:.0}%"), "background load now");
         let disk = app.inventory.as_ref().map_or_else(
-            || "scan Storage".to_owned(),
+            || "scan Explorer".to_owned(),
             |item| format_bytes(item.tree.logical_bytes),
         );
         metric_card(ui, "SCANNED DISK", &disk, "Folder Inspector");

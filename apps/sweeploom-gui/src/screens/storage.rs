@@ -7,7 +7,7 @@ use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 
 pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    ui.heading("Storage / Explorer");
+    ui.heading("Explorer");
     ui.horizontal(|ui| {
         ui.label("Root");
         ui.add(egui::TextEdit::singleline(&mut app.scan_root).desired_width(480.0));

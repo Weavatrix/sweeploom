@@ -76,6 +76,9 @@ them.
 cargo run -p sweeploom-gui
 cargo run -p sweeploom-cli -- sessions
 cargo run -p sweeploom-cli -- scan <path>
+cargo run -p sweeploom-cli -- projects <path>
+cargo run -p sweeploom-cli -- clean <path>
+cargo run -p sweeploom-cli -- clean <path> --apply
 ```
 
 ## Principles

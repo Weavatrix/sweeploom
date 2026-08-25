@@ -25,5 +25,5 @@ sweeploom-session = { workspace = true }
 sweeploom-storage = { workspace = true }
 sweeploom-network = { workspace = true }
 sweeploom-dev = { workspace = true }
-weavatrix-git = { workspace = true }
+sweeploom-exec = { workspace = true }
 serde_json = { workspace = true }

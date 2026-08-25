@@ -60,7 +60,7 @@ pub fn group_sessions(processes: &[ProcessSnapshot]) -> Vec<LiveSession> {
         next_id += 1;
     }
 
-    sessions.sort_by(|left, right| right.rss_bytes.cmp(&left.rss_bytes));
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.rss_bytes));
     sessions
 }
 

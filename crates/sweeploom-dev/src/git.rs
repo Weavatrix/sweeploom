@@ -38,6 +38,28 @@ impl GitSafety {
             Self::Known(safety) => assessment_from_safety(safety),
         }
     }
+
+    /// True when generated cleanup may be auto-selected.
+    #[must_use]
+    pub fn allows_generated_cleanup(&self) -> bool {
+        !self.assessment().is_blocked()
+    }
+
+    /// Short Git state for UI/CLI. Does not leak Weavatrix types to the shell.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::NotARepository => "none",
+            Self::Unknown => "unknown",
+            Self::Known(safety) => match safety.level {
+                WorktreeSafetyLevel::Clean => "clean",
+                WorktreeSafetyLevel::IgnoredOnly => "ignored-only",
+                WorktreeSafetyLevel::HasUntracked => "untracked",
+                WorktreeSafetyLevel::DirtyTracked => "dirty",
+                WorktreeSafetyLevel::Unknown => "unknown",
+            },
+        }
+    }
 }
 
 fn assessment_from_safety(safety: &WorktreeSafety) -> SafetyAssessment {
@@ -53,14 +75,6 @@ fn assessment_from_safety(safety: &WorktreeSafety) -> SafetyAssessment {
         WorktreeSafetyLevel::HasUntracked => SafetyAssessment::blocked(Blocker::UntrackedFiles),
         WorktreeSafetyLevel::DirtyTracked => SafetyAssessment::blocked(Blocker::DirtyTrackedFiles),
         WorktreeSafetyLevel::Unknown => SafetyAssessment::blocked(Blocker::UnknownGitState),
-    }
-}
-
-impl GitSafety {
-    /// True when generated cleanup may be auto-selected.
-    #[must_use]
-    pub fn allows_generated_cleanup(&self) -> bool {
-        !self.assessment().is_blocked()
     }
 }
 

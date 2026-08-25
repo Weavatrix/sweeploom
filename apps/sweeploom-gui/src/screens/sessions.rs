@@ -52,7 +52,7 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                 });
             }
         })
-        .body(|mut body| {
+        .body(|body| {
             body.rows(20.0, row_count, |mut row| {
                 fill_session_row(app, &mut row);
             });
@@ -101,7 +101,7 @@ fn fill_session_row(app: &mut SweepLoomApp, row: &mut egui_extras::TableRow<'_, 
     });
 }
 
-pub fn ui_process_table(app: &SweepLoomApp, ui: &mut egui::Ui) {
+fn ui_process_table(app: &SweepLoomApp, ui: &mut egui::Ui) {
     let Some(snapshot) = &app.snapshot else {
         return;
     };
@@ -121,7 +121,7 @@ pub fn ui_process_table(app: &SweepLoomApp, ui: &mut egui::Ui) {
                 });
             }
         })
-        .body(|mut body| {
+        .body(|body| {
             body.rows(18.0, rows, |mut row| {
                 let index = row.index();
                 if let Some(process) = snapshot.processes.get(index) {

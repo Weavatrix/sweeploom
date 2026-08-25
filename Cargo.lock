@@ -2663,12 +2663,12 @@ dependencies = [
  "serde_json",
  "sweeploom-core",
  "sweeploom-dev",
+ "sweeploom-exec",
  "sweeploom-network",
  "sweeploom-platform",
  "sweeploom-process",
  "sweeploom-session",
  "sweeploom-storage",
- "weavatrix-git",
 ]
 
 [[package]]
@@ -2714,6 +2714,7 @@ dependencies = [
  "egui_extras",
  "sweeploom-core",
  "sweeploom-dev",
+ "sweeploom-exec",
  "sweeploom-network",
  "sweeploom-platform",
  "sweeploom-process",

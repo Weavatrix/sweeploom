@@ -1,11 +1,11 @@
 //! Cargo target analyzer. Git safety comes from weavatrix-git, not a local Git.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use sweeploom_core::{Blocker, ProcessSnapshot, RebuildCost};
 
 use crate::git::{GitSafety, inspect};
+use crate::size::dir_logical_bytes;
 
 /// How aggressively generated Cargo output can be trimmed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,31 +146,6 @@ fn push_offer(
     });
 }
 
-fn dir_logical_bytes(root: &Path) -> u64 {
-    let mut total = 0_u64;
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let Ok(meta) = fs::symlink_metadata(&path) else {
-                continue;
-            };
-            if meta.file_type().is_symlink() {
-                continue;
-            }
-            if meta.is_dir() {
-                stack.push(path);
-            } else {
-                total = total.saturating_add(meta.len());
-            }
-        }
-    }
-    total
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +157,7 @@ mod tests {
 
     #[test]
     fn discovers_debug_and_full_target() {
+        use std::fs;
         let root = std::env::temp_dir().join(format!("sweeploom-cargo-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("target").join("debug")).unwrap();

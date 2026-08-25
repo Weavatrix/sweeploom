@@ -5,7 +5,8 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{self, RichText};
 
-use sweeploom_core::LiveSession;
+use sweeploom_core::{LiveSession, Receipt};
+use sweeploom_dev::ReviewRow;
 use sweeploom_network::enrich_network;
 use sweeploom_platform::UserLocations;
 use sweeploom_process::{ProcessSampler, ProcessSnapshotSet};
@@ -31,6 +32,8 @@ pub struct SweepLoomApp {
     pub(crate) locations: UserLocations,
     pub(crate) confirm_terminate: bool,
     pub(crate) action_message: Option<String>,
+    pub(crate) review: Vec<ReviewRow>,
+    pub(crate) last_receipt: Option<Receipt>,
 }
 
 impl SweepLoomApp {
@@ -57,6 +60,8 @@ impl SweepLoomApp {
             locations,
             confirm_terminate: false,
             action_message: None,
+            review: Vec::new(),
+            last_receipt: None,
         }
     }
 
@@ -78,6 +83,7 @@ impl SweepLoomApp {
             Ok(report) => {
                 self.inventory = Some(report);
                 self.inventory_error = None;
+                self.rebuild_review();
             }
             Err(error) => self.inventory_error = Some(error.to_string()),
         }
@@ -139,7 +145,8 @@ fn draw_page(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     match app.nav {
         Nav::Overview => screens::ui_overview(app, ui),
         Nav::Sessions => screens::ui_sessions(app, ui),
-        Nav::Storage | Nav::Explorer => screens::ui_storage(app, ui),
+        Nav::Storage => screens::ui_review(app, ui),
+        Nav::Explorer => screens::ui_storage(app, ui),
         Nav::Projects => screens::ui_projects(app, ui),
         Nav::Browser => placeholder(
             ui,

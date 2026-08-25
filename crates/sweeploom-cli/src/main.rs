@@ -1,6 +1,7 @@
 //! SweepLoom CLI. GUI is the primary surface; this is for scripts and agents.
 
 mod bytes;
+mod cmd_clean;
 mod cmd_projects;
 
 use std::env;
@@ -22,6 +23,12 @@ fn main() {
         "sessions" => cmd_sessions(),
         "scan" => cmd_scan(&arg_root(args.next())),
         "projects" => cmd_projects::run(&arg_root(args.next())),
+        "clean" => {
+            let rest: Vec<String> = args.collect();
+            let apply = rest.iter().any(|item| item == "--apply");
+            let root = rest.into_iter().find(|item| item != "--apply");
+            cmd_clean::run(&arg_root(root), apply);
+        }
         "help" | "--help" | "-h" => print_help(),
         other => {
             eprintln!("unknown command: {other}");
@@ -45,6 +52,7 @@ Usage:
   sweeploom sessions
   sweeploom scan [path]
   sweeploom projects [path]
+  sweeploom clean [path] [--apply]
 "
     );
 }

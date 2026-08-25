@@ -45,7 +45,7 @@ impl Nav {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Overview => "Overview",
-            Self::Storage => "Storage",
+            Self::Storage => "Review",
             Self::Sessions => "Sessions",
             Self::Projects => "Projects",
             Self::Browser => "Browser",

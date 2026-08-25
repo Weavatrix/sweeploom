@@ -60,12 +60,16 @@ pub fn revalidate(entry: &CleanPlanEntry) -> Option<SkipReason> {
     if !path.exists() {
         return Some(SkipReason::Missing);
     }
-    if let Some(expected) = entry.expected_latest_write
-        && let Ok(meta) = fs::metadata(path)
-        && let Ok(modified) = meta.modified()
-        && modified > expected
-    {
-        return Some(SkipReason::Changed);
+    if let Ok(meta) = fs::metadata(path) {
+        if meta.is_file() && meta.len() != entry.expected_bytes {
+            return Some(SkipReason::Changed);
+        }
+        if let Some(expected) = entry.expected_latest_write
+            && let Ok(modified) = meta.modified()
+            && modified > expected
+        {
+            return Some(SkipReason::Changed);
+        }
     }
     if entry
         .required_safety
@@ -79,8 +83,8 @@ pub fn revalidate(entry: &CleanPlanEntry) -> Option<SkipReason> {
     None
 }
 
-/// Apply a plan. Only `PermanentGenerated` of empty-enough test dirs is
-/// implemented in this first cut; everything else is skipped as inspect-only.
+/// Apply a plan. `PermanentGenerated` deletes after revalidation;
+/// every other strategy is skipped as inspect-only.
 #[must_use]
 pub fn apply_plan(plan: &CleanPlan) -> (ExecutionReport, Receipt) {
     let started = SystemTime::now();
@@ -189,6 +193,36 @@ mod tests {
         assert_eq!(report.counts.skipped_changed, 1);
         assert_eq!(report.counts.deleted, 0);
         assert!(target.exists(), "changed candidate must survive");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn generated_directory_is_deleted() {
+        let root = std::env::temp_dir().join(format!("sweeploom-exec-del-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let target = root.join("incremental");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("a.bin"), b"stale").unwrap();
+        let candidate = Candidate {
+            id: CandidateId(2),
+            kind: CandidateKind::BuildArtifact,
+            owner: CandidateOwner::User,
+            path: target.clone(),
+            logical_bytes: 5,
+            allocated_bytes: None,
+            file_count: 1,
+            activity: ActivityEvidence::default(),
+            safety: SafetyAssessment::safe(),
+            rebuild: RebuildAssessment::default(),
+            deletion: DeletionStrategy::PermanentGenerated,
+            evidence: Vec::new(),
+            user_policy: UserPolicy::Default,
+        };
+        let plan = build_plan(&[candidate], None);
+        let (report, receipt) = apply_plan(&plan);
+        assert_eq!(report.counts.deleted, 1);
+        assert_eq!(receipt.counts.deleted, 1);
+        assert!(!target.exists(), "generated path must be removed");
         let _ = fs::remove_dir_all(&root);
     }
 }
