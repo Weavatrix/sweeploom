@@ -1,0 +1,13 @@
+/target
+**/*.rs.bk
+*.profraw
+*.profdata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.codex/
+.claude/
+*.exe
+*.pdb
+Cargo.lock.bak

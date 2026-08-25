@@ -1,0 +1,30 @@
+[package]
+name = "sweeploom-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version = "1.95"
+publish.workspace = true
+description = "SweepLoom desktop UI (egui + eframe, glow renderer)"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "sweeploom-gui"
+path = "src/main.rs"
+
+[dependencies]
+sweeploom-core = { workspace = true }
+sweeploom-platform = { workspace = true }
+sweeploom-process = { workspace = true }
+sweeploom-session = { workspace = true }
+sweeploom-storage = { workspace = true }
+sweeploom-network = { workspace = true }
+crossbeam-channel = { workspace = true }
+eframe = { workspace = true }
+egui = { workspace = true }
+egui_extras = { workspace = true }

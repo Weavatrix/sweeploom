@@ -1,0 +1,76 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/sweeploom-core",
+    "crates/sweeploom-platform",
+    "crates/sweeploom-process",
+    "crates/sweeploom-session",
+    "crates/sweeploom-network",
+    "crates/sweeploom-storage",
+    "crates/sweeploom-rules",
+    "crates/sweeploom-exec",
+    "crates/sweeploom-dev",
+    "crates/sweeploom-ai",
+    "crates/sweeploom-general",
+    "crates/sweeploom-browser",
+    "crates/sweeploom-history",
+    "crates/sweeploom-cli",
+    "apps/sweeploom-gui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+authors = ["Sergii Ziborov <sergii.ziborov@gmail.com>"]
+repository = "https://github.com/Weavatrix/sweeploom"
+homepage = "https://sweeploom.com"
+rust-version = "1.88"
+publish = false
+
+[workspace.dependencies]
+sweeploom-core = { path = "crates/sweeploom-core" }
+sweeploom-platform = { path = "crates/sweeploom-platform" }
+sweeploom-process = { path = "crates/sweeploom-process" }
+sweeploom-session = { path = "crates/sweeploom-session" }
+sweeploom-network = { path = "crates/sweeploom-network" }
+sweeploom-storage = { path = "crates/sweeploom-storage" }
+sweeploom-rules = { path = "crates/sweeploom-rules" }
+sweeploom-exec = { path = "crates/sweeploom-exec" }
+sweeploom-dev = { path = "crates/sweeploom-dev" }
+sweeploom-ai = { path = "crates/sweeploom-ai" }
+sweeploom-general = { path = "crates/sweeploom-general" }
+sweeploom-browser = { path = "crates/sweeploom-browser" }
+sweeploom-history = { path = "crates/sweeploom-history" }
+
+weavatrix-scan = { version = "0.4.6", default-features = false }
+weavatrix-git = { version = "0.3.1", default-features = false }
+
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+sysinfo = "0.37.2"
+crossbeam-channel = "0.5.15"
+toml = "0.9.5"
+etcetera = "0.10.0"
+
+eframe = { version = "0.33.3", default-features = false, features = ["glow", "persistence", "accesskit", "x11", "wayland"] }
+egui = "0.33.3"
+egui_extras = { version = "0.33.3", default-features = false, features = ["serde"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = "allow"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

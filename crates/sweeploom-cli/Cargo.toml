@@ -1,0 +1,27 @@
+[package]
+name = "sweeploom-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "SweepLoom command-line interface"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "sweeploom"
+path = "src/main.rs"
+
+[dependencies]
+sweeploom-core = { workspace = true }
+sweeploom-platform = { workspace = true }
+sweeploom-process = { workspace = true }
+sweeploom-session = { workspace = true }
+sweeploom-storage = { workspace = true }
+sweeploom-network = { workspace = true }
+serde_json = { workspace = true }

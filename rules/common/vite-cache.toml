@@ -1,0 +1,10 @@
+schema = 1
+
+[[cleaner]]
+id = "vite-cache"
+label = "Vite cache"
+category = "build-cache"
+risk = "safe"
+strategy = "permanent-generated"
+markers = ["package.json"]
+paths = ["node_modules/.vite", ".vite"]

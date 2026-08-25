@@ -1,0 +1,40 @@
+# Dependency policy for SweepLoom.
+#
+# SweepLoom itself is MPL-2.0. Weavatrix crates remain MIT and are consumed
+# as unmodified third-party dependencies. Do not copy Weavatrix sources here.
+
+[graph]
+all-features = true
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [
+    { name = "tokio", reason = "SweepLoom MVP is std::thread + channels, not an async runtime" },
+    { name = "hyper", reason = "no network client stack in the base product" },
+    { name = "reqwest", reason = "local-first: no cloud HTTP client in the base product" },
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+    "OpenSSL",
+]
+confidence-threshold = 0.8
+
+[advisories]
+yanked = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

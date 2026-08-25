@@ -1,0 +1,18 @@
+[package]
+name = "sweeploom-browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Browser companion protocol: tab heat, discard, bookmark+close"
+
+[lints]
+workspace = true
+
+[dependencies]
+sweeploom-core = { workspace = true }
+serde = { workspace = true }

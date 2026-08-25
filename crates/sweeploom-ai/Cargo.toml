@@ -1,0 +1,18 @@
+[package]
+name = "sweeploom-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Inspect-first Claude/Codex storage analyzers (no weavatrix-search in MVP)"
+
+[lints]
+workspace = true
+
+[dependencies]
+sweeploom-core = { workspace = true }
+sweeploom-platform = { workspace = true }

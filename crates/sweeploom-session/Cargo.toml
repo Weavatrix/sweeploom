@@ -1,0 +1,18 @@
+[package]
+name = "sweeploom-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Logical session grouping, detectors, and forgotten-session scoring"
+
+[lints]
+workspace = true
+
+[dependencies]
+sweeploom-core = { workspace = true }
+sweeploom-process = { workspace = true }
