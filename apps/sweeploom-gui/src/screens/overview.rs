@@ -55,6 +55,14 @@ pub fn ui_overview(app: &SweepLoomApp, ui: &mut egui::Ui) {
             |item| format_bytes(item.tree.logical_bytes),
         );
         metric_card(ui, "SCANNED DISK", &disk, "Folder Inspector");
+        if let Some((mount, total, avail)) = app.volumes.first() {
+            metric_card(
+                ui,
+                "VOLUME",
+                &format_bytes(*avail),
+                &format!("free of {} on {}", format_bytes(*total), mount.display()),
+            );
+        }
     });
     ui.add_space(16.0);
     ui.label(RichText::new("Top opportunities").strong());

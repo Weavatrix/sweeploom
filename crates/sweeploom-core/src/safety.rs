@@ -103,6 +103,17 @@ impl SafetyAssessment {
         }
     }
 
+    /// User data / ambiguous content. Never auto-selected.
+    #[must_use]
+    pub fn review() -> Self {
+        Self {
+            level: SafetyLevel::Review,
+            blockers: Vec::new(),
+            warnings: Vec::new(),
+            confidence: crate::evidence::Confidence::Strong,
+        }
+    }
+
     /// True when the candidate may not be auto-selected.
     #[must_use]
     pub fn is_blocked(&self) -> bool {

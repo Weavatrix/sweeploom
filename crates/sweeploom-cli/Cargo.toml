@@ -26,4 +26,5 @@ sweeploom-storage = { workspace = true }
 sweeploom-network = { workspace = true }
 sweeploom-dev = { workspace = true }
 sweeploom-exec = { workspace = true }
+sweeploom-general = { workspace = true }
 serde_json = { workspace = true }

@@ -2,8 +2,10 @@
 
 use std::path::Path;
 
-use sweeploom_dev::collect_review;
+use sweeploom_dev::{ReviewRow, collect_review};
 use sweeploom_exec::{apply_plan, build_plan};
+use sweeploom_general::collect_offers;
+use sweeploom_platform::UserLocations;
 use sweeploom_storage::{InventoryLimits, scan_inventory};
 
 use crate::bytes::format_bytes;
@@ -16,7 +18,14 @@ pub fn run(root: &Path, apply: bool) {
             std::process::exit(1);
         }
     };
-    let rows = collect_review(&report.projects, &[]);
+    let mut rows = collect_review(&report.projects, &[]);
+    for offer in collect_offers(&UserLocations::current()) {
+        rows.push(ReviewRow {
+            candidate: offer.candidate,
+            selected: offer.selected,
+            title: offer.title,
+        });
+    }
     if rows.is_empty() {
         println!("no generated candidates");
         return;

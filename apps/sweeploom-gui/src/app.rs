@@ -9,7 +9,7 @@ use sweeploom_core::{LiveSession, Receipt};
 use sweeploom_dev::ReviewRow;
 use sweeploom_network::enrich_network;
 use sweeploom_platform::UserLocations;
-use sweeploom_process::{ProcessSampler, ProcessSnapshotSet};
+use sweeploom_process::{ProcessSampler, ProcessSnapshotSet, volume_space};
 use sweeploom_session::{AttributionRoots, sessions_from_snapshot};
 use sweeploom_storage::{InventoryLimits, InventoryReport, scan_inventory};
 
@@ -34,6 +34,8 @@ pub struct SweepLoomApp {
     pub(crate) action_message: Option<String>,
     pub(crate) review: Vec<ReviewRow>,
     pub(crate) last_receipt: Option<Receipt>,
+    pub(crate) free_gb: String,
+    pub(crate) volumes: Vec<(PathBuf, u64, u64)>,
 }
 
 impl SweepLoomApp {
@@ -46,7 +48,7 @@ impl SweepLoomApp {
         let locations = UserLocations::current();
         let mut sampler = ProcessSampler::new();
         let (snapshot, sessions) = sample_with(&mut sampler, &locations);
-        Self {
+        let mut app = Self {
             nav: Nav::Overview,
             sampler,
             last_sample: Instant::now(),
@@ -62,7 +64,11 @@ impl SweepLoomApp {
             action_message: None,
             review: Vec::new(),
             last_receipt: None,
-        }
+            free_gb: "1".to_owned(),
+            volumes: volume_space(),
+        };
+        app.rebuild_review();
+        app
     }
 
     pub(crate) fn refresh_live(&mut self) {

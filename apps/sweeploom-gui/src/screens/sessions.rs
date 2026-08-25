@@ -157,6 +157,24 @@ fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, index: usize) {
         session.processes.len(),
         session.activity
     ));
+    if session.network.connections_available {
+        if session.network.listening_ports.is_empty() {
+            ui.label("Listening ports: none observed");
+        } else {
+            ui.label(format!(
+                "Listening ports: {}",
+                session
+                    .network
+                    .listening_ports
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    } else {
+        ui.label("Listening ports unavailable on this OS (not shown as zero).");
+    }
     if session.safety.terminate_disabled {
         ui.colored_label(
             Color32::from_rgb(240, 160, 80),

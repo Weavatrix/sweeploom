@@ -1,7 +1,9 @@
 //! Review generated cleanup, then apply after revalidation.
 
 use eframe::egui::{self, Color32, RichText};
+use sweeploom_core::DeletionStrategy;
 use sweeploom_exec::{apply_plan, build_plan};
+use sweeploom_general::collect_offers;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
@@ -9,15 +11,23 @@ use crate::format::format_bytes;
 pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     ui.heading("Storage review");
     ui.label(
-        RichText::new("SAFE generated items can be pre-selected. BLOCKED rows cannot be cleaned.")
-            .weak(),
+        RichText::new(
+            "SAFE generated/temp can be pre-selected. Downloads stay REVIEW. BLOCKED cannot be cleaned.",
+        )
+        .weak(),
     );
     ui.horizontal(|ui| {
-        if ui.button("Rebuild from last scan").clicked() {
+        if ui.button("Rebuild review").clicked() {
             app.rebuild_review();
         }
         if ui.button("Clean selected").clicked() {
             app.apply_review();
+        }
+        ui.label("Free at least");
+        ui.add(egui::TextEdit::singleline(&mut app.free_gb).desired_width(48.0));
+        ui.label("GB");
+        if ui.button("Select to free").clicked() {
+            app.select_to_free();
         }
     });
     if let Some(message) = &app.action_message {
@@ -35,7 +45,7 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     }
     ui.add_space(8.0);
     if app.review.is_empty() {
-        ui.label("Scan Explorer first, then rebuild the review.");
+        ui.label("Rebuild review for temp/Downloads, or scan Explorer for project artifacts.");
         return;
     }
     let selected: u64 = app
@@ -86,19 +96,68 @@ fn draw_row(app: &mut SweepLoomApp, ui: &mut egui::Ui, index: usize) {
 }
 
 impl SweepLoomApp {
-    /// Fill review from the last inventory.
+    /// Fill review from general roots plus the last project inventory.
     pub fn rebuild_review(&mut self) {
-        let Some(report) = &self.inventory else {
-            self.action_message = Some("Scan Explorer first.".to_owned());
-            return;
-        };
         let processes = self
             .snapshot
             .as_ref()
             .map(|item| item.processes.as_slice())
             .unwrap_or(&[]);
-        self.review = sweeploom_dev::collect_review(&report.projects, processes);
+        let mut rows = match &self.inventory {
+            Some(report) => sweeploom_dev::collect_review(&report.projects, processes),
+            None => Vec::new(),
+        };
+        for offer in collect_offers(&self.locations) {
+            rows.push(sweeploom_dev::ReviewRow {
+                candidate: offer.candidate,
+                selected: offer.selected,
+                title: offer.title,
+            });
+        }
+        self.review = rows;
         self.action_message = Some(format!("{} candidates", self.review.len()));
+    }
+
+    /// Pre-select the cheapest SAFE generated rows until `free_gb` is reached.
+    pub fn select_to_free(&mut self) {
+        let gb: f64 = self.free_gb.trim().parse().unwrap_or(0.0);
+        let target = (gb * 1_000_000_000.0) as u64;
+        if target == 0 {
+            self.action_message = Some("Enter a size greater than 0 GB.".to_owned());
+            return;
+        }
+        for row in &mut self.review {
+            row.selected = false;
+        }
+        let mut order: Vec<usize> = self
+            .review
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| {
+                !row.candidate.safety.is_blocked()
+                    && row.candidate.deletion != DeletionStrategy::InspectOnly
+            })
+            .map(|(index, _)| index)
+            .collect();
+        order.sort_by_key(|&index| {
+            (
+                self.review[index].candidate.rebuild.cost,
+                std::cmp::Reverse(self.review[index].candidate.logical_bytes),
+            )
+        });
+        let mut acc = 0_u64;
+        for index in order {
+            if acc >= target {
+                break;
+            }
+            self.review[index].selected = true;
+            acc = acc.saturating_add(self.review[index].candidate.logical_bytes);
+        }
+        self.action_message = Some(format!(
+            "selected {} toward {}",
+            format_bytes(acc),
+            format_bytes(target)
+        ));
     }
 
     /// Apply selected unblocked rows through CleanPlan revalidation.
