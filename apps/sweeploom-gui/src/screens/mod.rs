@@ -8,6 +8,7 @@ mod browser_tabs;
 mod browser_trees;
 mod history;
 mod overview;
+mod project_facts;
 mod project_rows;
 mod projects;
 mod review;

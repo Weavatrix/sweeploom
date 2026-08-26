@@ -1,14 +1,19 @@
 //! Project table rows. Grouping does not walk the disk.
 
 use std::collections::{BTreeMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use sweeploom_core::CandidateOwner;
 use sweeploom_dev::{DevKind, classify_project};
+use sweeploom_storage::InventoryReport;
 
 use crate::app::SweepLoomApp;
 use crate::format::{format_bytes, row_caption};
 use crate::sort::{Col, Sort};
+
+use super::project_facts::{
+    Acc, Bit, artifact_label, folder_label, inventory_artifact_bytes, reclaimable_bytes,
+};
 
 /// How Projects cluster rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,11 +67,15 @@ pub(crate) fn collect_cards(app: &SweepLoomApp) -> Vec<ProjectCard> {
             continue;
         };
         let acc = map.entry(id.0.clone()).or_insert_with(|| Acc::new(&id.0));
-        acc.bytes = acc.bytes.saturating_add(row.candidate.logical_bytes);
-        acc.offers
-            .push((row_caption(&row.title), row.candidate.logical_bytes));
+        acc.bits.push(Bit {
+            path: row.candidate.path.clone(),
+            bytes: row.candidate.logical_bytes,
+            title: row_caption(&row.title),
+        });
     }
-    map.into_values().map(ProjectCard::from_acc).collect()
+    map.into_values()
+        .map(|acc| ProjectCard::from_acc(acc, app.inventory.as_ref()))
+        .collect()
 }
 
 pub(crate) fn sort_cards(cards: &mut [ProjectCard], sort: Sort) {
@@ -136,7 +145,7 @@ impl ProjectCard {
         }
     }
 
-    fn from_acc(acc: Acc) -> Self {
+    fn from_acc(acc: Acc, inventory: Option<&InventoryReport>) -> Self {
         let kinds = classify_project(&acc.path);
         let group_kind = kinds.first().copied().unwrap_or(DevKind::Other).label();
         let labels = kinds
@@ -144,46 +153,20 @@ impl ProjectCard {
             .map(|kind| kind.label())
             .collect::<Vec<_>>()
             .join(", ");
+        let mut bytes = reclaimable_bytes(&acc.bits);
+        if bytes == 0
+            && let Some(report) = inventory
+        {
+            bytes = inventory_artifact_bytes(report, &acc.path);
+        }
         Self {
             folder: folder_label(&acc.path),
+            artifacts: artifact_label(&acc.path, &acc.bits),
             path: acc.path,
-            bytes: acc.bytes,
+            bytes,
             kinds: labels,
             group_kind,
-            artifacts: artifact_label(&acc.offers),
         }
-    }
-}
-
-struct Acc {
-    path: PathBuf,
-    bytes: u64,
-    offers: Vec<(String, u64)>,
-}
-
-impl Acc {
-    fn new(path: &Path) -> Self {
-        Self {
-            path: path.to_path_buf(),
-            bytes: 0,
-            offers: Vec::new(),
-        }
-    }
-}
-
-fn folder_label(path: &Path) -> String {
-    path.parent()
-        .and_then(|parent| parent.file_name())
-        .and_then(|name| name.to_str())
-        .unwrap_or("root")
-        .to_owned()
-}
-
-fn artifact_label(offers: &[(String, u64)]) -> String {
-    match offers {
-        [] => "none".to_owned(),
-        [(title, bytes)] => format!("{title} · {}", format_bytes(*bytes)),
-        rest => format!("{} artifacts", rest.len()),
     }
 }
 

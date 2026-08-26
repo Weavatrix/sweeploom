@@ -14,6 +14,8 @@ description = "Semantic analyzers for Cargo, Node, and Python workspaces"
 workspace = true
 
 [dependencies]
+serde = { workspace = true }
 sweeploom-core = { workspace = true }
 sweeploom-storage = { workspace = true }
+toml = { workspace = true }
 weavatrix-git = { workspace = true }

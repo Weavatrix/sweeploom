@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use sweeploom_core::{Blocker, ProcessSnapshot, RebuildCost};
 
+use crate::cargo_manifest::{resolved_target_dir, workspace_root};
 use crate::git::{GitSafety, inspect};
 use crate::size::dir_logical_bytes;
 
@@ -38,16 +39,23 @@ pub struct CargoOffer {
 }
 
 /// Discover Cargo generated-output offers for one project.
+///
+/// Workspace members share the root `target`. Offers are owned by that root
+/// so Review/Projects do not size the same directory once per crate.
 #[must_use]
 pub fn cargo_offers(project: &Path, processes: &[ProcessSnapshot]) -> Vec<CargoOffer> {
-    let blocker = cargo_blocker(project, processes);
+    if !project.join("Cargo.toml").is_file() {
+        return Vec::new();
+    }
+    let owner = workspace_root(project);
+    let blocker = cargo_blocker(&owner, processes);
     let blocked = blocker.is_some();
     let mut offers = Vec::new();
-    for target in cargo_target_dirs(project) {
+    for target in cargo_target_dirs(&owner) {
         if !target.is_dir() {
             continue;
         }
-        push_target_offers(&mut offers, project, &target, blocked, blocker);
+        push_target_offers(&mut offers, &owner, &target, blocked, blocker);
     }
     offers
 }
@@ -65,11 +73,7 @@ impl CargoTrim {
 }
 
 fn cargo_target_dirs(project: &Path) -> Vec<PathBuf> {
-    let Some(primary) =
-        resolve_target_dir(project, std::env::var_os("CARGO_TARGET_DIR").as_deref())
-    else {
-        return Vec::new();
-    };
+    let primary = resolved_target_dir(project);
     let local = project.join("target");
     if primary == local {
         vec![primary]
@@ -112,24 +116,6 @@ fn push_target_offers(
         blocked,
         blocker,
     );
-}
-
-fn resolve_target_dir(project: &Path, custom: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
-    if !project.join("Cargo.toml").is_file() {
-        return None;
-    }
-    if let Some(custom) = custom {
-        let path = PathBuf::from(custom);
-        let resolved = if path.is_absolute() {
-            path
-        } else {
-            project.join(path)
-        };
-        if resolved.starts_with(project) {
-            return Some(resolved);
-        }
-    }
-    Some(project.join("target"))
 }
 
 fn cargo_blocker(project: &Path, processes: &[ProcessSnapshot]) -> Option<Blocker> {
@@ -213,18 +199,34 @@ mod tests {
     }
 
     #[test]
-    fn custom_target_outside_project_falls_back() {
+    fn workspace_member_offers_belong_to_the_root_target() {
         use std::fs;
-        let root = std::env::temp_dir().join(format!("sweeploom-cargo-out-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("Cargo.toml"), "[package]\nname=\"demo\"\n").unwrap();
-        let outside = std::env::temp_dir().join("sweeploom-shared-target");
-        let resolved = resolve_target_dir(&root, Some(outside.as_os_str())).expect("toml");
-        assert_eq!(resolved, root.join("target"));
-        let inside = resolve_target_dir(&root, Some(std::ffi::OsStr::new("custom-target")))
-            .expect("relative");
-        assert_eq!(inside, root.join("custom-target"));
+        let root = std::env::temp_dir().join(format!(
+            "sweeploom-cargo-ws-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|item| item.as_nanos())
+                .unwrap_or(0)
+        ));
+        let member = root.join("crates").join("api");
+        fs::create_dir_all(member.join("src")).unwrap();
+        fs::create_dir_all(root.join("target").join("debug")).unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .unwrap();
+        fs::write(member.join("Cargo.toml"), "[package]\nname = \"api\"\n").unwrap();
+        fs::write(
+            root.join("target").join("debug").join("a.rlib"),
+            vec![0_u8; 2048],
+        )
+        .unwrap();
+        let offers = cargo_offers(&member, &[]);
+        assert_eq!(offers[0].project, root);
+        assert!(offers.iter().any(|item| item.mode == CargoTrim::Full));
+        assert!(offers.iter().all(|item| item.logical_bytes >= 2048));
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -109,10 +109,19 @@ pub struct InventoryReport {
 }
 
 impl InventoryReport {
+    /// Folder at `path`, if the scan visited it.
+    #[must_use]
+    pub fn node(&self, path: &Path) -> Option<&DirectoryNode> {
+        find_node(&self.tree, path).or_else(|| {
+            let canonical = std::fs::canonicalize(path).ok()?;
+            find_node(&self.tree, &canonical)
+        })
+    }
+
     /// Source / artifact heat for a discovered project directory.
     #[must_use]
     pub fn project_heat(&self, project: &Path, now: SystemTime) -> (ActivityState, ActivityState) {
-        let Some(node) = find_node(&self.tree, project) else {
+        let Some(node) = self.node(project) else {
             return (ActivityState::Unknown, ActivityState::Unknown);
         };
         let evidence = ActivityEvidence {

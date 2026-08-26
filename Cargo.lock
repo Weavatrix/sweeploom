@@ -3002,8 +3002,10 @@ dependencies = [
 name = "sweeploom-dev"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "sweeploom-core",
  "sweeploom-storage",
+ "toml",
  "weavatrix-git",
 ]
 

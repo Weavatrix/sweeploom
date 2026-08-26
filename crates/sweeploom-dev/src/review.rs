@@ -1,6 +1,7 @@
 //! Turn analyzer offers into CleanPlan candidates.
 
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use sweeploom_core::{
     ActivityEvidence, Candidate, CandidateId, CandidateKind, CandidateOwner, DeletionStrategy,
@@ -9,6 +10,7 @@ use sweeploom_core::{
 };
 
 use crate::cargo::{CargoOffer, CargoTrim, cargo_offers};
+use crate::cargo_manifest::workspace_root;
 use crate::node::{NodeOffer, node_offers};
 use crate::python::{PythonOffer, python_offers};
 use crate::size::path_mtime;
@@ -43,11 +45,17 @@ pub fn collect_review(
 ) -> Vec<ReviewRow> {
     let mut rows = Vec::new();
     let mut id = 1_u64;
+    let mut cargo_owners = HashSet::<PathBuf>::new();
     for project in projects {
         let project = project.as_ref();
-        for offer in cargo_offers(project, processes) {
-            rows.push(cargo_row(offer, id));
-            id += 1;
+        if project.join("Cargo.toml").is_file() {
+            let owner = workspace_root(project);
+            if cargo_owners.insert(owner.clone()) {
+                for offer in cargo_offers(&owner, processes) {
+                    rows.push(cargo_row(offer, id));
+                    id += 1;
+                }
+            }
         }
         for offer in node_offers(project, processes) {
             rows.push(node_row(offer, id));
@@ -201,6 +209,43 @@ mod tests {
             .find(|row| row.title.contains("node_modules"))
             .expect("node row");
         assert!(!node.selected);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn member_review_sizes_the_workspace_target() {
+        let root = std::env::temp_dir().join(format!(
+            "sweeploom-review-ws-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|item| item.as_nanos())
+                .unwrap_or(0)
+        ));
+        let member = root.join("api");
+        fs::create_dir_all(member.join("src")).unwrap();
+        fs::create_dir_all(root.join("target").join("debug")).unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"api\"]\n",
+        )
+        .unwrap();
+        fs::write(member.join("Cargo.toml"), "[package]\nname = \"api\"\n").unwrap();
+        fs::write(
+            root.join("target").join("debug").join("a.rlib"),
+            vec![0_u8; 2048],
+        )
+        .unwrap();
+        let rows = collect_review(&[member.as_path()], &[]);
+        let full = rows
+            .iter()
+            .find(|row| row.title.contains("Full"))
+            .expect("workspace target");
+        assert_eq!(full.candidate.logical_bytes, 2048);
+        match &full.candidate.owner {
+            CandidateOwner::Project(id) => assert_eq!(id.0, root),
+            other => panic!("{other:?}"),
+        }
         let _ = fs::remove_dir_all(&root);
     }
 }
