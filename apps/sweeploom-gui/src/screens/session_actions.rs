@@ -1,7 +1,7 @@
 //! Explicit session terminate. Never automatic. Git dirty is a warning.
 
 use eframe::egui::{self, RichText};
-use sweeploom_core::LiveSession;
+use sweeploom_core::{LiveSession, SessionKind};
 use sweeploom_dev::inspect;
 use sweeploom_process::{
     SysinfoProcessControl, force_stop_session, still_running, stop_session_gracefully,
@@ -11,7 +11,7 @@ use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 
 pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
-    if session.safety.terminate_disabled {
+    if session.safety.terminate_disabled || session.kind == SessionKind::Browser {
         return;
     }
     if let Some(project) = &session.project {
@@ -98,7 +98,7 @@ pub(crate) fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui) -> bool {
     true
 }
 
-fn apply_stop(app: &mut SweepLoomApp, keys: &[sweeploom_core::ProcessKey], force: bool) {
+pub(crate) fn apply_stop(app: &mut SweepLoomApp, keys: &[sweeploom_core::ProcessKey], force: bool) {
     let control = SysinfoProcessControl::new();
     app.action_message = Some(if force {
         match force_stop_session(keys, &control) {
@@ -115,4 +115,5 @@ fn apply_stop(app: &mut SweepLoomApp, keys: &[sweeploom_core::ProcessKey], force
     app.confirm_terminate = false;
     app.confirm_force = false;
     app.confirm_planned = false;
+    app.confirm_helpers = false;
 }

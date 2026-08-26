@@ -68,9 +68,13 @@ pub fn group_sessions(processes: &[ProcessSnapshot]) -> Vec<LiveSession> {
 fn collect_descendants(
     root: ProcessKey,
     processes: &[ProcessSnapshot],
-    _by_key: &HashMap<ProcessKey, &ProcessSnapshot>,
+    by_key: &HashMap<ProcessKey, &ProcessSnapshot>,
 ) -> Vec<ProcessKey> {
     let mut members = vec![root];
+    let root_kind = by_key
+        .get(&root)
+        .and_then(|process| classify_process(process))
+        .map(|item| item.kind);
     let mut changed = true;
     while changed {
         changed = false;
@@ -78,12 +82,19 @@ fn collect_descendants(
             if members.contains(&process.key) {
                 continue;
             }
-            if let Some(parent) = process.parent
-                && members.contains(&parent)
-            {
-                members.push(process.key);
-                changed = true;
+            let Some(parent) = process.parent else {
+                continue;
+            };
+            if !members.contains(&parent) {
+                continue;
             }
+            if let Some(child) = classify_process(process)
+                && Some(child.kind) != root_kind
+            {
+                continue;
+            }
+            members.push(process.key);
+            changed = true;
         }
     }
     members

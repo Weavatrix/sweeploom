@@ -36,6 +36,27 @@ pub enum SessionKind {
     Unknown,
 }
 
+impl SessionKind {
+    /// Short UI label for a session kind.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Terminal => "Terminal",
+            Self::ClaudeCode => "Claude Code",
+            Self::Codex => "Codex",
+            Self::Mcp => "MCP",
+            Self::DevServer => "Dev server",
+            Self::Build => "Build",
+            Self::TestRunner => "Test runner",
+            Self::LanguageServer => "Language server",
+            Self::Browser => "Browser",
+            Self::Container => "Container",
+            Self::GenericApp => "App",
+            Self::Unknown => "Unknown session",
+        }
+    }
+}
+
 /// Observed session activity classification.
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -185,19 +206,6 @@ impl LiveSession {
     /// Display label used in the UI and CLI.
     #[must_use]
     pub fn label(&self) -> &'static str {
-        match self.kind {
-            SessionKind::Terminal => "Terminal",
-            SessionKind::ClaudeCode => "Claude Code",
-            SessionKind::Codex => "Codex",
-            SessionKind::Mcp => "MCP",
-            SessionKind::DevServer => "Dev server",
-            SessionKind::Build => "Build",
-            SessionKind::TestRunner => "Test runner",
-            SessionKind::LanguageServer => "Language server",
-            SessionKind::Browser => "Browser",
-            SessionKind::Container => "Container",
-            SessionKind::GenericApp => "App",
-            SessionKind::Unknown => "Unknown session",
-        }
+        self.kind.label()
     }
 }

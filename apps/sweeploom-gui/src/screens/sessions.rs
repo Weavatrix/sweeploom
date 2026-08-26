@@ -1,6 +1,7 @@
 //! Logical session table and raw process tree.
 
 use super::session_actions;
+use super::session_members;
 use super::session_observe;
 use super::session_plan;
 use crate::app::SweepLoomApp;
@@ -15,7 +16,7 @@ pub fn ui_sessions(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Sessions",
-        "Logical sessions sit on top of the OS process tree. Keep means leave it running. Idle is only after known quiet time, not uptime.",
+        "Logical sessions sit on top of the OS process tree. Open a row to see member processes — a forgotten shell or vite under Claude can be stopped without ending the agent. Keep means leave it running.",
     );
     session_plan::draw(app, ui);
     ui.checkbox(&mut app.group_raw, "Raw process tree");
@@ -76,6 +77,10 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         });
     app.planned_keys = planned;
     app.session_sort = sort;
+    if app.selected_session != selected {
+        app.helper_keys.clear();
+        app.confirm_helpers = false;
+    }
     app.selected_session = selected;
     if let Some(id) = app.selected_session
         && let Some(session) = app.sessions.iter().find(|item| item.id == id).cloned()
@@ -161,6 +166,9 @@ fn fill_session_row(
     row.col(|ui| {
         ui.label(&project);
     });
+    if row.response().clicked() {
+        *selected = Some(id);
+    }
 }
 
 fn ui_process_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -242,6 +250,7 @@ fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSess
         session.activity.label()
     ));
     session_observe::draw(app, ui, session);
+    session_members::draw(app, ui, session);
     if session.safety.terminate_disabled {
         ui.colored_label(
             ui.visuals().warn_fg_color,

@@ -124,6 +124,15 @@ mod tests {
                 80_000_000,
                 0.0,
             ),
+            proc(
+                13,
+                Some(10),
+                "powershell.exe",
+                Some("/work/kablay"),
+                &["powershell"],
+                20_000_000,
+                0.0,
+            ),
         ];
         let mut snapshot = ProcessSnapshotSet {
             captured_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_400_000),
@@ -141,8 +150,22 @@ mod tests {
             .iter()
             .find(|session| session.kind == SessionKind::ClaudeCode)
             .expect("claude session");
-        assert!(claude.processes.len() >= 2);
-        assert_eq!(claude.project, Some(ProjectId(project)));
-        assert!(claude.rss_bytes > 500_000_000);
+        assert_eq!(claude.processes.len(), 1);
+        assert_eq!(claude.project, Some(ProjectId(project.clone())));
+        assert!(
+            sessions
+                .iter()
+                .any(|session| session.kind == SessionKind::DevServer)
+        );
+        assert!(
+            sessions
+                .iter()
+                .any(|session| session.kind == SessionKind::Mcp)
+        );
+        assert!(
+            sessions
+                .iter()
+                .any(|session| session.kind == SessionKind::Terminal)
+        );
     }
 }

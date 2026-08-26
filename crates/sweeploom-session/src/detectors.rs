@@ -65,6 +65,24 @@ pub fn builtin_detectors() -> Vec<Box<dyn SessionDetector + Send + Sync>> {
                 "typescript-language-server",
             ],
         )),
+        Box::new(NamedDetector::new(
+            "terminal",
+            SessionKind::Terminal,
+            &[
+                "cmd",
+                "cmd.exe",
+                "powershell",
+                "powershell.exe",
+                "pwsh",
+                "pwsh.exe",
+                "WindowsTerminal.exe",
+                "bash",
+                "bash.exe",
+                "zsh",
+                "fish",
+                "wt.exe",
+            ],
+        )),
         Box::new(BrowserDetector),
         Box::new(CommandContains::new(
             "playwright",
@@ -243,6 +261,10 @@ mod tests {
         assert_eq!(
             classify_process(&process("chrome.exe", &["chrome"])).map(|item| item.kind),
             Some(SessionKind::Browser)
+        );
+        assert_eq!(
+            classify_process(&process("powershell.exe", &["powershell"])).map(|item| item.kind),
+            Some(SessionKind::Terminal)
         );
     }
 }

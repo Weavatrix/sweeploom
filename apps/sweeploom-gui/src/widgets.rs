@@ -3,6 +3,7 @@
 use eframe::egui::{self, CornerRadius, CursorIcon, Margin, RichText, Sense};
 
 use crate::icons::{self, Glyph};
+use crate::nav::Nav;
 use crate::theme;
 
 /// One overview metric.
@@ -15,6 +16,8 @@ pub struct Metric {
     pub value: String,
     /// Supporting line.
     pub sub: String,
+    /// Screen opened when the card is clicked.
+    pub open: Nav,
 }
 
 /// Pointing hand on anything the user can click.
@@ -23,26 +26,30 @@ pub fn pointer(response: egui::Response) -> egui::Response {
 }
 
 /// Overview metric cards that wrap instead of clipping.
-pub fn metric_grid(ui: &mut egui::Ui, cards: &[Metric]) {
+pub fn metric_grid(ui: &mut egui::Ui, cards: &[Metric]) -> Option<Nav> {
     if cards.is_empty() {
-        return;
+        return None;
     }
     let gap = ui.spacing().item_spacing.x;
     let avail = ui.available_width();
     let min_w = 220.0;
     let cols = ((avail + gap) / (min_w + gap)).floor().clamp(1.0, 4.0) as usize;
     let width = ((avail - gap * cols.saturating_sub(1) as f32) / cols as f32).max(160.0);
+    let mut open = None;
     for chunk in cards.chunks(cols) {
         ui.horizontal(|ui| {
             for card in chunk {
-                metric_card(ui, card, width);
+                if metric_card(ui, card, width).clicked() {
+                    open = Some(card.open);
+                }
             }
         });
         ui.add_space(8.0);
     }
+    open
 }
 
-fn metric_card(ui: &mut egui::Ui, card: &Metric, width: f32) {
+fn metric_card(ui: &mut egui::Ui, card: &Metric, width: f32) -> egui::Response {
     let id = ui.id().with(&card.title);
     let inner_w = (width - 24.0).max(120.0);
     ui.scope(|ui| {
@@ -80,8 +87,11 @@ fn metric_card(ui: &mut egui::Ui, card: &Metric, width: f32) {
                         .wrap(),
                 );
             });
-        gold_stroke(ui, id, inner.response.rect, inner.response.hovered(), 10.0);
-    });
+        let clicked = pointer(inner.response.interact(Sense::click()));
+        gold_stroke(ui, id, clicked.rect, clicked.hovered(), 10.0);
+        clicked
+    })
+    .inner
 }
 
 fn gold_stroke(ui: &egui::Ui, id: egui::Id, rect: egui::Rect, hovered: bool, radius: f32) {

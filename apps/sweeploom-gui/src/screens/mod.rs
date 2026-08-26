@@ -8,6 +8,7 @@ mod projects;
 mod review;
 mod rules;
 mod session_actions;
+mod session_members;
 mod session_observe;
 mod session_plan;
 mod sessions;

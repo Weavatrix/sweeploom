@@ -16,7 +16,9 @@ pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Overview",
         "Live pressure now. History starts the moment SweepLoom opens.",
     );
-    widgets::metric_grid(ui, &overview_cards(app));
+    if let Some(nav) = widgets::metric_grid(ui, &overview_cards(app)) {
+        app.nav = nav;
+    }
     ui.add_space(8.0);
     ui.label(RichText::new("Top opportunities").size(18.0).strong());
     ui.add_space(6.0);
@@ -72,24 +74,28 @@ fn overview_cards(app: &SweepLoomApp) -> Vec<Metric> {
             title: "MEMORY".into(),
             value: format_bytes(memory.used_bytes),
             sub: format!("of {}", format_bytes(memory.total_bytes)),
+            open: Nav::Sessions,
         },
         Metric {
             icon: Glyph::Sessions,
             title: "IDLE SESSIONS".into(),
             value: format_bytes(reclaimable),
             sub: format!("{stale} idle long enough to consider"),
+            open: Nav::Sessions,
         },
         Metric {
             icon: Glyph::Cpu,
             title: "CPU".into(),
             value: format!("{cpu:.0}%"),
             sub: format!("{stale_cpu:.0}% in idle sessions"),
+            open: Nav::Sessions,
         },
         Metric {
             icon: Glyph::Disk,
             title: "REVIEW DISK".into(),
             value: disk,
             sub: "Generated + temp".into(),
+            open: Nav::Storage,
         },
     ];
     if let Some((mount, total, avail)) = app.volumes.first() {
@@ -98,6 +104,7 @@ fn overview_cards(app: &SweepLoomApp) -> Vec<Metric> {
             title: "VOLUME".into(),
             value: format_bytes(*avail),
             sub: format!("free of {} on {}", format_bytes(*total), mount.display()),
+            open: Nav::Explorer,
         });
     }
     cards
@@ -112,15 +119,17 @@ fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .take(6)
         .map(|session| {
             (
+                session.id,
                 session.label().to_owned(),
                 format_bytes(session.rss_bytes),
                 session.recommendation.recommendation.label().to_owned(),
             )
         })
         .collect();
-    for (label, rss, rec) in sessions {
+    for (id, label, rss, rec) in sessions {
         shown += 1;
         if list_row_at(ui, &label, &rss, &rec).clicked() {
+            app.selected_session = Some(id);
             app.nav = Nav::Sessions;
         }
     }
