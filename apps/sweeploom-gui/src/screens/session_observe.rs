@@ -38,12 +38,22 @@ fn draw_history(app: &SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         ));
     }
     let cpu = summarize_cpu(&fast, &hist.slow.chrono(), last.at_unix_ms);
-    ui.label(format!(
-        "CPU now {:.1}%  peak {:.1}%  {}",
-        cpu.now,
-        cpu.peak,
-        avg_label("5m", cpu.avg_5m)
-    ));
+    ui.horizontal(|ui| {
+        ui.label(format!(
+            "CPU now {:.1}%  peak {:.1}%  {}",
+            cpu.now,
+            cpu.peak,
+            avg_label("5m", cpu.avg_5m)
+        ));
+        let spark: Vec<f32> = fast
+            .iter()
+            .rev()
+            .take(40)
+            .map(|item| item.cpu_percent)
+            .collect();
+        let spark: Vec<f32> = spark.into_iter().rev().collect();
+        crate::widgets::sparkline(ui, &spark, egui::vec2(140.0, 20.0), crate::theme::accent());
+    });
     ui.label(avg_label("1h", cpu.avg_1h));
 }
 

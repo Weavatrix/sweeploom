@@ -60,7 +60,10 @@ pub fn draw(ctx: &egui::Context, app: &mut SweepLoomApp) {
         .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(Margin::symmetric(18, 12)))
         .show(ctx, |ui| {
             ui.set_width(ui.available_width());
-            if matches!(app.nav, Nav::Sessions | Nav::Storage | Nav::Explorer) {
+            if matches!(
+                app.nav,
+                Nav::Sessions | Nav::Storage | Nav::Explorer | Nav::History
+            ) {
                 draw_page(app, ui);
             } else {
                 egui::ScrollArea::vertical()

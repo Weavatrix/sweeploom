@@ -39,20 +39,27 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             if report.capped { " · capped" } else { "" }
         ));
         ui.add_space(8.0);
-        folder_table(ui, &report.tree, &mut app.explorer_sort);
+        ui.label(
+            RichText::new("Click a folder name to put its path in Root. Scan again to open it.")
+                .size(13.0)
+                .color(crate::theme::muted(ui)),
+        );
+        folder_table(ui, &report.tree, &mut app.explorer_sort, &mut app.scan_root);
     } else {
         ui.label("Scan a folder to open the inspector. Symlinks are not followed.");
     }
 }
 
-fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort) {
+fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort, scan_root: &mut String) {
     let mut rows = Vec::new();
     collect_rows(root, 0, *sort, &mut rows);
     let row_count = rows.len();
     let height = table_scroll_height(ui);
+    let mut picked = None;
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
+        .sense(egui::Sense::click())
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
@@ -85,6 +92,12 @@ fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort) {
                     ui.label(format_bytes(node.logical_bytes));
                 });
                 row.col(|ui| {
+                    crate::icons::show(
+                        ui,
+                        category_glyph(node.category),
+                        14.0,
+                        crate::theme::accent(),
+                    );
                     ui.label(RichText::new(format!("{indent}{name}")).size(16.0));
                 });
                 row.col(|ui| {
@@ -93,8 +106,25 @@ fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort) {
                 row.col(|ui| {
                     ui.label(node.files.to_string());
                 });
+                if row.response().clicked() {
+                    picked = Some(node.path.display().to_string());
+                }
             });
         });
+    if let Some(path) = picked {
+        *scan_root = path;
+    }
+}
+
+fn category_glyph(category: sweeploom_storage::PathCategory) -> crate::icons::Glyph {
+    use crate::icons::Glyph;
+    use sweeploom_storage::PathCategory;
+    match category {
+        PathCategory::Generated | PathCategory::Cache => Glyph::Disk,
+        PathCategory::Dependencies => Glyph::Projects,
+        PathCategory::UserData => Glyph::Volume,
+        PathCategory::Source | PathCategory::Unknown => Glyph::Explorer,
+    }
 }
 
 fn collect_rows<'a>(

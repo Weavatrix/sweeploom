@@ -162,6 +162,29 @@ pub fn table_scroll_height(ui: &egui::Ui) -> f32 {
     ui.available_height().max(180.0)
 }
 
+/// Tiny observed series. Does not invent missing samples.
+pub fn sparkline(ui: &mut egui::Ui, values: &[f32], size: egui::Vec2, color: egui::Color32) {
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    if values.len() < 2 {
+        return;
+    }
+    let min = values.iter().copied().fold(f32::MAX, f32::min);
+    let max = values.iter().copied().fold(0.0_f32, f32::max);
+    let span = (max - min).max(0.01);
+    let last = (values.len() - 1) as f32;
+    let points: Vec<egui::Pos2> = values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let x = rect.left() + rect.width() * (index as f32 / last);
+            let y = rect.bottom() - rect.height() * ((*value - min) / span);
+            egui::Pos2::new(x, y)
+        })
+        .collect();
+    ui.painter()
+        .add(egui::Shape::line(points, egui::Stroke::new(1.2_f32, color)));
+}
+
 /// Screen title plus a one-line hint.
 pub fn page_title(ui: &mut egui::Ui, title: &str, hint: &str) {
     ui.heading(RichText::new(title).size(26.0).strong());

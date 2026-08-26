@@ -141,3 +141,18 @@ pub struct ExecutionReport {
     /// Failed paths with a message (already free of secrets).
     pub failures: Vec<(CandidateId, String)>,
 }
+
+impl DeletionStrategy {
+    /// Short UI label. Avoids Debug in the Rules screen.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::PermanentGenerated => "Delete generated",
+            Self::Trash => "Trash",
+            Self::NativeTool => "Native tool",
+            Self::Archive => "Archive",
+            Self::Truncate => "Truncate",
+            Self::InspectOnly => "Inspect only",
+        }
+    }
+}
