@@ -131,9 +131,30 @@ pub fn section(
     ui.add_space(12.0);
 }
 
-/// One opportunity / history / listing row.
+/// One opportunity / history / listing row. Display only — no click affordance.
 pub fn list_row(ui: &mut egui::Ui, title: &str, meta: &str, detail: &str) {
-    let _ = list_row_at(ui, title, meta, detail);
+    egui::Frame::default()
+        .fill(ui.visuals().faint_bg_color)
+        .corner_radius(CornerRadius::same(8))
+        .inner_margin(Margin::symmetric(12, 8))
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.add(egui::Label::new(RichText::new(title).strong()).selectable(false));
+                if !meta.is_empty() {
+                    ui.add(
+                        egui::Label::new(RichText::new(meta).color(theme::muted(ui)))
+                            .selectable(false),
+                    );
+                }
+                if !detail.is_empty() {
+                    ui.add(
+                        egui::Label::new(RichText::new(detail).color(theme::muted(ui)))
+                            .selectable(false),
+                    );
+                }
+            });
+        });
+    ui.add_space(4.0);
 }
 
 /// Clickable listing row. Returns the row response.

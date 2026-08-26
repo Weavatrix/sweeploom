@@ -1,40 +1,81 @@
-//! Logical session table and raw process tree.
+//! Logical session table. Details sit in reserved space under the table.
 
 use super::session_actions;
+use super::session_label;
 use super::session_members;
 use super::session_observe;
 use super::session_plan;
+use super::session_raw;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::sort::{Col, Sort, header_cell};
-use crate::widgets::{page_title, table_scroll_height};
+use crate::widgets::page_title;
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
-use sweeploom_core::LiveSession;
+use sweeploom_core::{LiveSession, ProcessSnapshot};
 
 pub fn ui_sessions(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Sessions",
-        "Logical sessions sit on top of the OS process tree. Open a row to see member processes — a forgotten shell or vite under Claude can be stopped without ending the agent. Keep means leave it running.",
+        "Logical sessions sit on top of the OS process tree. Select a row — member processes appear under the table. A forgotten shell under Claude can be stopped without ending the agent.",
     );
     session_plan::draw(app, ui);
-    ui.checkbox(&mut app.group_raw, "Raw process tree");
+    ui.horizontal_wrapped(|ui| {
+        ui.checkbox(&mut app.group_raw, "Raw process tree");
+        if !app.group_raw {
+            let hidden = hidden_count(app);
+            ui.checkbox(
+                &mut app.show_all_apps,
+                format!("Show leftover apps ({hidden} hidden)"),
+            );
+        }
+    });
     ui.add_space(8.0);
     if app.group_raw {
-        ui_process_table(app, ui);
+        session_raw::draw(app, ui);
         return;
     }
     draw_session_table(app, ui);
 }
 
+fn hidden_count(app: &SweepLoomApp) -> usize {
+    let processes = processes_of(app);
+    app.sessions
+        .iter()
+        .filter(|session| !session_label::is_spotlight(session, processes))
+        .count()
+}
+
+fn processes_of(app: &SweepLoomApp) -> &[ProcessSnapshot] {
+    app.snapshot
+        .as_ref()
+        .map(|item| item.processes.as_slice())
+        .unwrap_or(&[])
+}
+
 fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut sort = app.session_sort;
     let mut selected = app.selected_session;
+    let show_all = app.show_all_apps;
+    let (order, titles) = {
+        let processes = processes_of(app);
+        let order = session_order(&app.sessions, processes, sort, show_all);
+        let titles: Vec<String> = order
+            .iter()
+            .filter_map(|&index| app.sessions.get(index))
+            .map(|session| session_label::title(session, processes))
+            .collect();
+        (order, titles)
+    };
     let mut planned = std::mem::take(&mut app.planned_keys);
-    let order = session_order(&app.sessions, sort);
+    let reserve = if selected.is_some() {
+        (ui.available_height() * 0.45).clamp(200.0, 420.0)
+    } else {
+        40.0
+    };
+    let height = (ui.available_height() - reserve).max(140.0);
     let row_count = order.len();
-    let height = table_scroll_height(ui);
     TableBuilder::new(ui)
         .striped(true)
         .resizable(true)
@@ -65,6 +106,7 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .body(|body| {
             body.rows(28.0, row_count, |mut row| {
                 let index = order.get(row.index()).copied().unwrap_or(row.index());
+                let title = titles.get(row.index()).cloned().unwrap_or_default();
                 fill_session_row(
                     &app.sessions,
                     &mut planned,
@@ -72,6 +114,7 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                     &mut row,
                     index,
                     &mut selected,
+                    &title,
                 );
             });
         });
@@ -82,26 +125,37 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         app.confirm_helpers = false;
     }
     app.selected_session = selected;
-    if let Some(id) = app.selected_session
-        && let Some(session) = app.sessions.iter().find(|item| item.id == id).cloned()
-    {
-        ui.separator();
-        session_details(app, ui, &session);
-    }
+    draw_details(app, ui);
 }
 
-fn session_order(sessions: &[LiveSession], sort: Sort) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..sessions.len()).collect();
-    order.sort_by(|&left, &right| compare_session(&sessions[left], &sessions[right], sort));
+fn session_order(
+    sessions: &[LiveSession],
+    processes: &[ProcessSnapshot],
+    sort: Sort,
+    show_all: bool,
+) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..sessions.len())
+        .filter(|&index| show_all || session_label::is_spotlight(&sessions[index], processes))
+        .collect();
+    order.sort_by(|&left, &right| {
+        compare_session(&sessions[left], &sessions[right], processes, sort)
+    });
     if sort.desc {
         order.reverse();
     }
     order
 }
 
-fn compare_session(left: &LiveSession, right: &LiveSession, sort: Sort) -> std::cmp::Ordering {
+fn compare_session(
+    left: &LiveSession,
+    right: &LiveSession,
+    processes: &[ProcessSnapshot],
+    sort: Sort,
+) -> std::cmp::Ordering {
     match sort.col {
-        Col::Name => left.label().cmp(right.label()),
+        Col::Name => {
+            session_label::title(left, processes).cmp(&session_label::title(right, processes))
+        }
         Col::Procs => left.processes.len().cmp(&right.processes.len()),
         Col::Cpu => left
             .cpu_percent
@@ -122,13 +176,13 @@ fn fill_session_row(
     row: &mut egui_extras::TableRow<'_, '_>,
     index: usize,
     selected: &mut Option<sweeploom_core::SessionId>,
+    title: &str,
 ) {
     let Some(session) = sessions.get(index) else {
         return;
     };
     let is_selected = selected_id == Some(session.id);
     let id = session.id;
-    let label = session.label().to_owned();
     let procs = session.processes.len().to_string();
     let rss = format_bytes(session.rss_bytes);
     let cpu = format!("{:.1}%", session.cpu_percent);
@@ -144,7 +198,7 @@ fn fill_session_row(
     });
     row.col(|ui| {
         if crate::widgets::pointer(
-            ui.add(egui::Button::new(RichText::new(label).size(16.0)).frame(false)),
+            ui.add(egui::Button::new(RichText::new(title).size(16.0)).frame(false)),
         )
         .clicked()
         {
@@ -171,79 +225,29 @@ fn fill_session_row(
     }
 }
 
-fn ui_process_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    let Some(snapshot) = &app.snapshot else {
+fn draw_details(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
+    let Some(id) = app.selected_session else {
+        ui.label("Select a session to see member processes that can be stopped on their own.");
         return;
     };
-    let mut sort = app.process_sort;
-    let mut order: Vec<usize> = (0..snapshot.processes.len()).collect();
-    order.sort_by(|&left, &right| {
-        let a = &snapshot.processes[left];
-        let b = &snapshot.processes[right];
-        match sort.col {
-            Col::Name => a.name.cmp(&b.name),
-            Col::Cpu => a
-                .cpu_percent
-                .partial_cmp(&b.cpu_percent)
-                .unwrap_or(std::cmp::Ordering::Equal),
-            _ => a.rss_bytes.cmp(&b.rss_bytes),
-        }
-    });
-    if sort.desc {
-        order.reverse();
-    }
-    let rows = order.len();
-    let height = table_scroll_height(ui);
-    TableBuilder::new(ui)
-        .striped(true)
-        .resizable(true)
-        .min_scrolled_height(height)
-        .max_scroll_height(height)
-        .column(Column::auto().at_least(80.0))
-        .column(Column::auto().at_least(180.0))
-        .column(Column::auto().at_least(100.0))
-        .column(Column::auto().at_least(80.0))
-        .column(Column::remainder())
-        .header(32.0, |mut header| {
-            header.col(|ui| {
-                ui.strong("PID");
-            });
-            header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Process"));
-            header.col(|ui| header_cell(ui, &mut sort, Col::Size, "RSS"));
-            header.col(|ui| header_cell(ui, &mut sort, Col::Cpu, "CPU"));
-            header.col(|ui| {
-                ui.strong("Command");
-            });
-        })
-        .body(|body| {
-            body.rows(26.0, rows, |mut row| {
-                let index = order.get(row.index()).copied().unwrap_or(0);
-                if let Some(process) = snapshot.processes.get(index) {
-                    row.col(|ui| {
-                        ui.label(process.pid.to_string());
-                    });
-                    row.col(|ui| {
-                        ui.label(&process.name);
-                    });
-                    row.col(|ui| {
-                        ui.label(format_bytes(process.rss_bytes));
-                    });
-                    row.col(|ui| {
-                        ui.label(format!("{:.1}%", process.cpu_percent));
-                    });
-                    row.col(|ui| {
-                        ui.monospace(process.command.join(" "));
-                    });
-                }
-            });
+    let Some(session) = app.sessions.iter().find(|item| item.id == id).cloned() else {
+        ui.label("Select a session to see member processes that can be stopped on their own.");
+        return;
+    };
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            session_details(app, ui, &session);
         });
-    app.process_sort = sort;
 }
 
 fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
-    ui.label(RichText::new(session.label()).size(20.0).strong());
+    let title = session_label::title(session, processes_of(app));
+    ui.separator();
+    ui.label(RichText::new(title).size(20.0).strong());
     ui.label(format!(
-        "RAM {} · CPU {:.1}% · processes {} · {}",
+        "{} · RAM {} · CPU {:.1}% · processes {} · {}",
+        session.kind.label(),
         format_bytes(session.rss_bytes),
         session.cpu_percent,
         session.processes.len(),

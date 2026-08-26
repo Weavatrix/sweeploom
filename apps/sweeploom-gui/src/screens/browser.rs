@@ -4,12 +4,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use eframe::egui::RichText;
 use sweeploom_browser::{BrowserPressure, TabAction, TabCommand, load_snapshot, save_apply};
-use sweeploom_core::{LiveSession, SessionKind};
+use sweeploom_core::SessionKind;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::icons::{self, Glyph};
-use crate::widgets::{list_row, page_title, pointer, section};
+use crate::nav::Nav;
+use crate::widgets::{list_row, list_row_at, page_title, pointer, section};
 
 pub fn ui_browser(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     page_title(
@@ -23,11 +24,31 @@ pub fn ui_browser(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
         .map(|item| item.processes.as_slice())
         .unwrap_or(&[]);
     let pressure = BrowserPressure::from_live(&app.sessions, processes);
-    draw_hosts(ui, &pressure, &app.sessions);
+    draw_hosts(app, ui, &pressure);
     draw_companion(app, ui);
 }
 
-fn draw_hosts(ui: &mut eframe::egui::Ui, pressure: &BrowserPressure, sessions: &[LiveSession]) {
+fn draw_hosts(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, pressure: &BrowserPressure) {
+    let browser: Vec<_> = app
+        .sessions
+        .iter()
+        .filter(|item| item.kind == SessionKind::Browser)
+        .take(12)
+        .map(|session| {
+            (
+                session.id,
+                session.label().to_owned(),
+                format_bytes(session.rss_bytes),
+                format!(
+                    "{:.1}% CPU · {} process(es) · {}",
+                    session.cpu_percent,
+                    session.processes.len(),
+                    session.recommendation.recommendation.label()
+                ),
+            )
+        })
+        .collect();
+    let mut open = None;
     section(
         ui,
         "Process trees",
@@ -62,26 +83,18 @@ fn draw_hosts(ui: &mut eframe::egui::Ui, pressure: &BrowserPressure, sessions: &
                 );
             }
             ui.add_space(8.0);
-            ui.label(RichText::new("Live sessions").strong());
-            for session in sessions
-                .iter()
-                .filter(|item| item.kind == SessionKind::Browser)
-                .take(12)
-            {
-                list_row(
-                    ui,
-                    session.label(),
-                    &format_bytes(session.rss_bytes),
-                    &format!(
-                        "{:.1}% CPU · {} process(es) · {}",
-                        session.cpu_percent,
-                        session.processes.len(),
-                        session.recommendation.recommendation.label()
-                    ),
-                );
+            ui.label(RichText::new("Live sessions — click to open members").strong());
+            for (id, label, rss, detail) in &browser {
+                if list_row_at(ui, label, rss, detail).clicked() {
+                    open = Some(*id);
+                }
             }
         },
     );
+    if let Some(id) = open {
+        app.selected_session = Some(id);
+        app.nav = Nav::Sessions;
+    }
 }
 
 fn draw_companion(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {

@@ -168,4 +168,97 @@ mod tests {
                 .any(|session| session.kind == SessionKind::Terminal)
         );
     }
+
+    #[test]
+    fn leftover_parent_keeps_unclassified_children() {
+        let processes = vec![
+            proc(40, None, "Slack.exe", None, &["Slack"], 200_000_000, 0.0),
+            proc(
+                41,
+                Some(40),
+                "crashpad.exe",
+                None,
+                &["crashpad"],
+                20_000_000,
+                0.0,
+            ),
+        ];
+        let mut snapshot = ProcessSnapshotSet {
+            captured_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_400_000),
+            processes,
+            memory: sweeploom_process::HostMemory::default(),
+            cpu: sweeploom_process::HostCpu::default(),
+            total_rss_bytes: 0,
+        };
+        let sessions = sessions_from_snapshot(
+            &mut snapshot,
+            &AttributionRoots {
+                projects: Vec::new(),
+                current_project: None,
+            },
+        );
+        let slack = sessions
+            .iter()
+            .find(|session| session.kind == SessionKind::GenericApp && session.processes.len() == 2)
+            .expect("slack tree");
+        assert_eq!(slack.processes.len(), 2);
+    }
+
+    #[test]
+    fn cursor_keeps_unclassified_node_helper() {
+        let processes = vec![
+            proc(1, None, "init", None, &["init"], 8_000, 0.0),
+            proc(
+                50,
+                Some(1),
+                "Cursor.exe",
+                None,
+                &["Cursor"],
+                300_000_000,
+                0.2,
+            ),
+            proc(
+                51,
+                Some(50),
+                "node.exe",
+                None,
+                &["node", "language-host"],
+                80_000_000,
+                0.0,
+            ),
+            proc(
+                52,
+                Some(50),
+                "powershell.exe",
+                None,
+                &["powershell"],
+                15_000_000,
+                0.0,
+            ),
+        ];
+        let mut snapshot = ProcessSnapshotSet {
+            captured_at: SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_400_000),
+            processes,
+            memory: sweeploom_process::HostMemory::default(),
+            cpu: sweeploom_process::HostCpu::default(),
+            total_rss_bytes: 0,
+        };
+        let sessions = sessions_from_snapshot(
+            &mut snapshot,
+            &AttributionRoots {
+                projects: Vec::new(),
+                current_project: None,
+            },
+        );
+        let cursor = sessions
+            .iter()
+            .find(|session| session.kind == SessionKind::GenericApp)
+            .expect("cursor");
+        assert_eq!(cursor.processes.len(), 2);
+        assert!(
+            sessions
+                .iter()
+                .any(|session| session.kind == SessionKind::Terminal)
+        );
+    }
 }

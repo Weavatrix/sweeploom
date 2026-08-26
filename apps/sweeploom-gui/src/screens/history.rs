@@ -40,10 +40,12 @@ pub fn ui_history(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut sort = app.history_sort;
     sort_rows(&mut rows, sort);
     let mut go = None;
-    draw_table(ui, &rows, &mut sort, &mut go);
+    let mut raw = false;
+    draw_table(ui, &rows, &mut sort, &mut go, &mut raw);
     app.history_sort = sort;
-    if let Some(id) = go {
-        app.selected_session = Some(id);
+    if go.is_some() || raw {
+        app.selected_session = go;
+        app.group_raw = raw;
         app.nav = Nav::Sessions;
     }
 }
@@ -95,7 +97,13 @@ fn sort_rows(rows: &mut [HistRow], sort: Sort) {
     }
 }
 
-fn draw_table(ui: &mut egui::Ui, rows: &[HistRow], sort: &mut Sort, go: &mut Option<SessionId>) {
+fn draw_table(
+    ui: &mut egui::Ui,
+    rows: &[HistRow],
+    sort: &mut Sort,
+    go: &mut Option<SessionId>,
+    raw: &mut bool,
+) {
     let height = table_scroll_height(ui);
     let count = rows.len();
     TableBuilder::new(ui)
@@ -153,6 +161,7 @@ fn draw_table(ui: &mut egui::Ui, rows: &[HistRow], sort: &mut Sort, go: &mut Opt
                 });
                 if row.response().clicked() {
                     *go = item.session;
+                    *raw = item.session.is_none();
                 }
             });
         });

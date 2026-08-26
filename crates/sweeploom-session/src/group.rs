@@ -45,17 +45,20 @@ pub fn group_sessions(processes: &[ProcessSnapshot]) -> Vec<LiveSession> {
     }
 
     for process in processes {
-        if assigned.contains(&process.key) {
+        if assigned.contains(&process.key)
+            || process.safety_class == ProcessSafetyClass::SystemCritical
+            || leftover_waits_for_parent(process, &assigned, &by_key)
+        {
             continue;
         }
-        if process.safety_class == ProcessSafetyClass::SystemCritical {
-            continue;
+        let members = collect_unassigned(process.key, processes, &assigned);
+        for member in &members {
+            assigned.insert(*member);
         }
-        assigned.insert(process.key);
         sessions.push(build_session(
             SessionId(next_id),
             SessionKind::GenericApp,
-            &[process.key],
+            &members,
             &by_key,
         ));
         next_id += 1;
@@ -95,6 +98,50 @@ fn collect_descendants(
             }
             members.push(process.key);
             changed = true;
+        }
+    }
+    members
+}
+
+fn leftover_waits_for_parent(
+    process: &ProcessSnapshot,
+    assigned: &HashSet<ProcessKey>,
+    by_key: &HashMap<ProcessKey, &ProcessSnapshot>,
+) -> bool {
+    let Some(parent) = process.parent else {
+        return false;
+    };
+    if assigned.contains(&parent) {
+        return false;
+    }
+    by_key
+        .get(&parent)
+        .is_some_and(|item| item.safety_class != ProcessSafetyClass::SystemCritical)
+}
+
+fn collect_unassigned(
+    root: ProcessKey,
+    processes: &[ProcessSnapshot],
+    assigned: &HashSet<ProcessKey>,
+) -> Vec<ProcessKey> {
+    let mut members = vec![root];
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for process in processes {
+            if assigned.contains(&process.key)
+                || members.contains(&process.key)
+                || process.safety_class == ProcessSafetyClass::SystemCritical
+            {
+                continue;
+            }
+            let Some(parent) = process.parent else {
+                continue;
+            };
+            if members.contains(&parent) {
+                members.push(process.key);
+                changed = true;
+            }
         }
     }
     members

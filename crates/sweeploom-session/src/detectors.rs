@@ -35,6 +35,18 @@ pub fn builtin_detectors() -> Vec<Box<dyn SessionDetector + Send + Sync>> {
             SessionKind::Codex,
             &["codex", "codex.exe"],
         )),
+        Box::new(NamedDetector::new(
+            "cursor",
+            SessionKind::GenericApp,
+            &[
+                "cursor",
+                "cursor.exe",
+                "opencode",
+                "opencode.exe",
+                "gemini",
+                "gemini.exe",
+            ],
+        )),
         Box::new(CommandContains::new(
             "mcp",
             SessionKind::Mcp,
@@ -43,7 +55,9 @@ pub fn builtin_detectors() -> Vec<Box<dyn SessionDetector + Send + Sync>> {
         Box::new(CommandContains::new(
             "vite",
             SessionKind::DevServer,
-            &["vite", "next", "nuxt", "webpack", "parcel"],
+            &[
+                "vite", "next", "nuxt", "webpack", "parcel", "nodemon", "tsx", "esbuild",
+            ],
         )),
         Box::new(NamedDetector::new(
             "cargo",

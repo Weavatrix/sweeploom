@@ -11,7 +11,7 @@ use crate::app::SweepLoomApp;
 use crate::format::{format_bytes, row_caption, short_path};
 use crate::icons::{self, Glyph};
 use crate::nav::Nav;
-use crate::widgets::{list_row, page_title};
+use crate::widgets::{list_row, list_row_at, page_title};
 
 struct ProjectCard {
     path: PathBuf,
@@ -48,7 +48,7 @@ pub fn ui_projects(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     );
     ui.add_space(8.0);
     for card in cards.into_iter().take(48) {
-        draw_card(ui, &card);
+        draw_card(app, ui, &card);
     }
 }
 
@@ -98,7 +98,7 @@ impl ProjectCard {
     }
 }
 
-fn draw_card(ui: &mut egui::Ui, card: &ProjectCard) {
+fn draw_card(app: &mut SweepLoomApp, ui: &mut egui::Ui, card: &ProjectCard) {
     let kinds = classify_project(&card.path)
         .into_iter()
         .map(|kind| kind.label())
@@ -109,6 +109,8 @@ fn draw_card(ui: &mut egui::Ui, card: &ProjectCard) {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("project");
+    let mut open_explorer = false;
+    let mut open_review = false;
     egui::Frame::default()
         .fill(ui.visuals().faint_bg_color)
         .corner_radius(CornerRadius::same(10))
@@ -116,7 +118,13 @@ fn draw_card(ui: &mut egui::Ui, card: &ProjectCard) {
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 icons::show(ui, Glyph::Projects, 16.0, crate::theme::accent());
-                ui.label(RichText::new(name).size(16.0).strong());
+                if crate::widgets::pointer(
+                    ui.add(egui::Button::new(RichText::new(name).size(16.0)).frame(false)),
+                )
+                .clicked()
+                {
+                    open_explorer = true;
+                }
                 ui.label(RichText::new(&kinds).color(crate::theme::muted(ui)));
                 if card.bytes > 0 {
                     ui.label(RichText::new(format_bytes(card.bytes)).strong());
@@ -136,14 +144,25 @@ fn draw_card(ui: &mut egui::Ui, card: &ProjectCard) {
                 );
             } else {
                 for (title, bytes, rebuild) in card.offers.iter().take(6) {
-                    list_row(
+                    if list_row_at(
                         ui,
                         title,
                         &format_bytes(*bytes),
                         &format!("rebuild={rebuild}"),
-                    );
+                    )
+                    .clicked()
+                    {
+                        open_review = true;
+                    }
                 }
             }
         });
+    if open_explorer {
+        app.scan_root = card.path.display().to_string();
+        app.nav = Nav::Explorer;
+    }
+    if open_review {
+        app.nav = Nav::Storage;
+    }
     ui.add_space(10.0);
 }

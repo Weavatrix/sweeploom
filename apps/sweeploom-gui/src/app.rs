@@ -35,6 +35,7 @@ pub struct SweepLoomApp {
     pub(crate) sessions: Vec<LiveSession>,
     pub(crate) selected_session: Option<SessionId>,
     pub(crate) group_raw: bool,
+    pub(crate) show_all_apps: bool,
     pub(crate) session_sort: Sort,
     pub(crate) review_sort: Sort,
     pub(crate) explorer_sort: Sort,
@@ -96,6 +97,7 @@ impl SweepLoomApp {
             sessions,
             selected_session: None,
             group_raw: false,
+            show_all_apps: false,
             session_sort: Sort::size_desc(),
             review_sort: Sort::size_desc(),
             explorer_sort: Sort::size_desc(),
@@ -201,6 +203,7 @@ impl SweepLoomApp {
             .flat_map(|session| session.processes.iter().copied())
             .collect();
         self.planned_keys.retain(|key| live_keys.contains(key));
+        self.helper_keys.retain(|key| live_keys.contains(key));
         self.snapshot = Some(snapshot);
         self.last_sample = Instant::now();
     }

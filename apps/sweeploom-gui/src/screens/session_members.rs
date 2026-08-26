@@ -71,7 +71,7 @@ fn draw_member_row(
     let mut on = selected.contains(&process.key);
     let role = member_role(process, root);
     let cmd = short_command(&process.command);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         if ui
             .add_enabled(!blocked, egui::Checkbox::new(&mut on, ""))
             .changed()
@@ -82,19 +82,23 @@ fn draw_member_row(
                 selected.remove(&process.key);
             }
         }
-        ui.label(RichText::new(&process.name).strong());
-        ui.label(
-            RichText::new(format!(
-                "{role} · pid {} · {} · {:.1}%",
-                process.pid,
-                format_bytes(process.rss_bytes),
-                process.cpu_percent
-            ))
-            .color(crate::theme::muted(ui)),
-        );
-        if !cmd.is_empty() {
-            ui.monospace(cmd);
-        }
+        ui.vertical(|ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(&process.name).strong());
+                ui.label(
+                    RichText::new(format!(
+                        "{role} · pid {} · {} · {:.1}%",
+                        process.pid,
+                        format_bytes(process.rss_bytes),
+                        process.cpu_percent
+                    ))
+                    .color(crate::theme::muted(ui)),
+                );
+            });
+            if !cmd.is_empty() {
+                ui.monospace(cmd);
+            }
+        });
     });
 }
 

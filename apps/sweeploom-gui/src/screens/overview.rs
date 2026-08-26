@@ -4,6 +4,7 @@ use eframe::egui::{self, RichText};
 use sweeploom_browser::BrowserPressure;
 use sweeploom_core::Recommendation;
 
+use super::session_label;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::icons::Glyph;
@@ -14,7 +15,7 @@ pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Overview",
-        "Live pressure now. History starts the moment SweepLoom opens.",
+        "Live pressure now. Click a card to open Sessions, Review, or Explorer.",
     );
     if let Some(nav) = widgets::metric_grid(ui, &overview_cards(app)) {
         app.nav = nav;
@@ -112,20 +113,22 @@ fn overview_cards(app: &SweepLoomApp) -> Vec<Metric> {
 
 fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut shown = 0_usize;
-    let sessions: Vec<_> = app
-        .sessions
-        .iter()
-        .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
-        .take(6)
-        .map(|session| {
-            (
-                session.id,
-                session.label().to_owned(),
-                format_bytes(session.rss_bytes),
-                session.recommendation.recommendation.label().to_owned(),
-            )
-        })
-        .collect();
+    let sessions: Vec<_> = {
+        let processes = processes_of(app);
+        app.sessions
+            .iter()
+            .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
+            .take(6)
+            .map(|session| {
+                (
+                    session.id,
+                    session_label::title(session, processes),
+                    format_bytes(session.rss_bytes),
+                    session.recommendation.recommendation.label().to_owned(),
+                )
+            })
+            .collect()
+    };
     for (id, label, rss, rec) in sessions {
         shown += 1;
         if list_row_at(ui, &label, &rss, &rec).clicked() {
@@ -133,12 +136,10 @@ fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             app.nav = Nav::Sessions;
         }
     }
-    let processes = app
-        .snapshot
-        .as_ref()
-        .map(|item| item.processes.as_slice())
-        .unwrap_or(&[]);
-    let pressure = BrowserPressure::from_live(&app.sessions, processes);
+    let pressure = {
+        let processes = processes_of(app);
+        BrowserPressure::from_live(&app.sessions, processes)
+    };
     if pressure.rss_bytes() > 0 && shown < 8 {
         shown += 1;
         if list_row_at(
@@ -172,4 +173,11 @@ fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     if shown == 0 {
         ui.label("No idle sessions. Open Review for Cargo target / node_modules, or Browser for process trees.");
     }
+}
+
+fn processes_of(app: &SweepLoomApp) -> &[sweeploom_core::ProcessSnapshot] {
+    app.snapshot
+        .as_ref()
+        .map(|item| item.processes.as_slice())
+        .unwrap_or(&[])
 }
