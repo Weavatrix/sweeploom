@@ -62,7 +62,7 @@ pub fn draw(ctx: &egui::Context, app: &mut SweepLoomApp) {
             ui.set_width(ui.available_width());
             if matches!(
                 app.nav,
-                Nav::Sessions | Nav::Storage | Nav::Explorer | Nav::History
+                Nav::Sessions | Nav::Storage | Nav::Explorer | Nav::History | Nav::Projects
             ) {
                 draw_page(app, ui);
             } else {

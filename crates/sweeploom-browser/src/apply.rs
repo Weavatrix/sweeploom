@@ -20,7 +20,7 @@ pub fn save_apply(app_data: &Path, actions: Vec<TabCommand>) -> io::Result<()> {
         .filter(|item| {
             matches!(
                 item.action,
-                TabAction::Discard | TabAction::BookmarkAndClose
+                TabAction::Discard | TabAction::BookmarkAndClose | TabAction::Focus
             )
         })
         .collect();
@@ -45,7 +45,7 @@ pub fn take_apply(app_data: &Path) -> io::Result<Vec<TabCommand>> {
         .filter(|item| {
             matches!(
                 item.action,
-                TabAction::Discard | TabAction::BookmarkAndClose
+                TabAction::Discard | TabAction::BookmarkAndClose | TabAction::Focus
             )
         })
         .collect())
@@ -77,6 +77,24 @@ mod tests {
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].tab_id, 2);
         assert!(!apply_path(&dir).is_file());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn focus_is_queued() {
+        let dir = std::env::temp_dir().join(format!("sweeploom-focus-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        save_apply(
+            &dir,
+            vec![TabCommand {
+                tab_id: 4,
+                action: TabAction::Focus,
+            }],
+        )
+        .unwrap();
+        let got = take_apply(&dir).unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].action, TabAction::Focus);
         let _ = fs::remove_dir_all(&dir);
     }
 }

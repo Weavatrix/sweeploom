@@ -2,8 +2,13 @@
 
 mod ai;
 mod browser;
+mod browser_later;
+mod browser_state;
+mod browser_tabs;
+mod browser_trees;
 mod history;
 mod overview;
+mod project_rows;
 mod projects;
 mod review;
 mod rules;
@@ -19,8 +24,10 @@ mod storage;
 
 pub use ai::ui_ai;
 pub use browser::ui_browser;
+pub use browser_state::BrowserUi;
 pub use history::ui_history;
 pub use overview::ui_overview;
+pub use project_rows::ProjectGroup;
 pub use projects::ui_projects;
 pub use review::ui_review;
 pub use rules::ui_rules;

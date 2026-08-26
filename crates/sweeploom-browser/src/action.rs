@@ -15,6 +15,8 @@ pub enum TabAction {
     Discard,
     /// Bookmark then close, transactional.
     BookmarkAndClose,
+    /// Focus the tab and its window. Not a reclaim action.
+    Focus,
     /// Close. Never the default.
     Close,
 }

@@ -110,8 +110,27 @@ async function applyActions(actions) {
       } catch (_error) {
         /* tab gone */
       }
+    } else if (item.action === "focus") {
+      await focusTab(item.tab_id);
     } else if (item.action === "bookmark_and_close") {
       await bookmarkAndClose(item.tab_id);
+    }
+  }
+}
+
+async function focusTab(tabId) {
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+    await chrome.tabs.update(tabId, { active: true });
+  } catch (_error) {
+    return;
+  }
+  if (tab && typeof tab.windowId === "number") {
+    try {
+      await chrome.windows.update(tab.windowId, { focused: true });
+    } catch (_error) {
+      /* window gone */
     }
   }
 }

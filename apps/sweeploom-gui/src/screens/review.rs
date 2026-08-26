@@ -1,6 +1,5 @@
 //! Review generated cleanup, then apply after revalidation.
 
-use crate::review_extra;
 use eframe::egui::{self, RichText};
 use sweeploom_core::DeletionStrategy;
 use sweeploom_exec::{apply_plan, build_plan};
@@ -20,7 +19,14 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Cargo/Node/Python generated output. Stripes are not selection. npm is here, not Browser.",
     );
     ui.horizontal_wrapped(|ui| {
-        if crate::widgets::pointer(ui.button("Rebuild review")).clicked() {
+        let rebuild = if app.scanning {
+            "Rebuilding…"
+        } else {
+            "Rebuild review"
+        };
+        if crate::widgets::pointer(ui.add_enabled(!app.scanning, egui::Button::new(rebuild)))
+            .clicked()
+        {
             app.rebuild_review();
         }
         if crate::widgets::pointer(ui.button("Clean selected")).clicked() {
@@ -48,7 +54,11 @@ pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     }
     ui.add_space(8.0);
     if app.review.is_empty() {
-        ui.label("Rebuild review for temp/Downloads, or scan Explorer for project artifacts.");
+        if app.scanning {
+            ui.label("Rebuilding review in the background. The window stays interactive.");
+        } else {
+            ui.label("Rebuild review for temp/Downloads, or scan Explorer for project artifacts.");
+        }
         return;
     }
     let selected: u64 = app
@@ -181,12 +191,17 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
 
 impl SweepLoomApp {
     /// Fill review from project discovery plus temp / Downloads / AI.
+    ///
+    /// Discovery walks generated trees and must not run on the UI thread.
     pub fn rebuild_review(&mut self) {
+        if self.scanning {
+            return;
+        }
         let processes = self
             .snapshot
             .as_ref()
-            .map(|item| item.processes.as_slice())
-            .unwrap_or(&[]);
+            .map(|item| item.processes.clone())
+            .unwrap_or_default();
         let root = std::path::PathBuf::from(self.scan_root.trim());
         let inventory = self
             .inventory
@@ -194,17 +209,15 @@ impl SweepLoomApp {
             .map(|item| item.projects.clone())
             .unwrap_or_default();
         let current = self.current_project.as_ref().map(|item| item.0.clone());
-        let built = review_extra::assemble(
-            &root,
-            &self.locations,
-            &inventory,
-            current.as_deref(),
+        self.scanning = true;
+        self.action_message = Some("Rebuilding review in the background…".to_owned());
+        self.rebuild_rx = Some(crate::scan_job::spawn_review(
+            root,
+            inventory,
+            current,
             processes,
-        );
-        let n = built.rows.len();
-        self.project_roots = built.projects;
-        self.review = built.rows;
-        self.action_message = Some(format!("{n} candidates"));
+            self.locations.clone(),
+        ));
     }
 
     /// Pre-select the cheapest SAFE generated rows until `free_gb` is reached.

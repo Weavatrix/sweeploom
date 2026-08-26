@@ -1,4 +1,4 @@
-//! Clickable column sort used by Sessions, Review, and Explorer.
+//! Clickable column sort used by Sessions, Review, Explorer, and Projects.
 
 use crate::icons::{self, Glyph};
 use crate::theme;

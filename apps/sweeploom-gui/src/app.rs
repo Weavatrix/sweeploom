@@ -20,7 +20,8 @@ use crate::chrome;
 use crate::live;
 use crate::nav::Nav;
 use crate::prefs::Prefs;
-use crate::scan_job::{self, ScanOutcome};
+use crate::scan_job::{RebuildOutcome, ScanOutcome};
+use crate::screens::{BrowserUi, ProjectGroup};
 use crate::sort::Sort;
 use crate::theme;
 use crate::tray::{self, TrayCommand, TrayIconHandle};
@@ -38,6 +39,9 @@ pub struct SweepLoomApp {
     pub(crate) show_all_apps: bool,
     pub(crate) session_sort: Sort,
     pub(crate) review_sort: Sort,
+    pub(crate) project_sort: Sort,
+    pub(crate) project_group: ProjectGroup,
+    pub(crate) collapsed_project_groups: HashSet<String>,
     pub(crate) explorer_sort: Sort,
     pub(crate) process_sort: Sort,
     pub(crate) history_sort: Sort,
@@ -59,7 +63,7 @@ pub struct SweepLoomApp {
     pub(crate) helper_keys: HashSet<ProcessKey>,
     pub(crate) confirm_planned: bool,
     pub(crate) confirm_helpers: bool,
-    pub(crate) confirm_browser_discard: bool,
+    pub(crate) browser: BrowserUi,
     pub(crate) current_project: Option<ProjectId>,
     pub(crate) project_roots: Vec<PathBuf>,
     pub(crate) last_busy: HashMap<ProcessKey, SystemTime>,
@@ -71,7 +75,8 @@ pub struct SweepLoomApp {
     pub(crate) tray: Option<TrayIconHandle>,
     force_quit: bool,
     start_hidden: bool,
-    scan_rx: Option<Receiver<ScanOutcome>>,
+    pub(crate) scan_rx: Option<Receiver<ScanOutcome>>,
+    pub(crate) rebuild_rx: Option<Receiver<RebuildOutcome>>,
 }
 
 impl SweepLoomApp {
@@ -100,6 +105,9 @@ impl SweepLoomApp {
             show_all_apps: false,
             session_sort: Sort::size_desc(),
             review_sort: Sort::size_desc(),
+            project_sort: Sort::size_desc(),
+            project_group: ProjectGroup::Parent,
+            collapsed_project_groups: HashSet::new(),
             explorer_sort: Sort::size_desc(),
             process_sort: Sort::size_desc(),
             history_sort: Sort::size_desc(),
@@ -121,7 +129,7 @@ impl SweepLoomApp {
             helper_keys: HashSet::new(),
             confirm_planned: false,
             confirm_helpers: false,
-            confirm_browser_discard: false,
+            browser: BrowserUi::default(),
             current_project: std::env::current_dir().ok().map(ProjectId),
             project_roots: Vec::new(),
             last_busy: HashMap::new(),
@@ -134,6 +142,7 @@ impl SweepLoomApp {
             force_quit: false,
             start_hidden,
             scan_rx: None,
+            rebuild_rx: None,
         };
         live::stamp_first(&mut app);
         app.rebuild_review();
@@ -204,52 +213,18 @@ impl SweepLoomApp {
             .collect();
         self.planned_keys.retain(|key| live_keys.contains(key));
         self.helper_keys.retain(|key| live_keys.contains(key));
+        let live_sessions: HashSet<SessionId> = self.sessions.iter().map(|item| item.id).collect();
+        self.browser
+            .tree_ids
+            .retain(|id| live_sessions.contains(id));
         self.snapshot = Some(snapshot);
         self.last_sample = Instant::now();
-    }
-
-    pub(crate) fn run_scan(&mut self) {
-        if self.scanning {
-            return;
-        }
-        let root = PathBuf::from(self.scan_root.trim());
-        let processes = self
-            .snapshot
-            .as_ref()
-            .map(|item| item.processes.clone())
-            .unwrap_or_default();
-        self.scanning = true;
-        self.inventory_error = None;
-        self.action_message = Some(format!("Scanning {}…", root.display()));
-        self.scan_rx = Some(scan_job::spawn(root, processes, self.locations.clone()));
-    }
-
-    fn poll_scan(&mut self) {
-        let Some(rx) = &self.scan_rx else {
-            return;
-        };
-        let Ok(outcome) = rx.try_recv() else {
-            return;
-        };
-        self.scan_rx = None;
-        self.scanning = false;
-        match outcome {
-            Ok((report, rows)) => {
-                let n = rows.len();
-                self.project_roots = report.projects.clone();
-                self.inventory = Some(report);
-                self.review = rows;
-                self.inventory_error = None;
-                self.action_message = Some(format!("{n} candidates"));
-            }
-            Err(error) => self.inventory_error = Some(error),
-        }
     }
 }
 
 impl eframe::App for SweepLoomApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.poll_scan();
+        self.poll_disk();
         if self.start_hidden {
             self.start_hidden = false;
             self.enter_background(ctx);

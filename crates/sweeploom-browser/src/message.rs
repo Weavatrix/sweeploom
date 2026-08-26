@@ -10,7 +10,7 @@ use crate::tab::{CompanionTabs, TabSnapshot};
 pub struct TabCommand {
     /// Browser tab id.
     pub tab_id: i64,
-    /// Discard or bookmark-and-close. Close is never queued.
+    /// Discard, bookmark-and-close, or focus. Close is never queued.
     pub action: TabAction,
 }
 
