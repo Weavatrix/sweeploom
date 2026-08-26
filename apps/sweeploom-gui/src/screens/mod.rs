@@ -6,6 +6,7 @@ mod browser_later;
 mod browser_state;
 mod browser_tabs;
 mod browser_trees;
+mod explorer_rows;
 mod history;
 mod overview;
 mod project_facts;

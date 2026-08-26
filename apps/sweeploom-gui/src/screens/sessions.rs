@@ -77,19 +77,20 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let height = (ui.available_height() - reserve).max(140.0);
     let row_count = order.len();
     TableBuilder::new(ui)
+        .id_salt("sessions-table")
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click())
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::auto().at_least(36.0))
-        .column(Column::auto().at_least(180.0))
-        .column(Column::auto().at_least(80.0))
-        .column(Column::auto().at_least(100.0))
-        .column(Column::auto().at_least(80.0))
-        .column(Column::auto().at_least(160.0))
-        .column(Column::remainder())
+        .column(Column::exact(36.0).clip(true).resizable(false))
+        .column(Column::remainder().at_least(140.0).clip(true))
+        .column(Column::auto().at_least(48.0).at_most(72.0).clip(true))
+        .column(Column::auto().at_least(64.0).at_most(88.0).clip(true))
+        .column(Column::auto().at_least(56.0).at_most(80.0).clip(true))
+        .column(Column::auto().at_least(56.0).at_most(88.0).clip(true))
+        .column(Column::remainder().at_least(80.0).clip(true))
         .header(32.0, |mut header| {
             header.col(|ui| {
                 ui.strong("");
@@ -218,7 +219,7 @@ fn fill_session_row(
         ui.label(&rec);
     });
     row.col(|ui| {
-        ui.label(&project);
+        ui.add(egui::Label::new(&project).truncate());
     });
     if row.response().clicked() {
         *selected = Some(id);

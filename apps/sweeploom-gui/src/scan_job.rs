@@ -113,6 +113,7 @@ fn take_scan(app: &mut SweepLoomApp) -> bool {
             let n = rows.len();
             app.project_roots = report.projects.clone();
             app.inventory = Some(report);
+            app.expanded_explorer.clear();
             app.review = rows;
             app.inventory_error = None;
             app.action_message = Some(format!("{n} candidates"));

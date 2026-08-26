@@ -32,15 +32,16 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let rows = order.len();
     let height = table_scroll_height(ui);
     TableBuilder::new(ui)
+        .id_salt("process-raw")
         .striped(true)
         .resizable(true)
         .min_scrolled_height(height)
         .max_scroll_height(height)
-        .column(Column::auto().at_least(80.0))
-        .column(Column::auto().at_least(180.0))
-        .column(Column::auto().at_least(100.0))
-        .column(Column::auto().at_least(80.0))
-        .column(Column::remainder())
+        .column(Column::auto().at_least(48.0).at_most(72.0).clip(true))
+        .column(Column::remainder().at_least(120.0).clip(true))
+        .column(Column::auto().at_least(64.0).at_most(88.0).clip(true))
+        .column(Column::auto().at_least(56.0).at_most(80.0).clip(true))
+        .column(Column::remainder().at_least(80.0).clip(true))
         .header(32.0, |mut header| {
             header.col(|ui| {
                 ui.strong("PID");
@@ -60,7 +61,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                         ui.label(process.pid.to_string());
                     });
                     row.col(|ui| {
-                        ui.label(&process.name);
+                        ui.add(egui::Label::new(&process.name).truncate());
                     });
                     row.col(|ui| {
                         ui.label(format_bytes(process.rss_bytes));
@@ -69,7 +70,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                         ui.label(format!("{:.1}%", process.cpu_percent));
                     });
                     row.col(|ui| {
-                        ui.monospace(process.command.join(" "));
+                        ui.add(egui::Label::new(process.command.join(" ")).truncate());
                     });
                 }
             });

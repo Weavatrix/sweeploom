@@ -2,12 +2,13 @@
 
 use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
-use sweeploom_storage::DirectoryNode;
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::sort::{Col, Sort, header_cell};
+use crate::sort::{Col, header_cell};
 use crate::widgets::{page_title, table_scroll_height};
+
+use super::explorer_rows::{self, Line};
 
 pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
@@ -17,7 +18,8 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     );
     ui.horizontal(|ui| {
         ui.label("Root");
-        ui.add(egui::TextEdit::singleline(&mut app.scan_root).desired_width(480.0));
+        let width = (ui.available_width() - 88.0).max(160.0);
+        ui.add(egui::TextEdit::singleline(&mut app.scan_root).desired_width(width));
         let scan = if app.scanning { "Scanning…" } else { "Scan" };
         if crate::widgets::pointer(ui.add_enabled(!app.scanning, egui::Button::new(scan))).clicked()
         {
@@ -30,46 +32,57 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     if let Some(error) = &app.inventory_error {
         ui.colored_label(ui.visuals().error_fg_color, error);
     }
-    if let Some(report) = &app.inventory {
-        ui.label(format!(
+    let summary = app.inventory.as_ref().map(|report| {
+        format!(
             "entries {} · projects {} · logical {}{}",
             report.entries,
             report.projects.len(),
             format_bytes(report.tree.logical_bytes),
             if report.capped { " · capped" } else { "" }
-        ));
+        )
+    });
+    if let Some(summary) = summary {
+        ui.label(summary);
         ui.add_space(8.0);
         ui.label(
-            RichText::new("Click a folder name to put its path in Root. Scan again to open it.")
+            RichText::new("Click a folder to expand it. Double-click to scan it as Root.")
                 .size(13.0)
                 .color(crate::theme::muted(ui)),
         );
-        folder_table(ui, &report.tree, &mut app.explorer_sort, &mut app.scan_root);
+        folder_table(app, ui);
     } else {
         ui.label("Scan a folder to open the inspector. Symlinks are not followed.");
     }
 }
 
-fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort, scan_root: &mut String) {
-    let mut rows = Vec::new();
-    collect_rows(root, 0, *sort, &mut rows);
-    let row_count = rows.len();
+fn folder_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
+    let mut sort = app.explorer_sort;
+    let expanded = app.expanded_explorer.clone();
+    let lines = {
+        let Some(report) = &app.inventory else {
+            return;
+        };
+        explorer_rows::visible_lines(&report.tree, sort, &expanded)
+    };
+    let row_count = lines.len();
     let height = table_scroll_height(ui);
+    let mut toggle = None;
     let mut picked = None;
     TableBuilder::new(ui)
+        .id_salt("explorer-tree")
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click())
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::auto().at_least(110.0))
-        .column(Column::remainder().at_least(220.0))
-        .column(Column::auto().at_least(120.0))
-        .column(Column::auto().at_least(80.0))
+        .column(Column::remainder().at_least(140.0).clip(true))
+        .column(Column::auto().at_least(56.0).at_most(88.0).clip(true))
+        .column(Column::auto().at_least(64.0).at_most(110.0).clip(true))
+        .column(Column::auto().at_least(48.0).at_most(72.0).clip(true))
         .header(32.0, |mut header| {
-            header.col(|ui| header_cell(ui, sort, Col::Size, "Size"));
-            header.col(|ui| header_cell(ui, sort, Col::Name, "Name"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Name"));
+            header.col(|ui| header_cell(ui, &mut sort, Col::Size, "Size"));
             header.col(|ui| {
                 ui.strong("Category");
             });
@@ -79,41 +92,58 @@ fn folder_table(ui: &mut egui::Ui, root: &DirectoryNode, sort: &mut Sort, scan_r
         })
         .body(|body| {
             body.rows(26.0, row_count, |mut row| {
-                let Some((depth, node)) = rows.get(row.index()) else {
+                let Some(line) = lines.get(row.index()) else {
                     return;
                 };
-                let name = node
-                    .path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or(".");
-                let indent = "    ".repeat(*depth);
-                row.col(|ui| {
-                    ui.label(format_bytes(node.logical_bytes));
-                });
-                row.col(|ui| {
-                    crate::icons::show(
-                        ui,
-                        category_glyph(node.category),
-                        14.0,
-                        crate::theme::accent(),
-                    );
-                    ui.label(RichText::new(format!("{indent}{name}")).size(16.0));
-                });
-                row.col(|ui| {
-                    ui.label(node.category.label());
-                });
-                row.col(|ui| {
-                    ui.label(node.files.to_string());
-                });
-                if row.response().clicked() {
-                    picked = Some(node.path.display().to_string());
+                fill_line(&mut row, line);
+                if row.response().double_clicked() {
+                    picked = Some(line.path.display().to_string());
+                } else if row.response().clicked() && line.has_children {
+                    toggle = Some(explorer_rows::path_key(&line.path));
+                } else if row.response().clicked() {
+                    picked = Some(line.path.display().to_string());
                 }
             });
         });
-    if let Some(path) = picked {
-        *scan_root = path;
+    app.explorer_sort = sort;
+    if let Some(key) = toggle
+        && !app.expanded_explorer.remove(&key)
+    {
+        app.expanded_explorer.insert(key);
     }
+    if let Some(path) = picked {
+        app.scan_root = path;
+    }
+}
+
+fn fill_line(row: &mut egui_extras::TableRow<'_, '_>, line: &Line) {
+    let mark = if !line.has_children {
+        "  "
+    } else if line.expanded {
+        "▾ "
+    } else {
+        "▸ "
+    };
+    let name = format!("{mark}{}", line.name);
+    let size = format_bytes(line.bytes);
+    let files = line.files.to_string();
+    let category = line.category.label();
+    let depth = line.depth;
+    let glyph = category_glyph(line.category);
+    row.col(|ui| {
+        ui.add_space(depth as f32 * 12.0);
+        crate::icons::show(ui, glyph, 14.0, crate::theme::accent());
+        ui.add(egui::Label::new(RichText::new(name).size(16.0)).truncate());
+    });
+    row.col(|ui| {
+        ui.label(size);
+    });
+    row.col(|ui| {
+        ui.label(category);
+    });
+    row.col(|ui| {
+        ui.label(files);
+    });
 }
 
 fn category_glyph(category: sweeploom_storage::PathCategory) -> crate::icons::Glyph {
@@ -124,28 +154,5 @@ fn category_glyph(category: sweeploom_storage::PathCategory) -> crate::icons::Gl
         PathCategory::Dependencies => Glyph::Projects,
         PathCategory::UserData => Glyph::Volume,
         PathCategory::Source | PathCategory::Unknown => Glyph::Explorer,
-    }
-}
-
-fn collect_rows<'a>(
-    node: &'a DirectoryNode,
-    depth: usize,
-    sort: Sort,
-    out: &mut Vec<(usize, &'a DirectoryNode)>,
-) {
-    if depth > 5 {
-        return;
-    }
-    let mut children: Vec<&DirectoryNode> = node.children.iter().collect();
-    children.sort_by(|left, right| match sort.col {
-        Col::Name => left.path.file_name().cmp(&right.path.file_name()),
-        _ => left.logical_bytes.cmp(&right.logical_bytes),
-    });
-    if sort.desc {
-        children.reverse();
-    }
-    for child in children {
-        out.push((depth, child));
-        collect_rows(child, depth + 1, sort, out);
     }
 }
