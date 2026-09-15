@@ -7,7 +7,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+publish = true
 description = "Capability-gated process connection and listener inventory"
 
 # Workspace rust.unsafe_code is forbid and cannot be overridden. This crate

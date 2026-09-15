@@ -8,41 +8,42 @@ use crate::format::format_bytes;
 use crate::nav::Nav;
 use crate::sort::{Col, Sort, header_cell};
 use crate::theme;
-use crate::widgets::{page_title, sparkline, table_scroll_height};
-use eframe::egui;
+use crate::widgets::{disclose, page_title, sparkline, table_scroll_height};
+use eframe::egui::{self, RichText};
 use egui_extras::{Column, TableBuilder};
 
-struct HistRow {
-    name: String,
-    pid: u32,
-    rss: u64,
-    peak: u64,
-    cpu: f32,
-    avg_5m: String,
-    samples: usize,
-    spark: Vec<f32>,
-    session: Option<SessionId>,
-}
+use super::history_rows::{self, HistRow, Line};
 
 pub fn ui_history(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "History",
-        "Rings start when SweepLoom first sees a process. Averages stay unavailable until watched long enough. Click a row to open its session.",
+        "Groups start collapsed. Click a group to expand it. Click a member to open its session.",
     );
-    ui.label(format!("Tracked processes: {}", app.history.len()));
-    ui.add_space(8.0);
     let Some(snapshot) = &app.snapshot else {
         ui.label("No live snapshot yet.");
         return;
     };
-    let mut rows = collect_rows(app, snapshot.processes.as_slice());
+    let rows = collect_rows(app, snapshot.processes.as_slice());
     let mut sort = app.history_sort;
-    sort_rows(&mut rows, sort);
+    let expanded = app.expanded_history.clone();
+    let lines = history_rows::table_lines(
+        &rows,
+        &app.sessions,
+        snapshot.processes.as_slice(),
+        sort,
+        &expanded,
+    );
     let mut go = None;
     let mut raw = false;
-    draw_table(ui, &rows, &mut sort, &mut go, &mut raw);
+    let mut toggle = None;
+    draw_table(ui, &lines, &mut sort, &mut go, &mut raw, &mut toggle);
     app.history_sort = sort;
+    if let Some(key) = toggle
+        && !app.expanded_history.remove(&key)
+    {
+        app.expanded_history.insert(key);
+    }
     if go.is_some() || raw {
         app.selected_session = go;
         app.group_raw = raw;
@@ -82,44 +83,31 @@ fn spark_values(fast: &[Sample]) -> Vec<f32> {
     fast[start..].iter().map(|item| item.cpu_percent).collect()
 }
 
-fn sort_rows(rows: &mut [HistRow], sort: Sort) {
-    rows.sort_by(|left, right| match sort.col {
-        Col::Name => left.name.cmp(&right.name),
-        Col::Cpu => left
-            .cpu
-            .partial_cmp(&right.cpu)
-            .unwrap_or(std::cmp::Ordering::Equal),
-        Col::Status | Col::Procs => left.samples.cmp(&right.samples),
-        Col::Size => left.rss.cmp(&right.rss),
-    });
-    if sort.desc {
-        rows.reverse();
-    }
-}
-
 fn draw_table(
     ui: &mut egui::Ui,
-    rows: &[HistRow],
+    lines: &[Line],
     sort: &mut Sort,
     go: &mut Option<SessionId>,
     raw: &mut bool,
+    toggle: &mut Option<String>,
 ) {
     let height = table_scroll_height(ui);
-    let count = rows.len();
+    let count = lines.len();
     TableBuilder::new(ui)
+        .id_salt("history-grid")
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click())
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::remainder().at_least(140.0))
-        .column(Column::auto().at_least(80.0))
-        .column(Column::auto().at_least(80.0))
-        .column(Column::auto().at_least(70.0))
-        .column(Column::auto().at_least(90.0))
-        .column(Column::auto().at_least(88.0))
-        .column(Column::auto().at_least(70.0))
+        .column(Column::remainder().at_least(140.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .column(Column::exact(64.0).clip(true))
+        .column(Column::exact(64.0).clip(true))
+        .column(Column::exact(88.0).clip(true))
+        .column(Column::exact(64.0).clip(true))
         .header(32.0, |mut header| {
             header.col(|ui| header_cell(ui, sort, Col::Name, "Process"));
             header.col(|ui| header_cell(ui, sort, Col::Size, "RSS"));
@@ -134,37 +122,105 @@ fn draw_table(
             header.col(|ui| header_cell(ui, sort, Col::Status, "Samples"));
         })
         .body(|body| {
-            body.rows(28.0, count, |mut row| {
-                let Some(item) = rows.get(row.index()) else {
-                    return;
-                };
-                row.col(|ui| {
-                    ui.label(format!("{}  pid {}", item.name, item.pid));
-                });
-                row.col(|ui| {
-                    ui.label(format_bytes(item.rss));
-                });
-                row.col(|ui| {
-                    ui.label(format_bytes(item.peak));
-                });
-                row.col(|ui| {
-                    ui.label(format!("{:.1}%", item.cpu));
-                });
-                row.col(|ui| {
-                    ui.label(&item.avg_5m);
-                });
-                row.col(|ui| {
-                    sparkline(ui, &item.spark, egui::vec2(80.0, 18.0), theme::accent());
-                });
-                row.col(|ui| {
-                    ui.label(item.samples.to_string());
-                });
-                if row.response().clicked() {
-                    *go = item.session;
-                    *raw = item.session.is_none();
+            body.rows(crate::widgets::TABLE_ROW, count, |mut row| {
+                match lines.get(row.index()) {
+                    Some(line @ Line::Group { key, .. }) => {
+                        fill_group(&mut row, line, toggle);
+                        if row.response().clicked() {
+                            *toggle = Some(key.clone());
+                        }
+                    }
+                    Some(Line::Item(item)) => fill_item(&mut row, item, go, raw),
+                    None => {}
                 }
             });
         });
+}
+
+fn fill_group(row: &mut egui_extras::TableRow<'_, '_>, line: &Line, toggle: &mut Option<String>) {
+    let Line::Group {
+        key,
+        title,
+        kind,
+        rss,
+        peak,
+        cpu,
+        avg_5m,
+        spark,
+        samples,
+        count,
+        expanded,
+    } = line
+    else {
+        return;
+    };
+    row.col(|ui| {
+        if disclose(ui, *expanded, theme::accent()) {
+            *toggle = Some(key.clone());
+        }
+        crate::brand::show_group(ui, title, *kind, 16.0);
+        ui.add(
+            egui::Label::new(RichText::new(format!("{title}  ·  {count}")).strong())
+                .truncate()
+                .selectable(false),
+        );
+    });
+    row.col(|ui| {
+        ui.label(format_bytes(*rss));
+    });
+    row.col(|ui| {
+        ui.label(format_bytes(*peak));
+    });
+    row.col(|ui| {
+        ui.label(format!("{cpu:.1}%"));
+    });
+    row.col(|ui| {
+        ui.label(avg_5m);
+    });
+    row.col(|ui| {
+        sparkline(ui, spark, egui::vec2(80.0, 18.0), theme::accent());
+    });
+    row.col(|ui| {
+        ui.label(samples.to_string());
+    });
+}
+
+fn fill_item(
+    row: &mut egui_extras::TableRow<'_, '_>,
+    item: &HistRow,
+    go: &mut Option<SessionId>,
+    raw: &mut bool,
+) {
+    row.col(|ui| {
+        ui.add_space(16.0);
+        ui.add(
+            egui::Label::new(format!("{}  pid {}", item.name, item.pid))
+                .truncate()
+                .selectable(false),
+        );
+    });
+    row.col(|ui| {
+        ui.label(format_bytes(item.rss));
+    });
+    row.col(|ui| {
+        ui.label(format_bytes(item.peak));
+    });
+    row.col(|ui| {
+        ui.label(format!("{:.1}%", item.cpu));
+    });
+    row.col(|ui| {
+        ui.label(&item.avg_5m);
+    });
+    row.col(|ui| {
+        sparkline(ui, &item.spark, egui::vec2(80.0, 18.0), theme::accent());
+    });
+    row.col(|ui| {
+        ui.label(item.samples.to_string());
+    });
+    if row.response().clicked() {
+        *go = item.session;
+        *raw = item.session.is_none();
+    }
 }
 
 fn avg_short(value: Option<f32>) -> String {

@@ -7,6 +7,21 @@ use sweeploom_core::SafetyAssessment;
 /// Human-readable byte count for cards and tables.
 #[must_use]
 pub fn format_bytes(bytes: u64) -> String {
+    format_bytes_inner(bytes)
+}
+
+/// Lower-bound size. Incomplete walks must not look exact.
+#[must_use]
+pub fn format_bytes_bound(bytes: u64, complete: bool) -> String {
+    let text = format_bytes_inner(bytes);
+    if complete {
+        text
+    } else {
+        format!("≥ {text}")
+    }
+}
+
+fn format_bytes_inner(bytes: u64) -> String {
     const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
     const MIB: f64 = 1024.0 * 1024.0;
     let value = bytes as f64;
@@ -32,6 +47,16 @@ pub fn row_caption(title: &str) -> String {
     title.split(" · ").next().unwrap_or(title).to_owned()
 }
 
+/// True when `text` is a global scan/rebuild status that should not occupy a page.
+#[must_use]
+pub fn is_scan_chatter(text: &str) -> bool {
+    let text = text.trim();
+    text.ends_with("candidates")
+        || text.contains("Folders ready")
+        || text.starts_with("Scanning ")
+        || text.starts_with("Rebuilding review in the background")
+}
+
 /// Human safety cell. Avoids Debug truncation.
 #[must_use]
 pub fn safety_text(assessment: &SafetyAssessment) -> String {
@@ -49,5 +74,20 @@ pub fn safety_text(assessment: &SafetyAssessment) -> String {
         }
     } else {
         assessment.level.label().to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inventory_status_is_chatter() {
+        assert!(is_scan_chatter("252 candidates"));
+        assert!(is_scan_chatter(
+            "Folders ready. Building Review in the background…"
+        ));
+        assert!(!is_scan_chatter("selected 1.2 GB toward 2.0 GB"));
+        assert!(!is_scan_chatter("deleted=1 skipped_changed=0 failed=0"));
     }
 }

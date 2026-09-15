@@ -34,6 +34,14 @@ fn inventory_finds_cargo_project_and_target_bytes() {
         "logical={}",
         report.tree.logical_bytes
     );
+    assert!(
+        report
+            .project_bytes
+            .iter()
+            .any(|(path, bytes)| paths_match(path, &root) && *bytes >= 4096),
+        "project bytes missing: {:?}",
+        report.project_bytes
+    );
     let target = report.tree.children.iter().find(|child| {
         child
             .path
@@ -119,6 +127,33 @@ fn developer_roots_prefers_github_over_documents() {
 }
 
 #[test]
+fn cap_keeps_visited_bytes() {
+    let root = std::env::temp_dir().join(format!("sweeploom-cap-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let deep = root.join("a").join("b").join("c");
+    fs::create_dir_all(&deep).unwrap();
+    fs::write(deep.join("big.bin"), vec![0_u8; 2048]).unwrap();
+    let report = scan_inventory(
+        &root,
+        InventoryLimits {
+            max_entries: Some(1),
+            max_children_per_dir: 64,
+            max_projects: 8,
+            large_file_bytes: 32 * 1024 * 1024,
+        },
+    )
+    .expect("scan");
+    assert!(report.capped);
+    assert!(report.tree.incomplete);
+    assert!(
+        report.tree.logical_bytes >= 2048,
+        "visited bytes must survive a cap, got {}",
+        report.tree.logical_bytes
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn review_scan_roots_uses_developer_folders_for_home() {
     let home = std::env::temp_dir().join(format!("sweeploom-review-roots-{}", std::process::id()));
     let _ = fs::remove_dir_all(&home);
@@ -130,4 +165,82 @@ fn review_scan_roots_uses_developer_folders_for_home() {
     let scoped = super::review_scan_roots(&other, &home);
     assert_eq!(scoped, vec![other]);
     let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn gui_scan_has_no_entry_cap() {
+    assert!(super::InventoryLimits::gui().max_entries.is_none());
+}
+
+#[test]
+fn scan_preview_keeps_immediate_children_only() {
+    let root = std::env::temp_dir().join(format!(
+        "sweeploom-preview-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|item| item.as_nanos())
+            .unwrap_or(0)
+    ));
+    fs::create_dir_all(root.join("alpha").join("nested")).unwrap();
+    fs::write(root.join("alpha").join("nested").join("a.bin"), [0_u8; 8]).unwrap();
+    let report = super::scan_inventory(&root, super::InventoryLimits::gui()).expect("scan");
+    let preview = report.tree.preview();
+    fs::remove_dir_all(&root).ok();
+    assert!(!preview.children.is_empty());
+    assert!(
+        preview
+            .children
+            .iter()
+            .all(|child| child.children.is_empty())
+    );
+}
+
+fn child<'a>(node: &'a super::DirectoryNode, name: &str) -> &'a super::DirectoryNode {
+    node.children
+        .iter()
+        .find(|item| {
+            item.path
+                .file_name()
+                .and_then(|file| file.to_str())
+                .is_some_and(|file| file.eq_ignore_ascii_case(name))
+        })
+        .unwrap_or_else(|| panic!("{name} missing under {}", node.path.display()))
+}
+
+#[test]
+fn bulky_home_trees_do_not_keep_nested_inspector_rows() {
+    let root = std::env::temp_dir().join(format!(
+        "sweeploom-flat-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|item| item.as_nanos())
+            .unwrap_or(0)
+    ));
+    let docker = root
+        .join("AppData")
+        .join("Local")
+        .join("Docker")
+        .join("overlay2")
+        .join("layer");
+    let pkg = root
+        .join("AppData")
+        .join("Local")
+        .join("Packages")
+        .join("Claude_x")
+        .join("LocalState");
+    fs::create_dir_all(&docker).unwrap();
+    fs::create_dir_all(&pkg).unwrap();
+    fs::write(docker.join("blob"), [0_u8; 32]).unwrap();
+    fs::write(pkg.join("state"), [0_u8; 16]).unwrap();
+    let report = super::scan_inventory(&root, super::InventoryLimits::gui()).expect("scan");
+    let local = child(child(&report.tree, "AppData"), "Local");
+    assert!(child(local, "Docker").children.is_empty());
+    assert!(
+        child(child(local, "Packages"), "Claude_x")
+            .children
+            .is_empty()
+    );
+    let _ = fs::remove_dir_all(&root);
 }

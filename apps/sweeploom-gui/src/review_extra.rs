@@ -9,7 +9,7 @@ use sweeploom_general::collect_offers;
 use sweeploom_platform::UserLocations;
 use sweeploom_storage::{discover_projects_from, review_scan_roots};
 
-const MAX_PROJECTS: usize = 120;
+const MAX_PROJECTS: usize = 512;
 
 /// Result of Review discovery.
 pub struct ReviewBuild {
@@ -44,10 +44,15 @@ pub fn assemble(
     if let Ok(cwd) = std::env::current_dir() {
         prepend_unique(&mut roots, Some(cwd.as_path()));
     }
-    for project in inventory_projects {
-        push_unique(&mut roots, project);
-    }
-    let mut projects = discover_projects_from(&roots, MAX_PROJECTS);
+    let mut projects = if inventory_projects.is_empty() {
+        discover_projects_from(&roots, MAX_PROJECTS)
+    } else {
+        inventory_projects
+            .iter()
+            .take(MAX_PROJECTS)
+            .cloned()
+            .collect()
+    };
     prepend_project(&mut projects, current_project);
     if let Ok(cwd) = std::env::current_dir() {
         prepend_project(&mut projects, Some(cwd.as_path()));
@@ -58,9 +63,15 @@ pub fn assemble(
 }
 
 fn looks_like_project(path: &Path) -> bool {
-    ["Cargo.toml", "package.json", "pyproject.toml", "Pipfile"]
-        .iter()
-        .any(|marker| path.join(marker).is_file())
+    [
+        "Cargo.toml",
+        "package.json",
+        "pyproject.toml",
+        "Pipfile",
+        "go.mod",
+    ]
+    .iter()
+    .any(|marker| path.join(marker).is_file())
 }
 
 fn prepend_unique(roots: &mut Vec<PathBuf>, path: Option<&Path>) {
@@ -72,12 +83,6 @@ fn prepend_unique(roots: &mut Vec<PathBuf>, path: Option<&Path>) {
     }
     roots.retain(|item| item != path);
     roots.insert(0, path.to_path_buf());
-}
-
-fn push_unique(roots: &mut Vec<PathBuf>, path: &Path) {
-    if !roots.iter().any(|item| item == path) {
-        roots.push(path.to_path_buf());
-    }
 }
 
 fn prepend_project(projects: &mut Vec<PathBuf>, path: Option<&Path>) {

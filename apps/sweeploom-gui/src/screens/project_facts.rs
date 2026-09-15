@@ -1,5 +1,6 @@
 //! Artifact size and Cargo unit labels for the Projects table.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use sweeploom_dev::{read_manifest, workspace_root};
@@ -27,9 +28,21 @@ impl Acc {
     }
 }
 
-pub(super) fn folder_label(path: &Path) -> String {
-    path.parent()
-        .and_then(|parent| parent.file_name())
+/// Walk past nested project roots so `GitHub/app/e2e` groups under GitHub, not `app`.
+pub(super) fn cluster_parent(path: &Path, projects: &HashSet<PathBuf>) -> PathBuf {
+    let mut dir = path.parent().map(Path::to_path_buf);
+    while let Some(parent) = dir {
+        if !projects.iter().any(|item| item == &parent) {
+            return parent;
+        }
+        dir = parent.parent().map(Path::to_path_buf);
+    }
+    path.to_path_buf()
+}
+
+pub(super) fn cluster_title(parent: &Path) -> String {
+    parent
+        .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("root")
         .to_owned()
@@ -112,5 +125,16 @@ mod tests {
             },
         ];
         assert_eq!(reclaimable_bytes(&bits), 10_000);
+    }
+
+    #[test]
+    fn nested_project_clusters_under_github() {
+        let github = PathBuf::from("Documents/GitHub");
+        let frontend = github.join("frontend");
+        let e2e = frontend.join("test-e2e");
+        let projects = HashSet::from([frontend.clone(), e2e.clone()]);
+        assert_eq!(cluster_parent(&frontend, &projects), github);
+        assert_eq!(cluster_parent(&e2e, &projects), github);
+        assert_eq!(cluster_title(&github), "GitHub");
     }
 }

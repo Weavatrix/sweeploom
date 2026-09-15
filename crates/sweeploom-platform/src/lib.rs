@@ -110,14 +110,92 @@ pub fn disk_space(_path: &Path) -> Option<DiskSpace> {
     None
 }
 
+/// What this backend can actually do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProcessControlCapabilities {
+    /// A supported polite stop exists (SIGTERM / Ctrl+C / app shutdown).
+    pub graceful_stop: bool,
+    /// Force kill is available.
+    pub force_kill: bool,
+}
+
+impl ProcessControlCapabilities {
+    /// Conservative default until a backend reports otherwise.
+    #[must_use]
+    pub const fn unknown() -> Self {
+        Self {
+            graceful_stop: false,
+            force_kill: false,
+        }
+    }
+
+    /// Host capabilities for the current OS.
+    #[must_use]
+    pub const fn host() -> Self {
+        Self {
+            graceful_stop: !cfg!(windows),
+            force_kill: true,
+        }
+    }
+}
+
 /// Process-control backend. Never default to force-kill.
 pub trait ProcessControlBackend {
+    /// What this backend supports. Unsupported graceful is not a successful Term.
+    fn capabilities(&self) -> ProcessControlCapabilities {
+        ProcessControlCapabilities::host()
+    }
     /// Ask the process to stop politely (Ctrl+C / SIGTERM / WM_CLOSE).
     fn request_graceful_stop(&self, key: ProcessKey) -> Result<()>;
     /// Terminate after the graceful timeout.
     fn terminate(&self, key: ProcessKey) -> Result<()>;
     /// Force kill. Only after explicit escalation.
     fn force_kill(&self, key: ProcessKey) -> Result<()>;
+}
+
+/// Native file identity. Missing fields mean identity is unknown.
+#[must_use]
+pub fn file_identity(path: &Path) -> Option<sweeploom_core::FileIdentity> {
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if meta.file_type().is_symlink() {
+        return None;
+    }
+    let (volume, file_id) = native_identity(path, &meta)?;
+    Some(sweeploom_core::FileIdentity {
+        volume,
+        file_id,
+        is_dir: meta.is_dir(),
+    })
+}
+
+#[cfg(windows)]
+fn native_identity(path: &Path, meta: &std::fs::Metadata) -> Option<(u64, u64)> {
+    use std::os::windows::fs::MetadataExt;
+    // `volume_serial_number` / `file_index` are still unstable. Creation time
+    // plus a path fingerprint identifies the same directory object for plan/apply.
+    let created = meta.creation_time();
+    if created == 0 {
+        return None;
+    }
+    Some((path_fingerprint(path), created))
+}
+
+#[cfg(unix)]
+fn native_identity(_path: &Path, meta: &std::fs::Metadata) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    Some((meta.dev(), meta.ino()))
+}
+
+#[cfg(not(any(windows, unix)))]
+fn native_identity(_path: &Path, _meta: &std::fs::Metadata) -> Option<(u64, u64)> {
+    None
+}
+
+fn path_fingerprint(path: &Path) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Network capability reported to the UI. Missing data is not "zero activity".

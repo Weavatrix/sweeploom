@@ -10,51 +10,93 @@ use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use sweeploom_dev::inspect;
 
-/// Planner toolbar: Free X GB RAM, Reduce CPU, terminate planned.
-pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.label("Free");
-        ui.add(egui::TextEdit::singleline(&mut app.free_ram_gb).desired_width(40.0));
-        ui.label("GB RAM");
-        if crate::widgets::pointer(ui.button("Select to free RAM")).clicked() {
-            app.plan_free_ram();
-        }
-        ui.separator();
-        ui.label("Cut");
-        ui.add(egui::TextEdit::singleline(&mut app.reduce_cpu).desired_width(40.0));
-        ui.label("% CPU");
-        if crate::widgets::pointer(ui.button("Select to reduce CPU")).clicked() {
-            app.plan_reduce_cpu();
-        }
-        ui.separator();
-        if crate::widgets::pointer(ui.button("Quiet workstation")).clicked() {
-            app.plan_quiet();
-        }
-    });
+/// Compact planner buttons. Extra confirm UI is [`extras`].
+pub fn controls(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
+    ui.add(egui::TextEdit::singleline(&mut app.free_ram_gb).desired_width(36.0));
+    ui.label("GB");
+    if hover_btn(
+        ui,
+        "Free RAM",
+        "Pre-select forgotten sessions for this much RAM. Terminate is never automatic.",
+    ) {
+        app.plan_free_ram();
+    }
+    ui.add(egui::TextEdit::singleline(&mut app.reduce_cpu).desired_width(32.0));
+    ui.label("%");
+    if hover_btn(
+        ui,
+        "Cut CPU",
+        "Pre-select forgotten sessions until this CPU share. Terminate is never automatic.",
+    ) {
+        app.plan_reduce_cpu();
+    }
+    if hover_btn(
+        ui,
+        "Quiet",
+        "Pre-select forgotten sessions. Protects the current project and browsers. Terminate is never automatic.",
+    ) {
+        app.plan_quiet();
+    }
+    let (count, rss, cpu) = planned_totals(app);
+    if let Some(text) = planned_caption(count, rss, cpu) {
+        ui.label(
+            RichText::new(text)
+                .size(13.0)
+                .color(crate::theme::muted(ui)),
+        );
+    }
+}
+
+/// Confirm / force / planner messages. Hidden when idle.
+pub fn extras(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let planned: Vec<LiveSession> = app
         .sessions
         .iter()
         .filter(|session| session_planned(session, &app.planned_keys))
         .cloned()
         .collect();
-    let rss: u64 = planned
-        .iter()
-        .map(|session| session.recommendation.estimated_reclaimable_rss)
-        .sum();
-    let cpu: f32 = planned.iter().map(|session| session.cpu_percent).sum();
-    ui.label(format!(
-        "{} planned · ~{} RAM · {:.1}% CPU — terminate is never automatic",
-        planned.len(),
-        format_bytes(rss),
-        cpu
-    ));
     if !planned.is_empty() {
         draw_confirm(app, ui, &planned);
     }
     let _ = super::session_actions::draw_force(app, ui);
-    if let Some(message) = &app.action_message {
+    if let Some(message) = &app.action_message
+        && is_session_message(message)
+    {
         ui.label(message);
     }
+}
+
+fn hover_btn(ui: &mut egui::Ui, label: &str, help: &str) -> bool {
+    crate::widgets::pointer(ui.button(label))
+        .on_hover_text(help)
+        .clicked()
+}
+
+fn planned_totals(app: &SweepLoomApp) -> (usize, u64, f32) {
+    let planned: Vec<&LiveSession> = app
+        .sessions
+        .iter()
+        .filter(|session| session_planned(session, &app.planned_keys))
+        .collect();
+    let rss = planned
+        .iter()
+        .map(|session| session.recommendation.estimated_reclaimable_rss)
+        .sum();
+    let cpu = planned.iter().map(|session| session.cpu_percent).sum();
+    (planned.len(), rss, cpu)
+}
+
+#[must_use]
+fn planned_caption(count: usize, rss: u64, cpu: f32) -> Option<String> {
+    (count > 0).then(|| format!("{count} · {} · {:.0}% CPU", format_bytes(rss), cpu))
+}
+
+fn is_session_message(text: &str) -> bool {
+    text.contains("planned")
+        || text.starts_with("Asked ")
+        || text.starts_with("Stop failed")
+        || text.starts_with("Nothing planned")
+        || text.starts_with("Enter a size")
 }
 
 /// Checkbox for one session row. System-critical stays disabled.
@@ -66,6 +108,35 @@ pub fn checkbox(ui: &mut egui::Ui, session: &LiveSession, planned: &mut HashSet<
         .changed()
     {
         set_planned(session, planned, on);
+    }
+}
+
+/// Checkbox that plans every member of a title group.
+pub fn checkbox_group(
+    ui: &mut egui::Ui,
+    sessions: &[LiveSession],
+    indexes: &[usize],
+    planned: &mut HashSet<ProcessKey>,
+) {
+    let members: Vec<&LiveSession> = indexes.iter().filter_map(|&i| sessions.get(i)).collect();
+    if members.is_empty() {
+        return;
+    }
+    let mut on = members
+        .iter()
+        .all(|session| session_planned(session, planned));
+    let enabled = members
+        .iter()
+        .any(|session| !session.safety.terminate_disabled);
+    if ui
+        .add_enabled(enabled, egui::Checkbox::new(&mut on, ""))
+        .changed()
+    {
+        for session in members {
+            if !session.safety.terminate_disabled {
+                set_planned(session, planned, on);
+            }
+        }
     }
 }
 
@@ -186,4 +257,25 @@ fn apply_ids(app: &mut SweepLoomApp, ids: Vec<sweeploom_core::SessionId>, bad_ta
         }
     }
     app.action_message = Some(format!("{} session(s) planned", ids.len()));
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn explorer_status_stays_off_sessions() {
+        assert!(!super::is_session_message("252 candidates"));
+        assert!(!super::is_session_message(
+            "Folders ready. Building Review in the background…"
+        ));
+        assert!(super::is_session_message("3 session(s) planned"));
+    }
+
+    #[test]
+    fn idle_plan_has_no_caption() {
+        assert_eq!(super::planned_caption(0, 0, 0.0), None);
+        assert_eq!(
+            super::planned_caption(2, 2 * 1024 * 1024 * 1024, 4.0).as_deref(),
+            Some("2 · 2.0 GB · 4% CPU")
+        );
+    }
 }

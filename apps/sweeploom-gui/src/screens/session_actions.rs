@@ -1,8 +1,9 @@
 //! Explicit session terminate. Never automatic. Git dirty is a warning.
 
 use eframe::egui::{self, RichText};
-use sweeploom_core::{LiveSession, SessionKind};
+use sweeploom_core::{LiveSession, PendingTermination, SessionKind};
 use sweeploom_dev::inspect;
+use sweeploom_platform::ProcessControlCapabilities;
 use sweeploom_process::{
     SysinfoProcessControl, force_stop_session, still_running, stop_session_gracefully,
 };
@@ -29,8 +30,15 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         )
         .clicked()
         {
-            app.confirm_terminate = true;
+            let root = session.processes.first().copied();
+            app.pending_stop =
+                root.and_then(|root| PendingTermination::freeze(root, &session.processes));
+            app.confirm_terminate = app.pending_stop.is_some();
             app.confirm_force = false;
+            if app.pending_stop.is_none() {
+                app.action_message =
+                    Some("Cannot confirm: a process is missing a stable start time.".to_owned());
+            }
         }
     });
     if !app.confirm_terminate {
@@ -39,18 +47,40 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         }
         return;
     }
+    let Some(pending) = app.pending_stop.clone() else {
+        app.confirm_terminate = false;
+        return;
+    };
+    if !pending.still_valid(&session.processes) {
+        app.pending_stop = None;
+        app.confirm_terminate = false;
+        ui.colored_label(
+            ui.visuals().warn_fg_color,
+            "Confirmation cancelled: the session membership changed.",
+        );
+        return;
+    }
     ui.label(format!(
-        "Terminate {} ({} processes, {})?",
+        "Terminate {} ({} frozen process keys, {})?",
         session.label(),
-        session.processes.len(),
+        pending.approved_keys.len(),
         format_bytes(session.rss_bytes)
     ));
+    let graceful = ProcessControlCapabilities::host().graceful_stop;
     ui.horizontal(|ui| {
         if crate::widgets::pointer(ui.button("Cancel")).clicked() {
             app.confirm_terminate = false;
+            app.pending_stop = None;
         }
-        if crate::widgets::pointer(ui.button("Terminate gracefully")).clicked() {
-            apply_stop(app, &session.processes, false);
+        if graceful {
+            if crate::widgets::pointer(ui.button("Terminate gracefully")).clicked() {
+                apply_stop(app, &pending.approved_keys, false);
+            }
+        } else {
+            ui.label(
+                RichText::new("Graceful stop is unsupported on Windows.")
+                    .color(ui.visuals().warn_fg_color),
+            );
         }
     });
 }
@@ -113,6 +143,7 @@ pub(crate) fn apply_stop(app: &mut SweepLoomApp, keys: &[sweeploom_core::Process
     });
     app.pending_force = Some(keys.to_vec());
     app.confirm_terminate = false;
+    app.pending_stop = None;
     app.confirm_force = false;
     app.confirm_planned = false;
     app.confirm_helpers = false;

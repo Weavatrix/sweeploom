@@ -7,7 +7,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+publish = true
 description = "Immutable CleanPlan, apply-time revalidation, and receipts"
 
 [lints]

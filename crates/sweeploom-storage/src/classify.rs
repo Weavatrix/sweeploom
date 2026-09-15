@@ -45,10 +45,47 @@ pub fn classify_path_component(name: &str) -> PathCategory {
         "node_modules" | ".venv" | "venv" | "vendor" | ".gradle" | ".pnpm-store" => {
             PathCategory::Dependencies
         }
-        "cache" | ".cache" | "caches" => PathCategory::Cache,
+        "cache" | ".cache" | "caches" | "docker" | "overlay2" => PathCategory::Cache,
         "downloads" | "documents" | "desktop" | "pictures" => PathCategory::UserData,
         _ => PathCategory::Unknown,
     }
+}
+
+/// True when the inspector should keep nested folders under `path`.
+///
+/// Caches, dependency trees, and Windows package payloads stay one row so a
+/// home scan cannot freeze the UI with a hundred-thousand-node tree.
+#[must_use]
+pub fn keep_nested_children(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return true;
+    };
+    if matches!(
+        classify_path_component(name),
+        PathCategory::Generated | PathCategory::Dependencies | PathCategory::Cache
+    ) {
+        return false;
+    }
+    let lower = name.to_ascii_lowercase();
+    if matches!(
+        lower.as_str(),
+        ".git"
+            | "inetcache"
+            | "code cache"
+            | "gpucache"
+            | "shadercache"
+            | "cacheddata"
+            | "blob_storage"
+            | "localstate"
+            | "tempstate"
+            | "containers"
+    ) {
+        return false;
+    }
+    path.parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|parent| parent.to_str())
+        .is_none_or(|parent| !parent.eq_ignore_ascii_case("packages"))
 }
 
 /// True when `path` is a known project marker file.
@@ -81,5 +118,21 @@ mod tests {
         assert_eq!(classify_path_component("target"), PathCategory::Generated);
         assert!(is_source_extension(Path::new("src/lib.rs")));
         assert!(is_project_marker(Path::new("/work/app/Cargo.toml")));
+    }
+
+    #[test]
+    fn bulky_windows_trees_are_leaves() {
+        assert!(!keep_nested_children(Path::new(
+            r"C:\Users\me\AppData\Local\Docker"
+        )));
+        assert!(!keep_nested_children(Path::new(
+            r"C:\Users\me\AppData\Local\Packages\Claude_x"
+        )));
+        assert!(keep_nested_children(Path::new(
+            r"C:\Users\me\AppData\Local\Packages"
+        )));
+        assert!(keep_nested_children(Path::new(
+            r"C:\Users\me\Documents\GitHub"
+        )));
     }
 }

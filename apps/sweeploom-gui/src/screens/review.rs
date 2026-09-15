@@ -2,81 +2,90 @@
 
 use eframe::egui::{self, RichText};
 use sweeploom_core::DeletionStrategy;
-use sweeploom_exec::{apply_plan, build_plan};
+use sweeploom_core::auto_eligible;
 
 use crate::app::SweepLoomApp;
 use crate::format::{format_bytes, row_caption, safety_text, short_path};
 use crate::sort::{Col, Sort, header_cell};
 use crate::theme;
-use crate::widgets::{page_title, table_scroll_height};
+use crate::widgets::{self, page_title, table_scroll_height};
 use egui_extras::{Column, TableBuilder};
 use sweeploom_dev::ReviewRow;
 
 pub fn ui_review(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
-        "Storage review",
-        "Cargo/Node/Python generated output. Stripes are not selection. npm is here, not Browser.",
+        "Review",
+        "Cargo/Node/Python generated output. npm is here, not Browser. Checkbox selects; stripes are not selection.",
     );
-    ui.horizontal_wrapped(|ui| {
-        let rebuild = if app.scanning {
-            "Rebuilding…"
-        } else {
-            "Rebuild review"
-        };
-        if crate::widgets::pointer(ui.add_enabled(!app.scanning, egui::Button::new(rebuild)))
-            .clicked()
-        {
-            app.rebuild_review();
-        }
-        if crate::widgets::pointer(ui.button("Clean selected")).clicked() {
-            app.apply_review();
-        }
-        ui.label("Free at least");
-        ui.add(egui::TextEdit::singleline(&mut app.free_gb).desired_width(48.0));
-        ui.label("GB");
-        if crate::widgets::pointer(ui.button("Select to free")).clicked() {
-            app.select_to_free();
-        }
+    widgets::toolbar(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            let rebuild = if app.scanning {
+                "Rebuilding…"
+            } else {
+                "Rebuild"
+            };
+            if crate::widgets::pointer(ui.add_enabled(!app.scanning, egui::Button::new(rebuild)))
+                .clicked()
+            {
+                app.rebuild_review();
+            }
+            if widgets::apply_button(ui, "Clean").clicked() {
+                app.apply_review();
+            }
+            ui.add(egui::TextEdit::singleline(&mut app.free_gb).desired_width(36.0));
+            ui.label("GB");
+            if widgets::primary_button(ui, "Select")
+                .on_hover_text("Select cheapest auto-eligible rows until this many GB")
+                .clicked()
+            {
+                app.select_to_free();
+            }
+            if !app.review.is_empty() {
+                let selected: u64 = app
+                    .review
+                    .iter()
+                    .filter(|row| row.selected)
+                    .map(|row| row.candidate.logical_bytes)
+                    .sum();
+                ui.label(
+                    RichText::new(format!("{} · {}", app.review.len(), format_bytes(selected)))
+                        .color(theme::muted(ui)),
+                );
+            }
+        });
     });
-    if let Some(message) = &app.action_message {
-        ui.label(message);
-    }
+    widgets::action_note(ui, app.action_message.as_deref());
     if let Some(receipt) = &app.last_receipt {
-        ui.label(format!(
-            "Receipt {}  deleted={} skipped_changed={} failed={} planned={}",
-            receipt.plan.0,
-            receipt.counts.deleted,
-            receipt.counts.skipped_changed,
-            receipt.counts.failed,
-            format_bytes(receipt.estimated_physical_bytes)
-        ));
+        let delta = match receipt.actual_free_space_delta {
+            Some(value) => format_bytes(value.unsigned_abs()),
+            None => "not measured".to_owned(),
+        };
+        ui.label(
+            RichText::new(format!(
+                "deleted {} · skipped {} · failed {} · disk delta {delta}",
+                receipt.counts.deleted, receipt.counts.skipped_changed, receipt.counts.failed
+            ))
+            .color(theme::muted(ui)),
+        );
     }
-    ui.add_space(8.0);
     if app.review.is_empty() {
         if app.scanning {
-            ui.label("Rebuilding review in the background. The window stays interactive.");
+            ui.label("Rebuilding in the background.");
         } else {
-            ui.label("Rebuild review for temp/Downloads, or scan Explorer for project artifacts.");
+            ui.label("Rebuild for temp/Downloads, or scan Explorer for project artifacts.");
         }
         return;
     }
-    let selected: u64 = app
-        .review
-        .iter()
-        .filter(|row| row.selected)
-        .map(|row| row.candidate.logical_bytes)
-        .sum();
-    ui.label(format!(
-        "{} candidates · {} selected (checkbox, not row stripe)",
-        app.review.len(),
-        format_bytes(selected)
-    ));
     draw_review_table(app, ui);
 }
 
 fn can_select(row: &ReviewRow) -> bool {
     !row.candidate.safety.is_blocked() && row.candidate.deletion != DeletionStrategy::InspectOnly
+}
+
+fn can_auto_select(row: &ReviewRow) -> bool {
+    can_select(row) && auto_eligible(&row.candidate, std::time::SystemTime::now())
 }
 
 fn draw_review_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -92,16 +101,17 @@ fn draw_review_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let row_count = order.len();
     let height = table_scroll_height(ui);
     TableBuilder::new(ui)
+        .id_salt("review-grid")
         .striped(true)
         .resizable(true)
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::auto().at_least(36.0))
-        .column(Column::remainder().at_least(280.0))
-        .column(Column::auto().at_least(100.0))
-        .column(Column::auto().at_least(110.0))
-        .column(Column::auto().at_least(160.0))
+        .column(Column::exact(36.0).clip(true).resizable(false))
+        .column(Column::remainder().at_least(160.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .column(Column::exact(80.0).clip(true))
+        .column(Column::exact(168.0).clip(true))
         .header(32.0, |mut header| {
             header.col(|ui| {
                 if ui.checkbox(&mut all, "").changed() {
@@ -120,7 +130,7 @@ fn draw_review_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             });
         })
         .body(|body| {
-            body.rows(40.0, row_count, |mut row| {
+            body.rows(widgets::TABLE_ROW, row_count, |mut row| {
                 let index = order.get(row.index()).copied().unwrap_or(0);
                 fill_review_row(&mut app.review, &mut row, index);
             });
@@ -157,7 +167,6 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
     let rebuild = item.candidate.rebuild.cost.label().to_owned();
     let safety = safety_text(&item.candidate.safety);
     let mut selected = item.selected;
-    row.set_selected(selected);
     row.col(|ui| {
         if blocked || inspect_only {
             let mut off = false;
@@ -169,10 +178,12 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
         }
     });
     row.col(|ui| {
-        ui.vertical(|ui| {
-            ui.label(RichText::new(name).size(15.0).strong());
-            ui.label(RichText::new(path).size(12.0).color(theme::muted(ui)));
-        });
+        let label = ui.add(
+            egui::Label::new(RichText::new(name).size(15.0))
+                .truncate()
+                .selectable(false),
+        );
+        label.on_hover_text(path);
     });
     row.col(|ui| {
         ui.label(&size);
@@ -182,9 +193,18 @@ fn fill_review_row(rows: &mut [ReviewRow], row: &mut egui_extras::TableRow<'_, '
     });
     row.col(|ui| {
         if blocked {
-            ui.colored_label(ui.visuals().error_fg_color, safety);
+            widgets::chip(
+                ui,
+                &safety,
+                if ui.visuals().dark_mode {
+                    eframe::egui::Color32::from_rgb(52, 32, 26)
+                } else {
+                    eframe::egui::Color32::from_rgb(248, 228, 214)
+                },
+                theme::warn(),
+            );
         } else {
-            ui.label(safety);
+            widgets::chip(ui, &safety, ui.visuals().faint_bg_color, theme::muted(ui));
         }
     });
 }
@@ -235,7 +255,7 @@ impl SweepLoomApp {
             .review
             .iter()
             .enumerate()
-            .filter(|(_, row)| can_select(row))
+            .filter(|(_, row)| can_auto_select(row))
             .map(|(index, _)| index)
             .collect();
         order.sort_by_key(|&index| {
@@ -261,6 +281,10 @@ impl SweepLoomApp {
 
     /// Apply selected unblocked rows through CleanPlan revalidation.
     pub fn apply_review(&mut self) {
+        if self.apply_rx.is_some() {
+            self.action_message = Some("A cleanup is already running.".to_owned());
+            return;
+        }
         let selected: Vec<_> = self
             .review
             .iter()
@@ -271,17 +295,12 @@ impl SweepLoomApp {
             self.action_message = Some("Nothing selected.".to_owned());
             return;
         }
-        let plan = build_plan(&selected, None);
-        let (report, receipt) = apply_plan(&plan);
-        let summary = format!(
-            "deleted={} skipped_changed={} failed={} planned={}",
-            report.counts.deleted,
-            report.counts.skipped_changed,
-            report.counts.failed,
-            format_bytes(receipt.estimated_physical_bytes)
-        );
-        self.last_receipt = Some(receipt);
-        self.rebuild_review();
-        self.action_message = Some(summary);
+        let processes = self
+            .snapshot
+            .as_ref()
+            .map(|item| item.processes.clone())
+            .unwrap_or_default();
+        self.action_message = Some("Applying cleanup in the background…".to_owned());
+        self.apply_rx = Some(crate::scan_job::spawn_apply(selected, processes));
     }
 }

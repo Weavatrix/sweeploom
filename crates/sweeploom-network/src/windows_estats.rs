@@ -51,8 +51,13 @@ pub fn load() -> Option<HashMap<u32, (u64, u64)>> {
     let mut out = HashMap::new();
     for (pid, (rx, tx)) in &now {
         let (brx, btx) = base.entry(*pid).or_insert((*rx, *tx));
+        if *rx < *brx || *tx < *btx {
+            *brx = *rx;
+            *btx = *tx;
+        }
         out.insert(*pid, (rx.saturating_sub(*brx), tx.saturating_sub(*btx)));
     }
+    base.retain(|pid, _| now.contains_key(pid));
     Some(out)
 }
 

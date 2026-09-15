@@ -54,7 +54,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             });
         })
         .body(|body| {
-            body.rows(26.0, rows, |mut row| {
+            body.rows(crate::widgets::TABLE_ROW, rows, |mut row| {
                 let index = order.get(row.index()).copied().unwrap_or(0);
                 if let Some(process) = snapshot.processes.get(index) {
                     row.col(|ui| {

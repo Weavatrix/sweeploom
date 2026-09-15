@@ -2,7 +2,7 @@
 
 use sweeploom_browser::{
     TabAction, TabCommand, TabSnapshot, add_later, load_later, load_snapshot, save_apply,
-    save_later,
+    save_later, snapshot_path,
 };
 
 use crate::app::SweepLoomApp;
@@ -23,16 +23,29 @@ struct TabRow {
 
 pub fn draw(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     let now = unix_ms();
-    let stored = load_snapshot(&app.locations.app_data).ok().flatten();
-    let Some(stored) = stored.filter(|item| item.is_fresh(now)) else {
-        app.browser.confirm_discard = false;
-        ui.label("Companion is not fresh. Install the native host, then the extension.");
-        ui.label("1. sweeploom companion-install");
-        ui.label("2. Host binary: sweeploom-companion-host");
-        ui.label("3. Load the SweepLoom companion extension in Chrome or Edge");
-        ui.label("Until then, Process trees still work. Later can reopen saved URLs.");
-        return;
+    let path = snapshot_path(&app.locations.app_data);
+    let stored = match load_snapshot(&app.locations.app_data) {
+        Ok(Some(stored)) => stored,
+        Ok(None) => {
+            app.browser.confirm_discard = false;
+            super::browser_tabs_setup::draw_missing(app, ui, &path);
+            return;
+        }
+        Err(error) => {
+            app.browser.confirm_discard = false;
+            super::browser_tabs_setup::draw_error(app, ui, &path, &error);
+            return;
+        }
     };
+    if !stored.is_fresh(now) {
+        let mins = now.saturating_sub(stored.written_unix_ms) / 60_000;
+        ui.label(
+            RichText::new(format!(
+                "Companion last pinged {mins} min ago. Reload SweepLoom Companion if this stays stale."
+            ))
+            .color(crate::theme::muted(ui)),
+        );
+    }
     let discard = stored.tabs.discard_count(now);
     ui.label(
         RichText::new(format!(
@@ -42,6 +55,9 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
         ))
         .strong(),
     );
+    if stored.tabs.tabs.is_empty() {
+        ui.label("Companion is connected but sent 0 tabs. Keep the extension enabled.");
+    }
     if let Some(message) = &app.action_message {
         ui.label(message.clone());
     }
@@ -52,6 +68,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
         stored.tabs.active_tab_id,
         now,
         discard,
+        (&stored.instance_id, stored.epoch),
     );
     let mut rows = collect_rows(&stored.tabs.tabs, stored.tabs.active_tab_id, now);
     let mut sort = app.browser.tab_sort;
@@ -102,10 +119,12 @@ fn draw_actions(
     active: Option<i64>,
     now: u64,
     discard: usize,
+    route: (&str, u64),
 ) {
+    let (instance_id, epoch) = route;
     ui.horizontal_wrapped(|ui| {
         if pointer(ui.button("Go to current tab")).clicked() {
-            focus_current(app, active);
+            focus_current(app, active, instance_id, epoch);
         }
         if pointer(ui.button("Save selected to Later")).clicked() {
             save_selected(app, tabs, now);
@@ -124,7 +143,7 @@ fn draw_actions(
                 app.browser.confirm_discard = false;
             }
             if pointer(ui.button("Queue Discard")).clicked() {
-                queue_discard(app, tabs, active, now);
+                queue_discard(app, tabs, active, now, instance_id, epoch);
             }
         });
     }
@@ -135,6 +154,7 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, rows: &[TabRow]
     let count = rows.len();
     let mut selected = std::mem::take(&mut app.browser.tab_ids);
     TableBuilder::new(ui)
+        .id_salt("browser-tabs-grid")
         .striped(true)
         .resizable(true)
         .min_scrolled_height(height)
@@ -142,11 +162,11 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, rows: &[TabRow]
         .cell_layout(eframe::egui::Layout::left_to_right(
             eframe::egui::Align::Center,
         ))
-        .column(Column::auto().at_least(36.0))
-        .column(Column::remainder().at_least(160.0))
-        .column(Column::auto().at_least(80.0))
-        .column(Column::auto().at_least(80.0))
-        .column(Column::remainder().at_least(160.0))
+        .column(Column::exact(36.0).clip(true).resizable(false))
+        .column(Column::remainder().at_least(140.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .column(Column::exact(80.0).clip(true))
+        .column(Column::remainder().at_least(120.0).clip(true))
         .header(32.0, |mut header| {
             header.col(|ui| {
                 ui.strong("");
@@ -161,7 +181,7 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, rows: &[TabRow]
             });
         })
         .body(|body| {
-            body.rows(28.0, count, |mut row| {
+            body.rows(crate::widgets::TABLE_ROW, count, |mut row| {
                 let Some(item) = rows.get(row.index()) else {
                     return;
                 };
@@ -200,17 +220,19 @@ fn fill_row(
     });
 }
 
-fn focus_current(app: &mut SweepLoomApp, active: Option<i64>) {
+fn focus_current(app: &mut SweepLoomApp, active: Option<i64>, instance_id: &str, epoch: u64) {
     let Some(tab_id) = active else {
         app.action_message = Some("No current tab in the companion snapshot.".into());
         return;
     };
     queue(
         app,
-        vec![TabCommand {
+        vec![TabCommand::new(
             tab_id,
-            action: TabAction::Focus,
-        }],
+            TabAction::Focus,
+            instance_id,
+            epoch,
+        )],
     );
 }
 
@@ -237,13 +259,21 @@ fn save_selected(app: &mut SweepLoomApp, tabs: &[TabSnapshot], now: u64) {
     });
 }
 
-fn queue_discard(app: &mut SweepLoomApp, tabs: &[TabSnapshot], active: Option<i64>, now: u64) {
+fn queue_discard(
+    app: &mut SweepLoomApp,
+    tabs: &[TabSnapshot],
+    active: Option<i64>,
+    now: u64,
+    instance_id: &str,
+    epoch: u64,
+) {
     let actions: Vec<TabCommand> = tabs
         .iter()
         .filter(|tab| tab.suggested_action(now, active) == TabAction::Discard)
-        .map(|tab| TabCommand {
-            tab_id: tab.tab_id,
-            action: TabAction::Discard,
+        .map(|tab| {
+            let mut command = TabCommand::new(tab.tab_id, TabAction::Discard, instance_id, epoch);
+            command.expected_url = tab.url.clone();
+            command
         })
         .collect();
     app.browser.confirm_discard = false;

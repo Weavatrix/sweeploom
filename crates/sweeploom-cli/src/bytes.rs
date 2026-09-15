@@ -1,5 +1,7 @@
 //! Human-readable sizes for CLI output.
 
+/// Format bytes as KB/MB/GB for humans.
+#[must_use]
 pub fn format_bytes(bytes: u64) -> String {
     const KIB: f64 = 1024.0;
     const MIB: f64 = 1024.0 * 1024.0;

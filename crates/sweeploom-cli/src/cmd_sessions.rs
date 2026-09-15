@@ -66,7 +66,7 @@ pub fn run(args: impl Iterator<Item = String>) {
     }
     if quiet || free_ram.is_some() || reduce_cpu.is_some() {
         println!(
-            "plan={} session(s); dry-run only — terminate stays in the GUI after confirm",
+            "plan={} session(s); dry-run only — terminate is not offered on the CLI",
             planned.len()
         );
     }
@@ -96,21 +96,26 @@ fn planned_ids(
     ids
 }
 
-fn parse(args: impl Iterator<Item = String>) -> (Option<f64>, Option<f32>, bool) {
+pub(crate) fn parse(args: impl Iterator<Item = String>) -> (Option<f64>, Option<f32>, bool) {
     let items: Vec<String> = args.collect();
     let mut free_ram = None;
     let mut reduce_cpu = None;
     let mut quiet = false;
     let mut index = 0;
     while index < items.len() {
+        // A missing or flag-like token is not a value; do not skip the next flag.
         match items[index].as_str() {
             "--free-ram" => {
-                index += 1;
-                free_ram = items.get(index).and_then(|item| item.parse().ok());
+                if let Some(value) = items.get(index + 1).filter(|item| !item.starts_with('-')) {
+                    index += 1;
+                    free_ram = value.parse().ok();
+                }
             }
             "--reduce-cpu" => {
-                index += 1;
-                reduce_cpu = items.get(index).and_then(|item| item.parse().ok());
+                if let Some(value) = items.get(index + 1).filter(|item| !item.starts_with('-')) {
+                    index += 1;
+                    reduce_cpu = value.parse().ok();
+                }
             }
             "--quiet" => quiet = true,
             other => {
@@ -121,4 +126,62 @@ fn parse(args: impl Iterator<Item = String>) -> (Option<f64>, Option<f32>, bool)
         index += 1;
     }
     (free_ram, reduce_cpu, quiet)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_plan_flags() {
+        assert_eq!(
+            parse(["--quiet".to_owned()].into_iter()),
+            (None, None, true)
+        );
+        assert_eq!(
+            parse(["--free-ram".to_owned(), "4".to_owned()].into_iter()),
+            (Some(4.0), None, false)
+        );
+        assert_eq!(
+            parse(
+                [
+                    "--reduce-cpu".to_owned(),
+                    "20".to_owned(),
+                    "--quiet".to_owned()
+                ]
+                .into_iter()
+            ),
+            (None, Some(20.0), true)
+        );
+    }
+
+    #[test]
+    fn value_flags_do_not_swallow_the_next_flag() {
+        assert_eq!(
+            parse(["--free-ram".to_owned(), "--quiet".to_owned()].into_iter()),
+            (None, None, true)
+        );
+        assert_eq!(
+            parse(
+                [
+                    "--free-ram".to_owned(),
+                    "--reduce-cpu".to_owned(),
+                    "20".to_owned()
+                ]
+                .into_iter()
+            ),
+            (None, Some(20.0), false)
+        );
+        assert_eq!(
+            parse(
+                [
+                    "--reduce-cpu".to_owned(),
+                    "--free-ram".to_owned(),
+                    "4".to_owned()
+                ]
+                .into_iter()
+            ),
+            (Some(4.0), None, false)
+        );
+    }
 }

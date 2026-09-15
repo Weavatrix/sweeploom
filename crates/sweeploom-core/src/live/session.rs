@@ -16,6 +16,14 @@ pub enum SessionKind {
     ClaudeCode,
     /// Codex.
     Codex,
+    /// Cursor.
+    Cursor,
+    /// OpenCode.
+    OpenCode,
+    /// Gemini CLI / desktop helper.
+    Gemini,
+    /// Grok / xAI helper.
+    Grok,
     /// MCP server tree.
     Mcp,
     /// Dev server (vite, next, uvicorn, ...).
@@ -44,6 +52,10 @@ impl SessionKind {
             Self::Terminal => "Terminal",
             Self::ClaudeCode => "Claude Code",
             Self::Codex => "Codex",
+            Self::Cursor => "Cursor",
+            Self::OpenCode => "OpenCode",
+            Self::Gemini => "Gemini",
+            Self::Grok => "Grok",
             Self::Mcp => "MCP",
             Self::DevServer => "Dev server",
             Self::Build => "Build",
@@ -54,6 +66,30 @@ impl SessionKind {
             Self::GenericApp => "App",
             Self::Unknown => "Unknown session",
         }
+    }
+
+    /// Claude / Codex / Cursor and the other agent CLIs.
+    #[must_use]
+    pub const fn is_agent(self) -> bool {
+        matches!(
+            self,
+            Self::ClaudeCode
+                | Self::Codex
+                | Self::Cursor
+                | Self::OpenCode
+                | Self::Gemini
+                | Self::Grok
+        )
+    }
+
+    /// Agent, MCP, or a recognized developer helper. Forgotten scoring uses this.
+    #[must_use]
+    pub const fn is_known_dev(self) -> bool {
+        self.is_agent()
+            || matches!(
+                self,
+                Self::Mcp | Self::DevServer | Self::Build | Self::LanguageServer | Self::TestRunner
+            )
     }
 }
 

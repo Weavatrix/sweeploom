@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Weavatrix/sweeploom",
+  "title": "SweepLoom",
+  "description": "Local-first workstation evidence and gated cleanup for coding agents. Apply requires confirm=true.",
+  "repository": {
+    "url": "https://github.com/Weavatrix/sweeploom",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "sweeploom",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

@@ -3,7 +3,9 @@
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use crate::artifact::{FileIdentity, MetadataRevision};
 use crate::ids::{CandidateId, PlanId};
+use crate::live::ProcessSnapshot;
 use crate::safety::Blocker;
 
 /// How a candidate should be removed if the user approves it.
@@ -54,6 +56,10 @@ pub enum SkipReason {
     Cancelled,
     /// Missing at apply time.
     Missing,
+    /// Required evidence could not be obtained.
+    UnknownEvidence,
+    /// Strategy or platform action is unsupported.
+    Unsupported,
 }
 
 /// One immutable plan entry.
@@ -64,8 +70,14 @@ pub struct CleanPlanEntry {
     pub candidate_id: CandidateId,
     /// Planned path.
     pub path: PathBuf,
-    /// Optional native identity (filesystem + file id).
-    pub expected_identity: Option<(u64, u64)>,
+    /// Owning project root when known. Used to repeat artifact authorization.
+    pub owner_path: Option<PathBuf>,
+    /// Optional native identity (volume + file id).
+    pub expected_identity: Option<FileIdentity>,
+    /// Directory/file revision captured at plan time.
+    pub expected_revision: Option<MetadataRevision>,
+    /// True when the planned path was a directory.
+    pub expected_is_dir: bool,
     /// Newest write observed at plan time.
     pub expected_latest_write: Option<SystemTime>,
     /// Expected logical bytes.
@@ -96,7 +108,41 @@ pub struct CleanPlan {
 
 impl CleanPlan {
     /// Current plan schema.
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
+}
+
+/// How process evidence was obtained. An empty observed list is not "unknown".
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ProcessEvidence<'a> {
+    /// Caller did not sample processes.
+    Unknown,
+    /// Caller sampled; the slice may be empty.
+    Observed(&'a [ProcessSnapshot]),
+}
+
+/// Shared apply context for GUI and CLI.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExecutionContext<'a> {
+    /// Process evidence. [`ProcessEvidence::Unknown`] is not "no processes".
+    pub processes: ProcessEvidence<'a>,
+}
+
+impl ExecutionContext<'_> {
+    /// No process sample is available.
+    #[must_use]
+    pub const fn unknown() -> Self {
+        Self {
+            processes: ProcessEvidence::Unknown,
+        }
+    }
+
+    /// An observed sample, including an empty machine.
+    #[must_use]
+    pub const fn observed(processes: &[ProcessSnapshot]) -> ExecutionContext<'_> {
+        ExecutionContext {
+            processes: ProcessEvidence::Observed(processes),
+        }
+    }
 }
 
 /// Counts written to a receipt.
@@ -125,8 +171,8 @@ pub struct Receipt {
     pub selected_logical_bytes: u64,
     /// Estimated physical bytes.
     pub estimated_physical_bytes: u64,
-    /// Measured free-space delta. This is the honest number.
-    pub actual_free_space_delta: i64,
+    /// Measured free-space delta when a volume snapshot was taken. `None` is unavailable.
+    pub actual_free_space_delta: Option<i64>,
     /// Counts.
     pub counts: ReceiptCounts,
 }

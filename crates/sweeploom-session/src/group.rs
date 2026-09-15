@@ -21,13 +21,13 @@ pub fn group_sessions(processes: &[ProcessSnapshot]) -> Vec<LiveSession> {
         .collect();
     let mut assigned: HashSet<ProcessKey> = HashSet::new();
     let mut sessions = Vec::new();
-    let mut next_id = 1_u64;
 
     let mut roots: Vec<&ProcessSnapshot> = processes
         .iter()
         .filter(|process| classify_process(process).is_some())
+        .filter(|process| is_owning_root(process, &by_key))
         .collect();
-    roots.sort_by_key(|process| process.pid);
+    roots.sort_by_key(|process| ancestry_depth(process, &by_key));
 
     for root in roots {
         if assigned.contains(&root.key) {
@@ -36,12 +36,11 @@ pub fn group_sessions(processes: &[ProcessSnapshot]) -> Vec<LiveSession> {
         let kind = classify_process(root)
             .map(|item| item.kind)
             .unwrap_or(SessionKind::Unknown);
-        let members = collect_descendants(root.key, processes, &by_key);
+        let members = collect_descendants(root.key, processes, &by_key, &assigned);
         for member in &members {
             assigned.insert(*member);
         }
-        sessions.push(build_session(SessionId(next_id), kind, &members, &by_key));
-        next_id += 1;
+        sessions.push(build_session(session_id(root.key), kind, &members, &by_key));
     }
 
     for process in processes {
@@ -56,22 +55,62 @@ pub fn group_sessions(processes: &[ProcessSnapshot]) -> Vec<LiveSession> {
             assigned.insert(*member);
         }
         sessions.push(build_session(
-            SessionId(next_id),
+            session_id(process.key),
             SessionKind::GenericApp,
             &members,
             &by_key,
         ));
-        next_id += 1;
     }
 
     sessions.sort_by_key(|session| std::cmp::Reverse(session.rss_bytes));
     sessions
 }
 
+fn session_id(root: ProcessKey) -> SessionId {
+    SessionId(u64::from(root.pid) << 32 ^ root.started_at_unix_ms)
+}
+
+fn is_owning_root(
+    process: &ProcessSnapshot,
+    by_key: &HashMap<ProcessKey, &ProcessSnapshot>,
+) -> bool {
+    let Some(kind) = classify_process(process).map(|item| item.kind) else {
+        return false;
+    };
+    let mut parent = process.parent;
+    while let Some(key) = parent {
+        let Some(item) = by_key.get(&key) else {
+            break;
+        };
+        if classify_process(item).is_some_and(|found| found.kind == kind) {
+            return false;
+        }
+        parent = item.parent;
+    }
+    true
+}
+
+fn ancestry_depth(
+    process: &ProcessSnapshot,
+    by_key: &HashMap<ProcessKey, &ProcessSnapshot>,
+) -> u32 {
+    let mut depth = 0;
+    let mut parent = process.parent;
+    while let Some(key) = parent {
+        depth += 1;
+        parent = by_key.get(&key).and_then(|item| item.parent);
+        if depth > 64 {
+            break;
+        }
+    }
+    depth
+}
+
 fn collect_descendants(
     root: ProcessKey,
     processes: &[ProcessSnapshot],
     by_key: &HashMap<ProcessKey, &ProcessSnapshot>,
+    assigned: &HashSet<ProcessKey>,
 ) -> Vec<ProcessKey> {
     let mut members = vec![root];
     let root_kind = by_key
@@ -82,7 +121,7 @@ fn collect_descendants(
     while changed {
         changed = false;
         for process in processes {
-            if members.contains(&process.key) {
+            if members.contains(&process.key) || assigned.contains(&process.key) {
                 continue;
             }
             let Some(parent) = process.parent else {

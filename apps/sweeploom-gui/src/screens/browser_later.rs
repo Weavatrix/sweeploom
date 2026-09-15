@@ -41,6 +41,7 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, entries: &[Late
     let count = entries.len();
     let mut selected = std::mem::take(&mut app.browser.later_urls);
     TableBuilder::new(ui)
+        .id_salt("browser-later")
         .striped(true)
         .resizable(true)
         .min_scrolled_height(height)
@@ -48,9 +49,9 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, entries: &[Late
         .cell_layout(eframe::egui::Layout::left_to_right(
             eframe::egui::Align::Center,
         ))
-        .column(Column::auto().at_least(36.0))
-        .column(Column::remainder().at_least(180.0))
-        .column(Column::remainder().at_least(180.0))
+        .column(Column::exact(36.0).clip(true).resizable(false))
+        .column(Column::remainder().at_least(140.0).clip(true))
+        .column(Column::remainder().at_least(140.0).clip(true))
         .header(32.0, |mut header| {
             header.col(|ui| {
                 ui.strong("");
@@ -63,7 +64,7 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, entries: &[Late
             });
         })
         .body(|body| {
-            body.rows(28.0, count, |mut row| {
+            body.rows(crate::widgets::TABLE_ROW, count, |mut row| {
                 let Some(item) = entries.get(row.index()) else {
                     return;
                 };

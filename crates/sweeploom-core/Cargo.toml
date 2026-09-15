@@ -7,7 +7,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+publish = true
 description = "OS-neutral SweepLoom data model: safety, activity, candidates, sessions, plans"
 
 [lints]

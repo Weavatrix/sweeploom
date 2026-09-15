@@ -59,6 +59,9 @@ fn collect(
         children.reverse();
     }
     for child in children {
+        if out.len() >= 256 {
+            return;
+        }
         let has_children = !child.children.is_empty();
         let key = path_key(&child.path);
         let is_open = has_children && expanded.contains(&key);
@@ -98,6 +101,8 @@ mod tests {
             newest_generated_mtime: None,
             category: PathCategory::Unknown,
             children,
+            is_file: false,
+            incomplete: false,
         }
     }
 

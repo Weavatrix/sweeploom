@@ -1,0 +1,6 @@
+{
+  "sweeploom": {
+    "command": "npx",
+    "args": ["-y", "sweeploom", "mcp"]
+  }
+}

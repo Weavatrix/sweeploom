@@ -71,7 +71,12 @@ pub fn collect_review(
 
 fn cargo_row(offer: CargoOffer, id: u64) -> ReviewRow {
     let selected = !offer.blocked && matches!(offer.mode, CargoTrim::Light);
-    let title = format!("Cargo {:?} · {}", offer.mode, offer.path.display());
+    let size = if offer.size_complete {
+        String::new()
+    } else {
+        " · ≥".to_owned()
+    };
+    let title = format!("Cargo {:?}{size} · {}", offer.mode, offer.path.display());
     let safety = safety_of(offer.blocked, offer.blocker);
     let activity = generated_activity(&offer.path);
     ReviewRow {
@@ -99,13 +104,22 @@ fn cargo_row(offer: CargoOffer, id: u64) -> ReviewRow {
 }
 
 fn node_row(offer: NodeOffer, id: u64) -> ReviewRow {
-    let title = format!("node_modules · {}", offer.path.display());
+    let vite = offer.label != "node_modules";
+    let title = if vite {
+        format!("Vite {} · {}", offer.label, offer.path.display())
+    } else {
+        format!("node_modules · {}", offer.path.display())
+    };
     let safety = safety_of(offer.blocked, offer.blocker);
     let activity = generated_activity(&offer.path);
     ReviewRow {
         candidate: Candidate {
             id: CandidateId(id),
-            kind: CandidateKind::DependencyTree,
+            kind: if vite {
+                CandidateKind::BuildArtifact
+            } else {
+                CandidateKind::DependencyTree
+            },
             owner: CandidateOwner::Project(ProjectId(offer.project)),
             path: offer.path,
             logical_bytes: offer.logical_bytes,
@@ -118,10 +132,13 @@ fn node_row(offer: NodeOffer, id: u64) -> ReviewRow {
                 observed_duration_ms: None,
             },
             deletion: DeletionStrategy::PermanentGenerated,
-            evidence: vec![Evidence::exact("node-modules", title.clone())],
+            evidence: vec![Evidence::exact(
+                if vite { "vite-cache" } else { "node-modules" },
+                title.clone(),
+            )],
             user_policy: UserPolicy::Default,
         },
-        selected: false,
+        selected: offer.preselect,
         title,
     }
 }
@@ -209,6 +226,30 @@ mod tests {
             .find(|row| row.title.contains("node_modules"))
             .expect("node row");
         assert!(!node.selected);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn vite_cache_is_preselected() {
+        let root = std::env::temp_dir().join(format!(
+            "sweeploom-review-vite-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|item| item.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join(".vite")).unwrap();
+        fs::write(root.join("package.json"), "{}\n").unwrap();
+        fs::write(root.join(".vite").join("chunk"), vec![0_u8; 64]).unwrap();
+        let rows = collect_review(&[root.as_path()], &[]);
+        let vite = rows
+            .iter()
+            .find(|row| row.title.contains("Vite"))
+            .expect("vite row");
+        assert!(vite.selected);
+        assert!(!vite.candidate.safety.is_blocked());
         let _ = fs::remove_dir_all(&root);
     }
 

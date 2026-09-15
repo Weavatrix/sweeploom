@@ -13,8 +13,30 @@ pub fn inspect(path: &Path) -> GitSafety {
             Ok(safety) => GitSafety::Known(safety),
             Err(_) => GitSafety::Unknown,
         },
-        Err(_) => GitSafety::NotARepository,
+        Err(_) => classify_open_error(path),
     }
+}
+
+fn classify_open_error(path: &Path) -> GitSafety {
+    if ancestor_has_git(path) {
+        GitSafety::Unknown
+    } else {
+        GitSafety::NotARepository
+    }
+}
+
+fn ancestor_has_git(path: &Path) -> bool {
+    let mut current = Some(path);
+    for _ in 0..24 {
+        let Some(dir) = current else {
+            break;
+        };
+        if dir.join(".git").exists() {
+            return true;
+        }
+        current = dir.parent();
+    }
+    false
 }
 
 /// Result of a Git safety probe.
@@ -113,5 +135,20 @@ mod tests {
             evidence: Vec::new(),
         };
         assert!(!GitSafety::Known(safety).allows_generated_cleanup());
+    }
+
+    #[test]
+    fn git_dir_with_unreadable_repo_is_unknown_not_safe() {
+        let root = std::env::temp_dir().join(format!("sweeploom-git-unk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::write(root.join(".git").join("HEAD"), "not-a-repo").unwrap();
+        let git = inspect(&root);
+        std::fs::remove_dir_all(&root).ok();
+        assert!(matches!(git, GitSafety::Unknown | GitSafety::Known(_)));
+        if matches!(git, GitSafety::Unknown) {
+            assert!(git.assessment().is_blocked());
+            assert_ne!(git.label(), "none");
+        }
     }
 }

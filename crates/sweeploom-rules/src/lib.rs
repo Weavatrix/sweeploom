@@ -109,4 +109,25 @@ paths = ["node_modules/.vite", ".vite"]
             DeletionStrategy::PermanentGenerated
         );
     }
+
+    #[test]
+    fn parses_cargo_target_rule() {
+        let pack = parse_pack(
+            r#"
+schema = 1
+
+[[cleaner]]
+id = "cargo-target"
+label = "Cargo target"
+category = "build-cache"
+risk = "safe"
+strategy = "permanent-generated"
+markers = ["Cargo.toml"]
+paths = ["target"]
+"#,
+        )
+        .unwrap();
+        assert_eq!(pack.cleaner[0].id, "cargo-target");
+        assert_eq!(pack.cleaner[0].safety_level(), SafetyLevel::Safe);
+    }
 }

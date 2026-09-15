@@ -1,0 +1,47 @@
+{
+  "name": "sweeploom",
+  "version": "0.1.0",
+  "description": "SweepLoom by Weavatrix: local-first CLI and MCP cleaner with gated apply. Codex plugin in the git repo.",
+  "mcpName": "io.github.Weavatrix/sweeploom",
+  "bin": {
+    "sweeploom": "npm/cli.js",
+    "sweeploom-mcp": "npm/mcp.js"
+  },
+  "files": [
+    "npm/cli.js",
+    "npm/mcp.js",
+    "npm/launch.js",
+    "vendor",
+    "server.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node npm/prepare.js"
+  },
+  "license": "MPL-2.0",
+  "author": "Sergii Ziborov <sergii.ziborov@gmail.com>",
+  "homepage": "https://github.com/Weavatrix/sweeploom",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Weavatrix/sweeploom.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Weavatrix/sweeploom/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "sweeploom",
+    "cleanup",
+    "disk",
+    "sessions",
+    "coding-agents"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

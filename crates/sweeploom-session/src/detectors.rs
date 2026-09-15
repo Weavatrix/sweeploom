@@ -25,6 +25,7 @@ pub trait SessionDetector {
 #[must_use]
 pub fn builtin_detectors() -> Vec<Box<dyn SessionDetector + Send + Sync>> {
     vec![
+        Box::new(BrowserDetector),
         Box::new(NamedDetector::new(
             "claude",
             SessionKind::ClaudeCode,
@@ -37,20 +38,58 @@ pub fn builtin_detectors() -> Vec<Box<dyn SessionDetector + Send + Sync>> {
         )),
         Box::new(NamedDetector::new(
             "cursor",
-            SessionKind::GenericApp,
+            SessionKind::Cursor,
+            &["cursor", "cursor.exe"],
+        )),
+        Box::new(NamedDetector::new(
+            "opencode",
+            SessionKind::OpenCode,
+            &["opencode", "opencode.exe"],
+        )),
+        Box::new(NamedDetector::new(
+            "gemini",
+            SessionKind::Gemini,
+            &["gemini", "gemini.exe"],
+        )),
+        Box::new(NamedDetector::new(
+            "grok",
+            SessionKind::Grok,
+            &["grok", "grok.exe"],
+        )),
+        Box::new(NamedDetector::new(
+            "mcp-bin",
+            SessionKind::Mcp,
             &[
-                "cursor",
-                "cursor.exe",
-                "opencode",
-                "opencode.exe",
-                "gemini",
-                "gemini.exe",
+                "mcp-server",
+                "mcp-server.exe",
+                "mcp_server",
+                "mcp_server.exe",
+                "weavatrix",
+                "weavatrix.exe",
+                "weavatrix-mcp",
+                "weavatrix-mcp.exe",
+                "weavatrix-git",
+                "weavatrix-git.exe",
+                "weavatrix-md",
+                "weavatrix-md.exe",
+                "sweeploom-mcp",
+                "sweeploom-mcp.exe",
             ],
         )),
         Box::new(CommandContains::new(
             "mcp",
             SessionKind::Mcp,
-            &["mcp-server", "mcp_server", "@modelcontextprotocol"],
+            &[
+                "mcp-server",
+                "mcp_server",
+                "@modelcontextprotocol",
+                "--mcp",
+                "weavatrix",
+                "weavatrix-mcp",
+                "weavatrix-git",
+                "weavatrix-md",
+                "sweeploom-mcp",
+            ],
         )),
         Box::new(CommandContains::new(
             "vite",
@@ -97,7 +136,6 @@ pub fn builtin_detectors() -> Vec<Box<dyn SessionDetector + Send + Sync>> {
                 "wt.exe",
             ],
         )),
-        Box::new(BrowserDetector),
         Box::new(CommandContains::new(
             "playwright",
             SessionKind::TestRunner,
@@ -135,9 +173,7 @@ impl SessionDetector for NamedDetector {
     }
 
     fn classify(&self, process: &ProcessSnapshot) -> Option<SessionEvidence> {
-        if name_matches(&process.name, process.exe.as_deref(), self.names)
-            || command_contains(&process.command, self.names)
-        {
+        if name_matches(&process.name, process.exe.as_deref(), self.names) {
             Some(SessionEvidence {
                 kind: self.kind,
                 detector: self.id,
@@ -166,7 +202,7 @@ impl SessionDetector for CommandContains {
     }
 
     fn classify(&self, process: &ProcessSnapshot) -> Option<SessionEvidence> {
-        if command_contains(&process.command, self.needles) {
+        if command_contains_entrypoint(&process.command, self.needles) {
             Some(SessionEvidence {
                 kind: self.kind,
                 detector: self.id,
@@ -217,11 +253,46 @@ fn name_matches(name: &str, exe: Option<&Path>, needles: &[&str]) -> bool {
         .any(|needle| name.eq_ignore_ascii_case(needle) || file.eq_ignore_ascii_case(needle))
 }
 
-fn command_contains(command: &[String], needles: &[&str]) -> bool {
-    command.iter().any(|part| {
+fn command_contains_entrypoint(command: &[String], needles: &[&str]) -> bool {
+    command.iter().skip(1).any(|part| {
+        if looks_like_url(part) {
+            return false;
+        }
         let lower = part.to_ascii_lowercase();
-        needles.iter().any(|needle| lower.contains(needle))
+        needles.iter().any(|needle| {
+            if looks_like_entrypoint(part) {
+                lower.contains(needle)
+            } else {
+                token_is_needle(&lower, needle)
+            }
+        })
     })
+}
+
+fn token_is_needle(part: &str, needle: &str) -> bool {
+    let name = part
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(part)
+        .trim_end_matches(".exe");
+    name == needle || name == format!("{needle}.js")
+}
+
+fn looks_like_url(part: &str) -> bool {
+    let lower = part.to_ascii_lowercase();
+    lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("file:")
+        || lower.contains("://")
+}
+
+fn looks_like_entrypoint(part: &str) -> bool {
+    part.contains('/')
+        || part.contains('\\')
+        || part.ends_with(".js")
+        || part.ends_with(".mjs")
+        || part.ends_with(".cjs")
+        || part.ends_with(".ts")
 }
 
 #[cfg(test)]
@@ -273,12 +344,63 @@ mod tests {
             Some(SessionKind::DevServer)
         );
         assert_eq!(
+            classify_process(&process(
+                "chrome.exe",
+                &["chrome", "https://example.test/docs/claude"]
+            ))
+            .map(|item| item.kind),
+            Some(SessionKind::Browser)
+        );
+        assert_eq!(
             classify_process(&process("chrome.exe", &["chrome"])).map(|item| item.kind),
             Some(SessionKind::Browser)
         );
         assert_eq!(
             classify_process(&process("powershell.exe", &["powershell"])).map(|item| item.kind),
             Some(SessionKind::Terminal)
+        );
+        assert_eq!(
+            classify_process(&process("Cursor.exe", &["Cursor"])).map(|item| item.kind),
+            Some(SessionKind::Cursor)
+        );
+        assert_eq!(
+            classify_process(&process("opencode.exe", &["opencode"])).map(|item| item.kind),
+            Some(SessionKind::OpenCode)
+        );
+        assert_eq!(
+            classify_process(&process(
+                "node.exe",
+                &["node", "--mcp", "C:\\tools\\server.js"]
+            ))
+            .map(|item| item.kind),
+            Some(SessionKind::Mcp)
+        );
+        assert_eq!(
+            classify_process(&process("grok.exe", &["grok"])).map(|item| item.kind),
+            Some(SessionKind::Grok)
+        );
+        assert_eq!(
+            classify_process(&process("weavatrix.exe", &["weavatrix", "mcp", "."]))
+                .map(|item| item.kind),
+            Some(SessionKind::Mcp)
+        );
+        assert_eq!(
+            classify_process(&process(
+                "node.exe",
+                &["node", "C:\\npm\\weavatrix\\bin\\mcp.js"]
+            ))
+            .map(|item| item.kind),
+            Some(SessionKind::Mcp)
+        );
+        assert_eq!(
+            classify_process(&process("sweeploom-mcp.exe", &["sweeploom-mcp"]))
+                .map(|item| item.kind),
+            Some(SessionKind::Mcp)
+        );
+        assert_eq!(
+            classify_process(&process("sweeploom.exe", &["sweeploom", "scan"]))
+                .map(|item| item.kind),
+            None
         );
     }
 }

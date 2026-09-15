@@ -2,11 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
-use sweeploom_core::{Blocker, ProcessSnapshot, RebuildCost};
+use sweeploom_core::{Blocker, ProcessSnapshot, RebuildCost, authorize_generated};
 
 use crate::cargo_manifest::{resolved_target_dir, workspace_root};
 use crate::git::{GitSafety, inspect};
-use crate::size::dir_logical_bytes;
+use crate::size::dir_size;
 
 /// How aggressively generated Cargo output can be trimmed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,6 +30,8 @@ pub struct CargoOffer {
     pub mode: CargoTrim,
     /// Logical bytes under the path.
     pub logical_bytes: u64,
+    /// False when sizing stopped early.
+    pub size_complete: bool,
     /// Rebuild cost if deleted.
     pub rebuild: RebuildCost,
     /// True when auto-select is forbidden.
@@ -73,13 +75,17 @@ impl CargoTrim {
 }
 
 fn cargo_target_dirs(project: &Path) -> Vec<PathBuf> {
-    let primary = resolved_target_dir(project);
-    let local = project.join("target");
-    if primary == local {
-        vec![primary]
-    } else {
-        vec![primary, local]
+    let mut dirs = Vec::new();
+    let hinted = resolved_target_dir(project);
+    if let Ok(approved) = authorize_generated(project, &hinted, None) {
+        dirs.push(approved.canonical_root);
     }
+    let local = project.join("target");
+    if !dirs.iter().any(|item| item == &local) && authorize_generated(project, &local, None).is_ok()
+    {
+        dirs.push(local);
+    }
+    dirs
 }
 
 fn push_target_offers(
@@ -89,15 +95,17 @@ fn push_target_offers(
     blocked: bool,
     blocker: Option<Blocker>,
 ) {
-    push_offer(
-        offers,
-        project,
-        &target.join("incremental"),
-        CargoTrim::Light,
-        RebuildCost::Low,
-        blocked,
-        blocker,
-    );
+    for incremental in incremental_dirs(target) {
+        push_offer(
+            offers,
+            project,
+            &incremental,
+            CargoTrim::Light,
+            RebuildCost::Low,
+            blocked,
+            blocker,
+        );
+    }
     push_offer(
         offers,
         project,
@@ -155,19 +163,47 @@ fn push_offer(
     if !path.exists() {
         return;
     }
-    let logical_bytes = dir_logical_bytes(path);
-    if logical_bytes == 0 {
+    let size = dir_size(path);
+    if size.bytes == 0 {
         return;
     }
     offers.push(CargoOffer {
         project: project.to_path_buf(),
         path: path.to_path_buf(),
         mode,
-        logical_bytes,
+        logical_bytes: size.bytes,
+        size_complete: size.complete,
         rebuild,
         blocked,
         blocker,
     });
+}
+
+fn incremental_dirs(target: &Path) -> Vec<PathBuf> {
+    let mut dirs = vec![
+        target.join("incremental"),
+        target.join("debug").join("incremental"),
+        target.join("release").join("incremental"),
+    ];
+    if let Ok(entries) = std::fs::read_dir(target) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path
+                .file_name()
+                .and_then(|item| item.to_str())
+                .unwrap_or_default();
+            if name.contains('-') {
+                dirs.push(path.join("debug").join("incremental"));
+                dirs.push(path.join("release").join("incremental"));
+            }
+        }
+    }
+    dirs.into_iter()
+        .filter(|path| authorize_generated(target.parent().unwrap_or(target), path, None).is_ok())
+        .collect()
 }
 
 #[cfg(test)]
@@ -227,6 +263,55 @@ mod tests {
         assert_eq!(offers[0].project, root);
         assert!(offers.iter().any(|item| item.mode == CargoTrim::Full));
         assert!(offers.iter().all(|item| item.logical_bytes >= 2048));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn standard_incremental_is_light() {
+        use std::fs;
+        let root = std::env::temp_dir().join(format!("sweeploom-cargo-inc-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("target").join("debug").join("incremental")).unwrap();
+        fs::write(root.join("Cargo.toml"), "[package]\nname=\"demo\"\n").unwrap();
+        fs::write(
+            root.join("target")
+                .join("debug")
+                .join("incremental")
+                .join("a"),
+            vec![0_u8; 1024],
+        )
+        .unwrap();
+        let offers = cargo_offers(&root, &[]);
+        let light = offers
+            .iter()
+            .find(|item| item.mode == CargoTrim::Light)
+            .expect("light");
+        assert!(light.path.ends_with("incremental"));
+        assert!(light.path.to_string_lossy().contains("debug"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn src_target_dir_is_not_offered() {
+        use std::fs;
+        let root = std::env::temp_dir().join(format!("sweeploom-cargo-src-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join(".cargo")).unwrap();
+        fs::write(root.join("Cargo.toml"), "[package]\nname=\"demo\"\n").unwrap();
+        fs::write(root.join("src").join("lib.rs"), "pub fn x() {}\n").unwrap();
+        fs::write(
+            root.join(".cargo").join("config.toml"),
+            "[build]\ntarget-dir = \"src\"\n",
+        )
+        .unwrap();
+        let offers = cargo_offers(&root, &[]);
+        assert!(
+            offers
+                .iter()
+                .all(|item| !item.path.ends_with("src") && !item.path.join("lib.rs").exists()),
+            "{offers:?}"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

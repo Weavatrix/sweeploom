@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sweeploom": {
+      "command": "sweeploom",
+      "args": ["mcp"]
+    }
+  }
+}

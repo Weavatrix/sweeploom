@@ -8,7 +8,9 @@ use eframe::egui::{self, ViewportCommand};
 
 use crossbeam_channel::Receiver;
 use sweeploom_ai::AiOffer;
-use sweeploom_core::{LiveSession, ProcessKey, ProjectId, Receipt, SessionId};
+use sweeploom_core::{
+    LiveSession, ObservationTracker, PendingTermination, ProcessKey, ProjectId, Receipt, SessionId,
+};
 use sweeploom_dev::ReviewRow;
 use sweeploom_history::HistoryStore;
 use sweeploom_network::enrich_network;
@@ -20,18 +22,18 @@ use crate::chrome;
 use crate::live;
 use crate::nav::Nav;
 use crate::prefs::Prefs;
-use crate::scan_job::{RebuildOutcome, ScanOutcome};
-use crate::screens::{BrowserUi, ProjectGroup};
+use crate::scan_job::{RebuildOutcome, ScanMsg};
+use crate::screens::{AiGroup, BrowserUi, ProjectCard, ProjectGroup};
 use crate::sort::Sort;
 use crate::theme;
-use crate::tray::{self, TrayCommand, TrayIconHandle};
+use crate::tray::{self, TrayIconHandle};
 
 /// Live UI application.
 pub struct SweepLoomApp {
     pub(crate) nav: Nav,
-    sampler: ProcessSampler,
-    last_sample: Instant,
-    last_quiet: Instant,
+    pub(crate) sampler: ProcessSampler,
+    pub(crate) last_sample: Instant,
+    pub(crate) last_quiet: Instant,
     pub(crate) snapshot: Option<ProcessSnapshotSet>,
     pub(crate) sessions: Vec<LiveSession>,
     pub(crate) selected_session: Option<SessionId>,
@@ -42,6 +44,13 @@ pub struct SweepLoomApp {
     pub(crate) project_sort: Sort,
     pub(crate) project_group: ProjectGroup,
     pub(crate) collapsed_project_groups: HashSet<String>,
+    pub(crate) project_cards: Vec<ProjectCard>,
+    pub(crate) project_card_stamp: u64,
+    pub(crate) ai_sort: Sort,
+    pub(crate) ai_group: AiGroup,
+    pub(crate) collapsed_ai_groups: HashSet<String>,
+    pub(crate) expanded_history: HashSet<String>,
+    pub(crate) expanded_sessions: HashSet<String>,
     pub(crate) explorer_sort: Sort,
     pub(crate) expanded_explorer: HashSet<String>,
     pub(crate) process_sort: Sort,
@@ -52,6 +61,8 @@ pub struct SweepLoomApp {
     pub(crate) scan_root: String,
     pub(crate) locations: UserLocations,
     pub(crate) confirm_terminate: bool,
+    pub(crate) pending_stop: Option<PendingTermination>,
+    pub(crate) observation: ObservationTracker,
     pub(crate) confirm_force: bool,
     pub(crate) pending_force: Option<Vec<ProcessKey>>,
     pub(crate) action_message: Option<String>,
@@ -70,14 +81,21 @@ pub struct SweepLoomApp {
     pub(crate) last_busy: HashMap<ProcessKey, SystemTime>,
     pub(crate) volumes: Vec<(PathBuf, u64, u64)>,
     pub(crate) scanning: bool,
+    pub(crate) scan_entries: u64,
+    pub(crate) scan_bytes: u64,
+    pub(crate) scan_hint: String,
     pub(crate) ai_offers: Option<Vec<AiOffer>>,
+    pub(crate) ai_listing: bool,
     pub(crate) prefs: Prefs,
     pub(crate) hidden: bool,
+    pub(crate) hid_at: Instant,
     pub(crate) tray: Option<TrayIconHandle>,
-    force_quit: bool,
+    pub(crate) force_quit: bool,
     start_hidden: bool,
-    pub(crate) scan_rx: Option<Receiver<ScanOutcome>>,
+    pub(crate) scan_rx: Option<Receiver<ScanMsg>>,
     pub(crate) rebuild_rx: Option<Receiver<RebuildOutcome>>,
+    pub(crate) apply_rx: Option<Receiver<(String, Receipt)>>,
+    pub(crate) ai_rx: Option<Receiver<Result<Vec<AiOffer>, String>>>,
 }
 
 impl SweepLoomApp {
@@ -89,11 +107,6 @@ impl SweepLoomApp {
         tray::install_wake(cc.egui_ctx.clone());
         let mut sampler = ProcessSampler::new();
         let (snapshot, sessions) = live::sample_with(&mut sampler, &locations);
-        let tray = if prefs.tray_enabled {
-            tray::create()
-        } else {
-            None
-        };
         let mut app = Self {
             nav: Nav::Overview,
             sampler,
@@ -109,6 +122,13 @@ impl SweepLoomApp {
             project_sort: Sort::size_desc(),
             project_group: ProjectGroup::Parent,
             collapsed_project_groups: HashSet::new(),
+            project_cards: Vec::new(),
+            project_card_stamp: u64::MAX,
+            ai_sort: Sort::size_desc(),
+            ai_group: AiGroup::Tool,
+            collapsed_ai_groups: HashSet::new(),
+            expanded_history: HashSet::new(),
+            expanded_sessions: HashSet::new(),
             explorer_sort: Sort::size_desc(),
             expanded_explorer: HashSet::new(),
             process_sort: Sort::size_desc(),
@@ -119,6 +139,8 @@ impl SweepLoomApp {
             scan_root: locations.home.display().to_string(),
             locations,
             confirm_terminate: false,
+            pending_stop: None,
+            observation: ObservationTracker::default(),
             confirm_force: false,
             pending_force: None,
             action_message: None,
@@ -132,23 +154,34 @@ impl SweepLoomApp {
             confirm_planned: false,
             confirm_helpers: false,
             browser: BrowserUi::default(),
-            current_project: std::env::current_dir().ok().map(ProjectId),
+            current_project: live::current_project(),
             project_roots: Vec::new(),
             last_busy: HashMap::new(),
             volumes: volume_space(),
             scanning: false,
+            scan_entries: 0,
+            scan_bytes: 0,
+            scan_hint: String::new(),
             ai_offers: None,
+            ai_listing: false,
             prefs,
             hidden: false,
-            tray,
+            hid_at: Instant::now(),
+            tray: None,
             force_quit: false,
             start_hidden,
             scan_rx: None,
             rebuild_rx: None,
+            apply_rx: None,
+            ai_rx: None,
         };
         live::stamp_first(&mut app);
         app.rebuild_review();
         app
+    }
+
+    pub(crate) fn observation_gap(&self) -> bool {
+        self.observation.has_gap()
     }
 
     pub(crate) fn persist_prefs(&self) {
@@ -168,23 +201,31 @@ impl SweepLoomApp {
 
     pub(crate) fn leave_background(&mut self, ctx: &egui::Context) {
         self.hidden = false;
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize(egui::vec2(1360.0, 860.0)));
+        // Visible(false) stops Windows redraws, so restore both flags.
         ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
         ctx.send_viewport_cmd(ViewportCommand::Focus);
+        ctx.request_repaint();
         self.refresh_now();
     }
 
-    fn enter_background(&mut self, ctx: &egui::Context) {
+    pub(crate) fn enter_background(&mut self, ctx: &egui::Context) {
         self.hidden = true;
+        self.hid_at = Instant::now();
         self.history = HistoryStore::default();
         self.ai_offers = None;
         self.snapshot = None;
         self.sessions.clear();
         self.planned_keys.clear();
         self.selected_session = None;
-        self.last_busy.clear();
+        self.pending_stop = None;
+        self.observation.mark_gap();
         self.sampler.enter_quiet();
         ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-        ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+        // Keep the window visible to winit so tray clicks still wake a frame.
+        ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+        ctx.request_repaint();
     }
 
     pub(crate) fn refresh_live(&mut self) {
@@ -207,6 +248,7 @@ impl SweepLoomApp {
             &mut snapshot,
             self.current_project.as_ref(),
             &roots,
+            &mut self.observation,
         );
         let live_keys: HashSet<ProcessKey> = self
             .sessions
@@ -226,47 +268,29 @@ impl SweepLoomApp {
 
 impl eframe::App for SweepLoomApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.poll_disk();
+        self.ensure_tray();
         if self.start_hidden {
             self.start_hidden = false;
             self.enter_background(ctx);
         }
         self.handle_tray(ctx);
-        if self.hidden {
-            if self.last_quiet.elapsed() >= Duration::from_secs(60) {
-                self.sampler.pump_quiet();
-                self.last_quiet = Instant::now();
-            }
-            ctx.request_repaint_after(Duration::from_secs(60));
+        if self.stay_background(ctx) {
+            self.poll_disk();
             return;
         }
         theme::apply(ctx, self.prefs.theme, self.prefs.ui_scale);
-        if self.scanning {
+        if self.scanning || self.ai_listing || self.scan_rx.is_some() || self.apply_rx.is_some() {
+            self.refresh_live();
             ctx.request_repaint_after(Duration::from_millis(200));
         } else {
             self.refresh_live();
-            ctx.request_repaint_after(Duration::from_secs(1));
+            ctx.request_repaint_after(if self.tray.is_some() {
+                Duration::from_millis(200)
+            } else {
+                Duration::from_secs(1)
+            });
         }
         chrome::draw(ctx, self);
-    }
-}
-
-impl SweepLoomApp {
-    fn handle_tray(&mut self, ctx: &egui::Context) {
-        if let Some(handle) = &self.tray
-            && let Some(command) = tray::poll(handle)
-        {
-            match command {
-                TrayCommand::Show => self.leave_background(ctx),
-                TrayCommand::Quit => {
-                    self.force_quit = true;
-                    ctx.send_viewport_cmd(ViewportCommand::Close);
-                }
-            }
-        }
-        let close = ctx.input(|input| input.viewport().close_requested());
-        if close && !self.force_quit && self.prefs.tray_enabled && self.tray.is_some() {
-            self.enter_background(ctx);
-        }
+        self.poll_disk();
     }
 }

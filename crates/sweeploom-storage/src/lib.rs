@@ -9,10 +9,13 @@
 mod classify;
 mod inventory;
 
-pub use classify::{PathCategory, classify_path_component, is_project_marker, is_source_extension};
+pub use classify::{
+    PathCategory, classify_path_component, is_project_marker, is_source_extension,
+    keep_nested_children,
+};
 pub use inventory::{
-    DirectoryNode, InventoryLimits, InventoryReport, developer_roots, discover_projects,
-    discover_projects_from, review_scan_roots, scan_inventory,
+    DirectoryNode, InventoryLimits, InventoryReport, ScanTick, developer_roots, discover_projects,
+    discover_projects_from, review_scan_roots, scan_inventory, scan_inventory_with,
 };
 
 use weavatrix_scan::{IgnorePolicy, ScanOptions, StandardSkips};

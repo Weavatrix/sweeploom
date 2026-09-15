@@ -18,4 +18,4 @@ pub use node::{NodeOffer, node_offers};
 pub use project::{DevKind, classify_project};
 pub use python::{PythonOffer, python_offers};
 pub use review::{ReviewRow, collect_review, collect_review_from};
-pub use size::{dir_logical_bytes, path_mtime};
+pub use size::{dir_logical_bytes, dir_size, path_mtime};

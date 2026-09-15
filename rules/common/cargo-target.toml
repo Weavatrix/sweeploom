@@ -1,0 +1,10 @@
+schema = 1
+
+[[cleaner]]
+id = "cargo-target"
+label = "Cargo target"
+category = "build-cache"
+risk = "safe"
+strategy = "permanent-generated"
+markers = ["Cargo.toml"]
+paths = ["target"]

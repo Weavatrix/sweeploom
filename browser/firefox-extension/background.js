@@ -2,6 +2,8 @@
 
 const HOST = "com.sweeploom.companion";
 const VERSION = "0.1.0";
+const INSTANCE = `${chrome.runtime.id || "firefox"}:${Date.now()}`;
+let epoch = Date.now();
 
 let port = null;
 let sendTimer = 0;
@@ -16,15 +18,26 @@ function connect() {
     port = null;
     return null;
   }
+  epoch += 1;
   port.onDisconnect.addListener(() => {
     port = null;
   });
-  port.postMessage({ type: "hello", version: VERSION });
   port.onMessage.addListener((message) => {
     if (message && message.type === "apply" && Array.isArray(message.actions)) {
       void applyActions(message.actions);
     }
   });
+  try {
+    port.postMessage({
+      type: "hello",
+      version: VERSION,
+      instance_id: INSTANCE,
+      epoch,
+    });
+  } catch (_error) {
+    port = null;
+    return null;
+  }
   return port;
 }
 
@@ -36,6 +49,8 @@ function safeUrl(raw) {
     const url = new URL(raw);
     url.username = "";
     url.password = "";
+    url.search = "";
+    url.hash = "";
     return url.href;
   } catch (_error) {
     return "";
@@ -79,11 +94,17 @@ async function sendTabs() {
   });
   const activeId =
     active[0] && typeof active[0].id === "number" ? active[0].id : null;
-  native.postMessage({
-    type: "tabs",
-    tabs: tabs.filter((tab) => typeof tab.id === "number").map(snapshot),
-    active_tab_id: activeId,
-  });
+  try {
+    native.postMessage({
+      type: "tabs",
+      tabs: tabs.filter((tab) => typeof tab.id === "number").map(snapshot),
+      active_tab_id: activeId,
+      instance_id: INSTANCE,
+      epoch,
+    });
+  } catch (_error) {
+    port = null;
+  }
 }
 
 chrome.runtime.onInstalled.addListener(schedule);
@@ -91,7 +112,7 @@ chrome.runtime.onStartup.addListener(schedule);
 chrome.tabs.onUpdated.addListener(schedule);
 chrome.tabs.onRemoved.addListener(schedule);
 chrome.tabs.onActivated.addListener(schedule);
-chrome.alarms.create("sweeploom-tabs", { periodInMinutes: 5 });
+chrome.alarms.create("sweeploom-tabs", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "sweeploom-tabs") {
     void sendTabs();
@@ -99,23 +120,54 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 void sendTabs();
 
+function isProtected(tab) {
+  return Boolean(
+    !tab || tab.pinned || tab.audible || tab.incognito || tab.active
+  );
+}
+
 async function applyActions(actions) {
   for (const item of actions) {
-    if (!item || typeof item.tab_id !== "number") {
-      continue;
-    }
-    if (item.action === "discard") {
-      try {
-        await chrome.tabs.discard(item.tab_id);
-      } catch (_error) {
-        /* tab gone */
-      }
-    } else if (item.action === "focus") {
-      await focusTab(item.tab_id);
-    } else if (item.action === "bookmark_and_close") {
-      await bookmarkAndClose(item.tab_id);
+    try {
+      await applyOne(item);
+    } catch (_error) {
+      /* keep the rest of the batch */
     }
   }
+}
+
+async function applyOne(item) {
+  if (!item || typeof item.tab_id !== "number") {
+    return;
+  }
+  if (item.instance_id && item.instance_id !== INSTANCE) {
+    return;
+  }
+  if (item.epoch && item.epoch !== epoch) {
+    return;
+  }
+  if (item.action === "discard") {
+    await discardTab(item);
+  } else if (item.action === "focus") {
+    await focusTab(item.tab_id);
+  } else if (item.action === "bookmark_and_close") {
+    await bookmarkAndClose(item);
+  }
+}
+
+async function freshTab(tabId) {
+  return chrome.tabs.get(tabId);
+}
+
+async function discardTab(item) {
+  const tab = await freshTab(item.tab_id);
+  if (isProtected(tab) || tab.discarded) {
+    return;
+  }
+  if (item.expected_url && safeUrl(tab.url || "") !== item.expected_url) {
+    return;
+  }
+  await chrome.tabs.discard(item.tab_id);
 }
 
 async function focusTab(tabId) {
@@ -135,14 +187,10 @@ async function focusTab(tabId) {
   }
 }
 
-async function bookmarkAndClose(tabId) {
-  let tab;
-  try {
-    tab = await chrome.tabs.get(tabId);
-  } catch (_error) {
-    return;
-  }
-  if (!tab || tab.pinned || tab.audible || tab.incognito) {
+async function bookmarkAndClose(item) {
+  const tabId = item.tab_id;
+  let tab = await freshTab(tabId);
+  if (isProtected(tab)) {
     return;
   }
   const url = tab.url || "";
@@ -154,11 +202,17 @@ async function bookmarkAndClose(tabId) {
   ) {
     return;
   }
+  const approved = url;
   const created = await chrome.bookmarks.create({
     title: tab.title || url,
     url,
   });
-  if (created && created.id) {
-    await chrome.tabs.remove(tabId);
+  if (!created || !created.id) {
+    return;
   }
+  tab = await freshTab(tabId);
+  if (isProtected(tab) || (tab.url || "") !== approved) {
+    return;
+  }
+  await chrome.tabs.remove(tabId);
 }

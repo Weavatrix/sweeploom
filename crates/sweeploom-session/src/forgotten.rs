@@ -3,8 +3,8 @@
 use std::time::{Duration, SystemTime};
 
 use sweeploom_core::{
-    LiveSession, ProcessSafetyClass, ProjectId, Recommendation, SessionActivity, SessionKind,
-    SessionRecommendation, SessionSafety,
+    LiveSession, ProcessSafetyClass, ProcessSnapshot, ProjectId, Recommendation, SessionActivity,
+    SessionKind, SessionRecommendation, SessionSafety,
 };
 
 /// Inputs the scorer is allowed to consider.
@@ -59,44 +59,51 @@ pub fn score_session(
     };
     let network_bytes = scored.network.byte_rate_available
         && (scored.network.observed_rx_bytes + scored.network.observed_tx_bytes > 0);
-    let network_fresh = match idle {
-        None => true,
-        Some(idle) => idle < Duration::from_mins_compat(5),
-    };
     let input = ForgottenInput {
         idle,
         rss_bytes: scored.rss_bytes,
         cpu_percent: scored.cpu_percent,
-        network_active: network_bytes && network_fresh,
+        network_active: network_bytes,
         is_current_project: is_current,
         system_critical: scored.safety.terminate_disabled,
-        known_dev: matches!(
-            scored.kind,
-            SessionKind::ClaudeCode
-                | SessionKind::Codex
-                | SessionKind::Mcp
-                | SessionKind::DevServer
-                | SessionKind::Build
-                | SessionKind::LanguageServer
-                | SessionKind::TestRunner
-        ),
+        known_dev: scored.kind.is_known_dev(),
         disk_busy: scored.disk.read_bytes + scored.disk.write_bytes > 0,
     };
     apply_policy(&mut scored, input);
-    if scored.kind == SessionKind::Browser {
+    if scored.kind == SessionKind::Browser || scored.kind.is_agent() {
         scored.recommendation.recommendation = Recommendation::Keep;
         scored.recommendation.estimated_reclaimable_rss = 0;
     }
     scored
 }
 
-trait DurationMins {
-    fn from_mins_compat(mins: u64) -> Duration;
-}
-
-impl DurationMins for Duration {
-    fn from_mins_compat(mins: u64) -> Duration {
-        Duration::from_secs(mins.saturating_mul(60))
+/// MCP with no live agent parent is an orphan helper, not a kill signal by itself.
+pub fn mark_orphan_mcp(sessions: &mut [LiveSession], processes: &[ProcessSnapshot]) {
+    let agent_members: std::collections::HashSet<_> = sessions
+        .iter()
+        .filter(|session| session.kind.is_agent())
+        .flat_map(|session| session.processes.iter().copied())
+        .collect();
+    for session in sessions.iter_mut() {
+        if session.kind != SessionKind::Mcp {
+            continue;
+        }
+        let attached = session.processes.iter().any(|key| {
+            processes.iter().any(|process| {
+                process.key == *key
+                    && process
+                        .parent
+                        .is_some_and(|parent| agent_members.contains(&parent))
+            })
+        });
+        if !attached {
+            session.activity = SessionActivity::OrphanCandidate;
+            session.recommendation.recommendation = Recommendation::Optional;
+            session.recommendation.estimated_reclaimable_rss = estimate_reclaim(session.rss_bytes);
+        } else {
+            session.recommendation.recommendation = Recommendation::Keep;
+            session.recommendation.estimated_reclaimable_rss = 0;
+        }
     }
 }
 
@@ -140,6 +147,16 @@ fn apply_policy(session: &mut LiveSession, input: ForgottenInput) {
         session.recommendation.recommendation = Recommendation::Keep;
         return;
     }
+    if !input.known_dev {
+        session.activity = if idle_hours >= 2 {
+            SessionActivity::Idle
+        } else {
+            SessionActivity::BackgroundActive
+        };
+        session.recommendation.recommendation = Recommendation::Keep;
+        session.recommendation.estimated_reclaimable_rss = 0;
+        return;
+    }
     if idle_hours >= 2 && input.rss_bytes > 1_000_000_000 {
         session.activity = SessionActivity::SleepingMemoryHeavy;
         session.recommendation.recommendation = Recommendation::Recommended;
@@ -147,7 +164,7 @@ fn apply_policy(session: &mut LiveSession, input: ForgottenInput) {
         return;
     }
     if idle_hours >= 2 {
-        session.activity = SessionActivity::Idle;
+        session.activity = SessionActivity::LikelyForgotten;
         session.recommendation.recommendation = Recommendation::Optional;
         session.recommendation.estimated_reclaimable_rss = estimate_reclaim(input.rss_bytes);
         return;
@@ -203,10 +220,8 @@ mod tests {
     fn idle_heavy_session_is_recommended() {
         let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
         let scored = score_session(&session(2_000_000_000, SessionKind::ClaudeCode), now, None);
-        assert_eq!(
-            scored.recommendation.recommendation,
-            Recommendation::Recommended
-        );
+        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
+        assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
         assert_eq!(scored.activity, SessionActivity::SleepingMemoryHeavy);
     }
 
@@ -245,6 +260,31 @@ mod tests {
         let scored = score_session(&value, now, None);
         assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
         assert_eq!(scored.activity, SessionActivity::Active);
+    }
+
+    #[test]
+    fn generic_app_is_never_auto_recommended() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
+        let scored = score_session(&session(2_000_000_000, SessionKind::GenericApp), now, None);
+        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
+        assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
+    }
+
+    #[test]
+    fn idle_cursor_keeps_context() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
+        let scored = score_session(&session(2_000_000_000, SessionKind::Cursor), now, None);
+        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
+        assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
+        assert_eq!(scored.activity, SessionActivity::SleepingMemoryHeavy);
+    }
+
+    #[test]
+    fn idle_light_agent_is_likely_forgotten_but_kept() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
+        let scored = score_session(&session(500_000_000, SessionKind::ClaudeCode), now, None);
+        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
+        assert_eq!(scored.activity, SessionActivity::LikelyForgotten);
     }
 
     #[test]

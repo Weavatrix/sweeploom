@@ -8,34 +8,24 @@ use crate::format::{format_bytes, short_path};
 use crate::nav::Nav;
 use crate::sort::{Col, header_cell};
 use crate::theme;
-use crate::widgets::{page_title, pointer, table_scroll_height};
+use crate::widgets::{self, page_title, pointer, table_scroll_height};
 
-use super::project_rows::{
-    Line, ProjectCard, ProjectGroup, collect_cards, sort_cards, table_lines,
-};
+use super::project_rows::{Line, ProjectGroup, refresh_cards, sort_cards, table_lines};
 
 pub fn ui_projects(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Projects",
-        "Cargo, npm, and Python artifacts from Review. Browser is for Chrome/Edge trees, not node_modules.",
+        "Cargo, npm, and Python artifacts from Review. Click a folder to collapse it. Click a project to open Explorer. Browser is for Chrome/Edge trees, not node_modules.",
     );
     toolbar(app, ui);
-    ui.add_space(8.0);
-    let mut cards = collect_cards(app);
-    if cards.is_empty() {
+    refresh_cards(app);
+    if app.project_cards.is_empty() {
         empty_hint(app, ui);
         return;
     }
-    sort_cards(&mut cards, app.project_sort);
-    ui.label(
-        RichText::new(format!(
-            "{} project(s). Click a group to collapse it. Click a row to open Explorer.",
-            cards.len()
-        ))
-        .color(theme::muted(ui)),
-    );
-    draw_table(app, ui, &cards);
+    sort_cards(&mut app.project_cards, app.project_sort);
+    draw_table(app, ui);
 }
 
 fn toolbar(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -43,7 +33,7 @@ fn toolbar(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         let label = if app.scanning {
             "Working…"
         } else {
-            "Rebuild review"
+            "Rebuild"
         };
         if pointer(ui.add_enabled(!app.scanning, egui::Button::new(label))).clicked() {
             app.rebuild_review();
@@ -58,9 +48,7 @@ fn toolbar(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             }
         }
     });
-    if let Some(message) = &app.action_message {
-        ui.label(message);
-    }
+    widgets::action_note(ui, app.action_message.as_deref());
 }
 
 fn empty_hint(app: &SweepLoomApp, ui: &mut egui::Ui) {
@@ -71,24 +59,31 @@ fn empty_hint(app: &SweepLoomApp, ui: &mut egui::Ui) {
     }
 }
 
-fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui, cards: &[ProjectCard]) {
+fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut sort = app.project_sort;
-    let lines = table_lines(cards, app.project_group, &app.collapsed_project_groups);
+    let nested = app.project_group != ProjectGroup::None;
+    let lines = table_lines(
+        &app.project_cards,
+        app.project_group,
+        &app.collapsed_project_groups,
+        sort,
+    );
     let row_count = lines.len();
     let height = table_scroll_height(ui);
     let mut toggle = None;
     let mut open = None;
     TableBuilder::new(ui)
+        .id_salt("projects-grid")
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click())
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::remainder().at_least(220.0))
-        .column(Column::auto().at_least(90.0))
-        .column(Column::auto().at_least(90.0))
-        .column(Column::auto().at_least(140.0))
+        .column(Column::remainder().at_least(160.0).clip(true))
+        .column(Column::exact(80.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .column(Column::exact(140.0).clip(true))
         .header(32.0, |mut header| {
             header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Name"));
             header.col(|ui| header_cell(ui, &mut sort, Col::Status, "Kind"));
@@ -98,8 +93,15 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui, cards: &[ProjectCard]) 
             });
         })
         .body(|body| {
-            body.rows(40.0, row_count, |mut row| {
-                fill_line(&lines, cards, &mut row, &mut toggle, &mut open);
+            body.rows(widgets::TABLE_ROW, row_count, |mut row| {
+                fill_line(
+                    &lines,
+                    &app.project_cards,
+                    nested,
+                    &mut row,
+                    &mut toggle,
+                    &mut open,
+                );
             });
         });
     app.project_sort = sort;
@@ -108,16 +110,23 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui, cards: &[ProjectCard]) 
 
 fn fill_line(
     lines: &[Line],
-    cards: &[ProjectCard],
+    cards: &[super::project_rows::ProjectCard],
+    nested: bool,
     row: &mut egui_extras::TableRow<'_, '_>,
     toggle: &mut Option<String>,
     open: &mut Option<std::path::PathBuf>,
 ) {
     match lines.get(row.index()) {
-        Some(Line::Group { key, title }) => fill_group(row, key, title, toggle),
+        Some(Line::Group {
+            key,
+            title,
+            count,
+            bytes,
+            expanded,
+        }) => fill_group(row, key, title, *count, *bytes, *expanded, toggle),
         Some(Line::Project(index)) => {
             if let Some(card) = cards.get(*index) {
-                fill_project(row, card, open);
+                fill_project(row, card, nested, open);
             }
         }
         None => {}
@@ -128,13 +137,28 @@ fn fill_group(
     row: &mut egui_extras::TableRow<'_, '_>,
     key: &str,
     title: &str,
+    count: usize,
+    bytes: u64,
+    expanded: bool,
     toggle: &mut Option<String>,
 ) {
     row.col(|ui| {
-        ui.label(RichText::new(title).strong());
+        crate::icons::show(ui, crate::icons::Glyph::Explorer, 14.0, theme::accent());
+        if crate::widgets::disclose(ui, expanded, theme::accent()) {
+            *toggle = Some(key.to_owned());
+        }
+        ui.add(egui::Label::new(RichText::new(format!("{title}  ·  {count}")).strong()).truncate());
     });
-    row.col(|_ui| {});
-    row.col(|_ui| {});
+    row.col(|ui| {
+        ui.label("Folder");
+    });
+    row.col(|ui| {
+        ui.label(if bytes > 0 {
+            format_bytes(bytes)
+        } else {
+            "—".to_owned()
+        });
+    });
     row.col(|_ui| {});
     if row.response().clicked() {
         *toggle = Some(key.to_owned());
@@ -143,16 +167,19 @@ fn fill_group(
 
 fn fill_project(
     row: &mut egui_extras::TableRow<'_, '_>,
-    card: &ProjectCard,
+    card: &super::project_rows::ProjectCard,
+    nested: bool,
     open: &mut Option<std::path::PathBuf>,
 ) {
     let name = card.name().to_owned();
     let path = short_path(&card.path);
     row.col(|ui| {
-        ui.vertical(|ui| {
-            ui.label(RichText::new(name).size(15.0).strong());
-            ui.label(RichText::new(path).size(12.0).color(theme::muted(ui)));
-        });
+        if nested {
+            ui.add_space(18.0);
+        }
+        crate::icons::show(ui, crate::icons::Glyph::Projects, 14.0, theme::muted(ui));
+        ui.add(egui::Label::new(RichText::new(name).size(15.0)).truncate())
+            .on_hover_text(&path);
     });
     row.col(|ui| {
         ui.label(&card.kinds);
@@ -165,7 +192,7 @@ fn fill_project(
         });
     });
     row.col(|ui| {
-        ui.label(&card.artifacts);
+        ui.add(egui::Label::new(&card.artifacts).truncate());
     });
     if row.response().clicked() {
         *open = Some(card.path.clone());

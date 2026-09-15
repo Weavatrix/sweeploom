@@ -1,27 +1,12 @@
-//! `sweeploom clean` — review generated offers, optionally apply.
+//! `sweeploom clean` — review, optionally apply.
 
 use std::path::Path;
 
-use sweeploom_dev::{ReviewRow, collect_review_from};
-use sweeploom_exec::{apply_plan, build_plan};
-use sweeploom_general::collect_offers;
-use sweeploom_platform::UserLocations;
-
+use crate::api::{ApplyRequest, apply_cleanup, cleanup_candidates};
 use crate::bytes::format_bytes;
 
 pub fn run(root: &Path, apply: bool) {
-    let mut rows = collect_review_from(root, &[], 128);
-    let locations = UserLocations::current();
-    let include_general = root == locations.home || root == locations.temp;
-    if include_general {
-        for offer in collect_offers(&locations) {
-            rows.push(ReviewRow {
-                candidate: offer.candidate,
-                selected: offer.selected,
-                title: offer.title,
-            });
-        }
-    }
+    let rows = cleanup_candidates(root);
     if rows.is_empty() {
         println!("no generated candidates");
         return;
@@ -30,32 +15,32 @@ pub fn run(root: &Path, apply: bool) {
         println!(
             "{}\t{}\t{}{}",
             if row.selected { "[x]" } else { "[ ]" },
-            format_bytes(row.candidate.logical_bytes),
+            format_bytes(row.logical_bytes),
             row.title,
-            if row.candidate.safety.is_blocked() {
-                "\tBLOCKED"
-            } else {
-                ""
-            }
+            if row.blocked { "\tBLOCKED" } else { "" }
         );
     }
     if !apply {
         println!("dry-run; pass --apply to delete pre-selected SAFE rows after revalidation");
         return;
     }
-    let selected: Vec<_> = rows
-        .into_iter()
-        .filter(|row| row.selected && !row.candidate.safety.is_blocked())
-        .map(|row| row.candidate)
-        .collect();
-    let plan = build_plan(&selected, None);
-    let (report, receipt) = apply_plan(&plan);
+    let report = apply_cleanup(ApplyRequest {
+        confirm: true,
+        root: root.to_path_buf(),
+        ids: Vec::new(),
+    });
+    if !report.ok {
+        println!(
+            "{}",
+            report.error.unwrap_or_else(|| "apply refused".to_owned())
+        );
+        return;
+    }
     println!(
-        "receipt={}\tdeleted={}\tskipped_changed={}\tfailed={}\tplanned={}",
-        receipt.plan.0,
-        report.counts.deleted,
-        report.counts.skipped_changed,
-        report.counts.failed,
-        format_bytes(receipt.estimated_physical_bytes)
+        "receipt={}\tdeleted={}\tskipped_changed={}\tfailed={}",
+        report.receipt.unwrap_or(0),
+        report.deleted,
+        report.skipped_changed,
+        report.failed
     );
 }

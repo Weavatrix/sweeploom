@@ -5,32 +5,65 @@ use std::path::PathBuf;
 use std::thread;
 
 use crossbeam_channel::{Receiver, unbounded};
-use sweeploom_core::ProcessSnapshot;
+use sweeploom_core::{Candidate, ExecutionContext, ProcessSnapshot, Receipt};
 use sweeploom_dev::ReviewRow;
+use sweeploom_exec::{apply_plan_with, build_plan_with};
 use sweeploom_platform::UserLocations;
-use sweeploom_storage::{InventoryLimits, InventoryReport, scan_inventory};
+use sweeploom_storage::{InventoryLimits, InventoryReport, ScanTick, scan_inventory_with};
 
 use crate::app::SweepLoomApp;
 use crate::review_extra;
 
-/// Result of a background Explorer scan plus Review rebuild.
-pub type ScanOutcome = Result<(InventoryReport, Vec<ReviewRow>), String>;
 /// Result of a Review-only rebuild. Inventory is left untouched.
 pub type RebuildOutcome = Result<(Vec<PathBuf>, Vec<ReviewRow>), String>;
 
-/// Start a bounded inventory walk. The UI polls [`Receiver::try_recv`].
+/// Progress or finished Explorer walk.
+pub enum ScanMsg {
+    /// Counters (and maybe a shallow folder preview) from the walker.
+    Progress(ScanTick),
+    /// Full inspector tree. Review rows follow later.
+    Tree(InventoryReport),
+    /// Review list after the tree, or a walk/review error.
+    Finished(Result<Vec<ReviewRow>, String>),
+}
+
+/// Start a home/folder walk. The UI polls [`Receiver::try_recv`].
 #[must_use]
 pub fn spawn(
     root: PathBuf,
     processes: Vec<ProcessSnapshot>,
     locations: UserLocations,
-) -> Receiver<ScanOutcome> {
+) -> Receiver<ScanMsg> {
+    let (tx, rx) = unbounded();
+    thread::spawn(move || {
+        let tick_tx = tx.clone();
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            let report = scan_inventory_with(&root, InventoryLimits::gui(), |tick| {
+                let _ = tick_tx.send(ScanMsg::Progress(tick));
+            })
+            .map_err(|error| error.to_string())?;
+            let projects = report.projects.clone();
+            let scan_root = report.root.clone();
+            let _ = tick_tx.send(ScanMsg::Tree(report));
+            Ok(review_extra::all_rows(
+                &scan_root, &locations, &projects, &processes,
+            ))
+        }))
+        .unwrap_or_else(|_| Err("scan panicked".to_owned()));
+        let _ = tx.send(ScanMsg::Finished(outcome));
+    });
+    rx
+}
+
+/// Inspect AI stores off the UI thread.
+#[must_use]
+pub fn spawn_ai(locations: UserLocations) -> Receiver<Result<Vec<sweeploom_ai::AiOffer>, String>> {
     let (tx, rx) = unbounded();
     thread::spawn(move || {
         let outcome = catch_unwind(AssertUnwindSafe(|| {
-            build_scan(root, &processes, &locations)
+            sweeploom_ai::inspect_offers(&locations)
         }))
-        .unwrap_or_else(|_| Err("scan panicked".to_owned()));
+        .map_err(|_| "AI listing panicked".to_owned());
         let _ = tx.send(outcome);
     });
     rx
@@ -63,15 +96,44 @@ pub fn spawn_review(
     rx
 }
 
-fn build_scan(
-    root: PathBuf,
-    processes: &[ProcessSnapshot],
-    locations: &UserLocations,
-) -> ScanOutcome {
-    let report =
-        scan_inventory(&root, InventoryLimits::gui()).map_err(|error| error.to_string())?;
-    let rows = review_extra::all_rows(&root, locations, &report.projects, processes);
-    Ok((report, rows))
+/// Apply a cleanup plan off the UI thread.
+#[must_use]
+pub fn spawn_apply(
+    candidates: Vec<Candidate>,
+    processes: Vec<ProcessSnapshot>,
+) -> Receiver<(String, Receipt)> {
+    let (tx, rx) = unbounded();
+    thread::spawn(move || {
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            let ctx = ExecutionContext::observed(&processes);
+            let plan = build_plan_with(&candidates, None, &ctx);
+            let (report, receipt) = apply_plan_with(&plan, &ctx);
+            let summary = format!(
+                "deleted={} skipped_changed={} failed={} planned={}",
+                report.counts.deleted,
+                report.counts.skipped_changed,
+                report.counts.failed,
+                crate::format::format_bytes(receipt.estimated_physical_bytes)
+            );
+            (summary, receipt)
+        }))
+        .unwrap_or_else(|_| {
+            (
+                "apply panicked".to_owned(),
+                Receipt {
+                    plan: sweeploom_core::PlanId(0),
+                    started: std::time::SystemTime::now(),
+                    finished: std::time::SystemTime::now(),
+                    selected_logical_bytes: 0,
+                    estimated_physical_bytes: 0,
+                    actual_free_space_delta: None,
+                    counts: sweeploom_core::ReceiptCounts::default(),
+                },
+            )
+        });
+        let _ = tx.send(outcome);
+    });
+    rx
 }
 
 impl SweepLoomApp {
@@ -86,41 +148,109 @@ impl SweepLoomApp {
             .map(|item| item.processes.clone())
             .unwrap_or_default();
         self.scanning = true;
+        self.scan_entries = 0;
+        self.scan_bytes = 0;
+        self.scan_hint.clear();
         self.inventory_error = None;
         self.action_message = Some(format!("Scanning {}…", root.display()));
         self.scan_rx = Some(spawn(root, processes, self.locations.clone()));
+    }
+
+    pub(crate) fn run_ai_listing(&mut self) {
+        if self.ai_listing {
+            return;
+        }
+        self.ai_listing = true;
+        self.ai_offers = None;
+        self.action_message = Some("Sizing AI stores…".to_owned());
+        self.ai_rx = Some(spawn_ai(self.locations.clone()));
     }
 
     pub(crate) fn poll_disk(&mut self) {
         if take_scan(self) {
             return;
         }
+        take_ai(self);
         take_rebuild(self);
+        take_apply_job(self);
     }
 }
 
+fn take_apply_job(app: &mut SweepLoomApp) {
+    let Some(rx) = &app.apply_rx else {
+        return;
+    };
+    let Ok((summary, receipt)) = rx.try_recv() else {
+        return;
+    };
+    app.apply_rx = None;
+    app.last_receipt = Some(receipt);
+    app.action_message = Some(summary);
+    app.rebuild_review();
+}
+
 fn take_scan(app: &mut SweepLoomApp) -> bool {
-    let Some(rx) = &app.scan_rx else {
-        return false;
+    let message = {
+        let Some(rx) = &app.scan_rx else {
+            return false;
+        };
+        match rx.try_recv() {
+            Ok(message) => message,
+            Err(_) => return false,
+        }
     };
-    let Ok(outcome) = rx.try_recv() else {
-        return false;
-    };
+    match message {
+        ScanMsg::Progress(tick) => apply_tick(app, tick),
+        ScanMsg::Tree(report) => apply_tree(app, report),
+        ScanMsg::Finished(outcome) => apply_finished(app, outcome),
+    }
+    true
+}
+
+fn apply_finished(app: &mut SweepLoomApp, outcome: Result<Vec<ReviewRow>, String>) {
     app.scan_rx = None;
     app.scanning = false;
     match outcome {
-        Ok((report, rows)) => {
+        Ok(rows) => {
             let n = rows.len();
-            app.project_roots = report.projects.clone();
-            app.inventory = Some(report);
-            app.expanded_explorer.clear();
             app.review = rows;
             app.inventory_error = None;
             app.action_message = Some(format!("{n} candidates"));
         }
         Err(error) => app.inventory_error = Some(error),
     }
-    true
+}
+
+fn apply_tree(app: &mut SweepLoomApp, report: InventoryReport) {
+    app.scan_entries = report.entries;
+    app.scan_bytes = report.tree.logical_bytes;
+    app.project_roots = report.projects.clone();
+    app.inventory = Some(report);
+    app.expanded_explorer.clear();
+    app.scanning = false;
+    app.action_message = Some("Folders ready. Building Review in the background…".to_owned());
+}
+
+fn apply_tick(app: &mut SweepLoomApp, tick: ScanTick) {
+    app.scan_entries = tick.entries;
+    app.scan_bytes = tick.logical_bytes;
+    app.scan_hint = tick.hint;
+    if let Some(tree) = tick.root {
+        let root = PathBuf::from(app.scan_root.trim());
+        app.inventory = Some(InventoryReport {
+            root,
+            tree,
+            projects: app.project_roots.clone(),
+            project_bytes: app
+                .inventory
+                .as_ref()
+                .map(|item| item.project_bytes.clone())
+                .unwrap_or_default(),
+            entries: tick.entries,
+            errors: 0,
+            capped: false,
+        });
+    }
 }
 
 fn take_rebuild(app: &mut SweepLoomApp) {
@@ -138,6 +268,28 @@ fn take_rebuild(app: &mut SweepLoomApp) {
             app.project_roots = projects;
             app.review = rows;
             app.action_message = Some(format!("{n} candidates"));
+        }
+        Err(error) => app.action_message = Some(error),
+    }
+}
+
+fn take_ai(app: &mut SweepLoomApp) {
+    let outcome = {
+        let Some(rx) = &app.ai_rx else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(outcome) => outcome,
+            Err(_) => return,
+        }
+    };
+    app.ai_rx = None;
+    app.ai_listing = false;
+    match outcome {
+        Ok(offers) => {
+            let n = offers.len();
+            app.ai_offers = Some(offers);
+            app.action_message = Some(format!("{n} AI store(s) sized"));
         }
         Err(error) => app.action_message = Some(error),
     }

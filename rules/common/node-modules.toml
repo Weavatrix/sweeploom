@@ -1,0 +1,10 @@
+schema = 1
+
+[[cleaner]]
+id = "node-modules"
+label = "Node modules"
+category = "dependencies"
+risk = "low-risk"
+strategy = "permanent-generated"
+markers = ["package.json"]
+paths = ["node_modules"]

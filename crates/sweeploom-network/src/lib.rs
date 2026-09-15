@@ -31,10 +31,12 @@ pub fn enrich_network(processes: &mut [sweeploom_core::ProcessSnapshot]) -> Netw
     let table = load_pid_endpoints();
     let bytes = load_pid_bytes();
     let byte_rates = bytes.is_some();
-    let bytes = bytes.unwrap_or_default();
     for process in processes {
         let endpoints = table.get(&process.pid).map_or(&[][..], Vec::as_slice);
-        process.network = snapshot_from(endpoints, bytes.get(&process.pid).copied(), byte_rates);
+        let process_bytes = bytes
+            .as_ref()
+            .and_then(|map| map.get(&process.pid).copied());
+        process.network = snapshot_from(endpoints, process_bytes, process_bytes.is_some());
     }
     NetworkCapability {
         connections: true,

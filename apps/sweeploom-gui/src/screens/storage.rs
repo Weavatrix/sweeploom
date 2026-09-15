@@ -14,12 +14,15 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "Explorer",
-        "Folder inspector. Symlinks are not followed. Scan runs in the background.",
+        "Folder inspector. Symlinks are not followed. Scan runs in the background. Click a folder to expand it. Double-click to scan it as Root.",
     );
     ui.horizontal(|ui| {
         ui.label("Root");
-        let width = (ui.available_width() - 88.0).max(160.0);
-        ui.add(egui::TextEdit::singleline(&mut app.scan_root).desired_width(width));
+        ui.add(
+            egui::TextEdit::singleline(&mut app.scan_root)
+                .desired_width(280.0)
+                .clip_text(true),
+        );
         let scan = if app.scanning { "Scanning…" } else { "Scan" };
         if crate::widgets::pointer(ui.add_enabled(!app.scanning, egui::Button::new(scan))).clicked()
         {
@@ -27,30 +30,46 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         }
     });
     if app.scanning {
-        ui.label("Walk is running in the background. The window stays interactive.");
+        ui.horizontal(|ui| {
+            ui.allocate_ui(egui::vec2(18.0, 18.0), |ui| {
+                ui.spinner();
+            });
+            ui.label(
+                RichText::new(format!(
+                    "{} entries · {}",
+                    app.scan_entries,
+                    format_bytes(app.scan_bytes)
+                ))
+                .color(crate::theme::muted(ui)),
+            );
+            let hint = if app.scan_hint.is_empty() {
+                "walking…".to_owned()
+            } else {
+                std::path::Path::new(&app.scan_hint)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or(&app.scan_hint)
+                    .to_owned()
+            };
+            ui.add(egui::Label::new(RichText::new(hint).color(crate::theme::muted(ui))).truncate());
+        });
+    } else if let Some(report) = &app.inventory {
+        ui.label(
+            RichText::new(format!(
+                "{} entries · {} projects · {}",
+                report.entries,
+                report.projects.len(),
+                format_bytes(report.tree.logical_bytes),
+            ))
+            .color(crate::theme::muted(ui)),
+        );
     }
     if let Some(error) = &app.inventory_error {
         ui.colored_label(ui.visuals().error_fg_color, error);
     }
-    let summary = app.inventory.as_ref().map(|report| {
-        format!(
-            "entries {} · projects {} · logical {}{}",
-            report.entries,
-            report.projects.len(),
-            format_bytes(report.tree.logical_bytes),
-            if report.capped { " · capped" } else { "" }
-        )
-    });
-    if let Some(summary) = summary {
-        ui.label(summary);
-        ui.add_space(8.0);
-        ui.label(
-            RichText::new("Click a folder to expand it. Double-click to scan it as Root.")
-                .size(13.0)
-                .color(crate::theme::muted(ui)),
-        );
+    if app.inventory.is_some() {
         folder_table(app, ui);
-    } else {
+    } else if !app.scanning {
         ui.label("Scan a folder to open the inspector. Symlinks are not followed.");
     }
 }
@@ -69,17 +88,17 @@ fn folder_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut toggle = None;
     let mut picked = None;
     TableBuilder::new(ui)
-        .id_salt("explorer-tree")
+        .id_salt("explorer-grid")
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click())
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::remainder().at_least(140.0).clip(true))
-        .column(Column::auto().at_least(56.0).at_most(88.0).clip(true))
-        .column(Column::auto().at_least(64.0).at_most(110.0).clip(true))
-        .column(Column::auto().at_least(48.0).at_most(72.0).clip(true))
+        .column(Column::remainder().at_least(160.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .column(Column::exact(100.0).clip(true))
+        .column(Column::exact(64.0).clip(true))
         .header(32.0, |mut header| {
             header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Name"));
             header.col(|ui| header_cell(ui, &mut sort, Col::Size, "Size"));
@@ -91,14 +110,14 @@ fn folder_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             });
         })
         .body(|body| {
-            body.rows(26.0, row_count, |mut row| {
+            body.rows(crate::widgets::TABLE_ROW, row_count, |mut row| {
                 let Some(line) = lines.get(row.index()) else {
                     return;
                 };
-                fill_line(&mut row, line);
+                let disclosed = fill_line(&mut row, line);
                 if row.response().double_clicked() {
                     picked = Some(line.path.display().to_string());
-                } else if row.response().clicked() && line.has_children {
+                } else if (disclosed || row.response().clicked()) && line.has_children {
                     toggle = Some(explorer_rows::path_key(&line.path));
                 } else if row.response().clicked() {
                     picked = Some(line.path.display().to_string());
@@ -116,24 +135,25 @@ fn folder_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     }
 }
 
-fn fill_line(row: &mut egui_extras::TableRow<'_, '_>, line: &Line) {
-    let mark = if !line.has_children {
-        "  "
-    } else if line.expanded {
-        "▾ "
-    } else {
-        "▸ "
-    };
-    let name = format!("{mark}{}", line.name);
+fn fill_line(row: &mut egui_extras::TableRow<'_, '_>, line: &Line) -> bool {
+    let name = line.name.clone();
     let size = format_bytes(line.bytes);
     let files = line.files.to_string();
     let category = line.category.label();
     let depth = line.depth;
     let glyph = category_glyph(line.category);
+    let open = line.expanded;
+    let can_open = line.has_children;
+    let mut disclosed = false;
     row.col(|ui| {
         ui.add_space(depth as f32 * 12.0);
+        if can_open {
+            disclosed = crate::widgets::disclose(ui, open, crate::theme::accent());
+        } else {
+            ui.add_space(11.0);
+        }
         crate::icons::show(ui, glyph, 14.0, crate::theme::accent());
-        ui.add(egui::Label::new(RichText::new(name).size(16.0)).truncate());
+        ui.add(egui::Label::new(RichText::new(name).size(15.0)).truncate());
     });
     row.col(|ui| {
         ui.label(size);
@@ -144,15 +164,9 @@ fn fill_line(row: &mut egui_extras::TableRow<'_, '_>, line: &Line) {
     row.col(|ui| {
         ui.label(files);
     });
+    disclosed
 }
 
-fn category_glyph(category: sweeploom_storage::PathCategory) -> crate::icons::Glyph {
-    use crate::icons::Glyph;
-    use sweeploom_storage::PathCategory;
-    match category {
-        PathCategory::Generated | PathCategory::Cache => Glyph::Disk,
-        PathCategory::Dependencies => Glyph::Projects,
-        PathCategory::UserData => Glyph::Volume,
-        PathCategory::Source | PathCategory::Unknown => Glyph::Explorer,
-    }
+fn category_glyph(_category: sweeploom_storage::PathCategory) -> crate::icons::Glyph {
+    crate::icons::Glyph::Explorer
 }

@@ -2,8 +2,9 @@
 
 use std::fs;
 
+use sweeploom_core::ExecutionContext;
 use sweeploom_dev::collect_review;
-use sweeploom_exec::{apply_plan, build_plan};
+use sweeploom_exec::{apply_plan_with, build_plan_with};
 
 #[test]
 fn scan_review_apply_deletes_stale_incremental() {
@@ -24,8 +25,9 @@ fn scan_review_apply_deletes_stale_incremental() {
         !selected.is_empty(),
         "Light incremental must be pre-selected for a non-git fixture"
     );
-    let plan = build_plan(&selected, None);
-    let (report, receipt) = apply_plan(&plan);
+    let ctx = ExecutionContext::observed(&[]);
+    let plan = build_plan_with(&selected, None, &ctx);
+    let (report, receipt) = apply_plan_with(&plan, &ctx);
     assert_eq!(report.counts.deleted, 1);
     assert_eq!(receipt.counts.deleted, 1);
     assert!(!junk.exists(), "stale incremental must be removed");

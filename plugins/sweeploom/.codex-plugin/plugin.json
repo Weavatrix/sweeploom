@@ -1,0 +1,31 @@
+{
+  "name": "sweeploom",
+  "version": "0.1.0",
+  "description": "Local-first workstation cleaner: inspect disk, sessions, and AI stores; apply only after review.",
+  "author": {
+    "name": "Weavatrix",
+    "email": "sergii.ziborov@gmail.com",
+    "url": "https://github.com/Weavatrix"
+  },
+  "homepage": "https://github.com/Weavatrix/sweeploom",
+  "repository": "https://github.com/Weavatrix/sweeploom",
+  "license": "MPL-2.0",
+  "keywords": ["cleanup", "disk", "sessions", "mcp", "tokens"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "SweepLoom",
+    "shortDescription": "Reclaim a workstation without losing chat context",
+    "longDescription": "SweepLoom is a Weavatrix product. It maps disk, processes, projects, and AI stores locally, then deletes only reviewed SAFE generated rows. Live agents stay Keep. Apply through MCP requires confirm=true.",
+    "developerName": "Weavatrix",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/Weavatrix/sweeploom",
+    "defaultPrompt": [
+      "Use SweepLoom to list cleanup_candidates for this repo and explain anything unclear. Do not apply yet.",
+      "Use SweepLoom to list_ai_stores and show always-on token tax. Do not park AGENTS.md or rules.",
+      "Use SweepLoom to list_sessions. Do not terminate live agents."
+    ],
+    "brandColor": "#C48C30"
+  }
+}

@@ -27,8 +27,12 @@ pub struct BrowserUi {
     pub tab_sort: Sort,
     /// Stoppable trees checked for helper stop.
     pub tree_ids: HashSet<SessionId>,
+    /// Row opened for member details.
+    pub selected_tree: Option<SessionId>,
     /// Companion tabs checked for save/discard.
     pub tab_ids: HashSet<i64>,
+    /// Unpacked Edge/Chrome extension id (`a`–`p`, 32 chars).
+    pub chromium_id: String,
     /// Later URLs checked for reopen/remove.
     pub later_urls: HashSet<String>,
     /// Confirm stop helpers.
@@ -44,7 +48,9 @@ impl Default for BrowserUi {
             tree_sort: Sort::size_desc(),
             tab_sort: Sort::size_desc(),
             tree_ids: HashSet::new(),
+            selected_tree: None,
             tab_ids: HashSet::new(),
+            chromium_id: String::new(),
             later_urls: HashSet::new(),
             confirm_helpers: false,
             confirm_discard: false,

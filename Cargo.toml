@@ -24,27 +24,27 @@ edition = "2024"
 license = "MPL-2.0"
 authors = ["Sergii Ziborov <sergii.ziborov@gmail.com>"]
 repository = "https://github.com/Weavatrix/sweeploom"
-homepage = "https://sweeploom.com"
+homepage = "https://github.com/Weavatrix/sweeploom"
 rust-version = "1.88"
 publish = false
 
 [workspace.dependencies]
-sweeploom-core = { path = "crates/sweeploom-core" }
-sweeploom-platform = { path = "crates/sweeploom-platform" }
-sweeploom-process = { path = "crates/sweeploom-process" }
-sweeploom-session = { path = "crates/sweeploom-session" }
-sweeploom-network = { path = "crates/sweeploom-network" }
-sweeploom-storage = { path = "crates/sweeploom-storage" }
-sweeploom-rules = { path = "crates/sweeploom-rules" }
-sweeploom-exec = { path = "crates/sweeploom-exec" }
-sweeploom-dev = { path = "crates/sweeploom-dev" }
-sweeploom-ai = { path = "crates/sweeploom-ai" }
-sweeploom-general = { path = "crates/sweeploom-general" }
-sweeploom-browser = { path = "crates/sweeploom-browser" }
-sweeploom-history = { path = "crates/sweeploom-history" }
+sweeploom-core = { path = "crates/sweeploom-core", version = "0.1.0" }
+sweeploom-platform = { path = "crates/sweeploom-platform", version = "0.1.0" }
+sweeploom-process = { path = "crates/sweeploom-process", version = "0.1.0" }
+sweeploom-session = { path = "crates/sweeploom-session", version = "0.1.0" }
+sweeploom-network = { path = "crates/sweeploom-network", version = "0.1.0" }
+sweeploom-storage = { path = "crates/sweeploom-storage", version = "0.1.0" }
+sweeploom-rules = { path = "crates/sweeploom-rules", version = "0.1.0" }
+sweeploom-exec = { path = "crates/sweeploom-exec", version = "0.1.0" }
+sweeploom-dev = { path = "crates/sweeploom-dev", version = "0.1.0" }
+sweeploom-ai = { path = "crates/sweeploom-ai", version = "0.1.0" }
+sweeploom-general = { path = "crates/sweeploom-general", version = "0.1.0" }
+sweeploom-browser = { path = "crates/sweeploom-browser", version = "0.1.0" }
+sweeploom-history = { path = "crates/sweeploom-history", version = "0.1.0" }
 
-weavatrix-scan = { git = "https://github.com/Weavatrix/weavatrix-scan", rev = "d3c8bc5", default-features = false }
-weavatrix-git = { git = "https://github.com/Weavatrix/weavatrix-git", rev = "122cb70f1e715705cbb0859b8e43faca867fc7e6", default-features = false }
+weavatrix-scan = { version = "0.5.0", default-features = false }
+weavatrix-git = { version = "0.3.4", default-features = false }
 
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

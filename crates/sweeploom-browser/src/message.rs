@@ -12,6 +12,47 @@ pub struct TabCommand {
     pub tab_id: i64,
     /// Discard, bookmark-and-close, or focus. Close is never queued.
     pub action: TabAction,
+    /// Installation / profile id. Empty means the legacy single-host queue.
+    #[serde(default)]
+    pub instance_id: String,
+    /// Connection epoch. Stale epochs must not execute.
+    #[serde(default)]
+    pub epoch: u64,
+    /// Idempotency key for this action.
+    #[serde(default)]
+    pub action_id: String,
+    /// Unix ms after which the action expires.
+    #[serde(default)]
+    pub expires_unix_ms: u64,
+    /// Approved display URL captured at queue time.
+    #[serde(default)]
+    pub expected_url: String,
+}
+
+impl TabCommand {
+    /// Queue a tab action for one browser connection.
+    #[must_use]
+    pub fn new(tab_id: i64, action: TabAction, instance_id: impl Into<String>, epoch: u64) -> Self {
+        Self {
+            tab_id,
+            action,
+            instance_id: instance_id.into(),
+            epoch,
+            action_id: format!("{tab_id}-{}-{epoch}", action_name(action)),
+            expires_unix_ms: 0,
+            expected_url: String::new(),
+        }
+    }
+}
+
+fn action_name(action: TabAction) -> &'static str {
+    match action {
+        TabAction::Discard => "discard",
+        TabAction::BookmarkAndClose => "bookmark",
+        TabAction::Focus => "focus",
+        TabAction::Close => "close",
+        TabAction::Keep => "keep",
+    }
 }
 
 /// Message from the WebExtension.
@@ -23,6 +64,12 @@ pub enum ExtensionMessage {
     Hello {
         /// Extension version string.
         version: String,
+        /// Browser installation / profile id.
+        #[serde(default)]
+        instance_id: String,
+        /// Connection epoch.
+        #[serde(default)]
+        epoch: u64,
     },
     /// Full tab list. URLs must already have credentials stripped.
     #[serde(rename = "tabs")]
@@ -32,6 +79,12 @@ pub enum ExtensionMessage {
         /// Current tab.
         #[serde(default)]
         active_tab_id: Option<i64>,
+        /// Browser installation / profile id.
+        #[serde(default)]
+        instance_id: String,
+        /// Connection epoch.
+        #[serde(default)]
+        epoch: u64,
     },
 }
 
@@ -64,6 +117,7 @@ impl ExtensionMessage {
             Self::Tabs {
                 tabs,
                 active_tab_id,
+                ..
             } => Some(CompanionTabs {
                 tabs,
                 active_tab_id,

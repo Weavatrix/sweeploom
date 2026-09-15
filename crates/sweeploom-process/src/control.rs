@@ -3,7 +3,7 @@
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 use sweeploom_core::ProcessKey;
-use sweeploom_platform::{ProcessControlBackend, Result};
+use sweeploom_platform::{ProcessControlBackend, ProcessControlCapabilities, Result};
 
 /// `sysinfo`-backed process control. Verifies `ProcessKey` before signalling.
 #[derive(Debug, Default)]
@@ -32,8 +32,13 @@ impl SysinfoProcessControl {
                 "process no longer exists",
             ));
         };
+        if key.started_at_unix_ms == 0 {
+            return Err(sweeploom_platform::Error::Capability(
+                "unknown process start time; refusing signal",
+            ));
+        }
         let live_start_ms = process.start_time().saturating_mul(1000);
-        if key.started_at_unix_ms != 0 && live_start_ms != key.started_at_unix_ms {
+        if live_start_ms != key.started_at_unix_ms {
             return Err(sweeploom_platform::Error::Capability(
                 "process key no longer matches (PID reused)",
             ));
@@ -48,7 +53,16 @@ impl SysinfoProcessControl {
 }
 
 impl ProcessControlBackend for SysinfoProcessControl {
+    fn capabilities(&self) -> ProcessControlCapabilities {
+        ProcessControlCapabilities::host()
+    }
+
     fn request_graceful_stop(&self, key: ProcessKey) -> Result<()> {
+        if !self.capabilities().graceful_stop {
+            return Err(sweeploom_platform::Error::Capability(
+                "graceful stop is unsupported on this platform",
+            ));
+        }
         self.with_matching_process(key, |process| {
             process.kill_with(sysinfo::Signal::Term).unwrap_or(false)
         })

@@ -1,0 +1,10 @@
+schema = 1
+
+[[cleaner]]
+id = "python-pycache"
+label = "Python bytecode"
+category = "build-cache"
+risk = "safe"
+strategy = "permanent-generated"
+markers = ["pyproject.toml", "requirements.txt"]
+paths = ["__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"]

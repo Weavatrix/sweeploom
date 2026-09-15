@@ -8,7 +8,7 @@ mod summary;
 use sweeploom_core::ProcessKey;
 
 pub use store::HistoryStore;
-pub use summary::{CpuSummary, summarize_cpu};
+pub use summary::{CpuSummary, RssSummary, fold_recent, summarize_cpu, summarize_rss};
 
 /// One sample in a ring.
 #[derive(Clone, Copy, Debug, PartialEq)]

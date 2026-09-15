@@ -16,6 +16,8 @@ pub struct InventoryLimits {
     pub max_children_per_dir: usize,
     /// Stop recording project markers after this many roots.
     pub max_projects: usize,
+    /// Promote files at least this large into their own inspector rows.
+    pub large_file_bytes: u64,
 }
 
 impl Default for InventoryLimits {
@@ -24,18 +26,20 @@ impl Default for InventoryLimits {
             max_entries: Some(500_000),
             max_children_per_dir: 64,
             max_projects: 256,
+            large_file_bytes: 32 * 1024 * 1024,
         }
     }
 }
 
 impl InventoryLimits {
-    /// Tighter caps for the interactive GUI so a home scan cannot freeze the UI.
+    /// GUI walk. No entry cap — the scan is off-thread and streams progress.
     #[must_use]
     pub const fn gui() -> Self {
         Self {
-            max_entries: Some(80_000),
-            max_children_per_dir: 48,
-            max_projects: 128,
+            max_entries: None,
+            max_children_per_dir: 64,
+            max_projects: 512,
+            large_file_bytes: 32 * 1024 * 1024,
         }
     }
 }
@@ -61,6 +65,10 @@ pub struct DirectoryNode {
     pub category: PathCategory,
     /// Direct children, largest first, capped.
     pub children: Vec<DirectoryNode>,
+    /// True when this node is a single large file, not a folder.
+    pub is_file: bool,
+    /// True when the walk did not finish this subtree.
+    pub incomplete: bool,
 }
 
 impl DirectoryNode {
@@ -79,6 +87,51 @@ impl DirectoryNode {
             newest_generated_mtime: None,
             category,
             children: Vec::new(),
+            is_file: false,
+            incomplete: false,
+        }
+    }
+
+    pub(crate) fn file_leaf(path: PathBuf, bytes: u64, mtime: Option<SystemTime>) -> Self {
+        let mut node = Self::new(path);
+        node.logical_bytes = bytes;
+        node.files = 1;
+        node.is_file = true;
+        node.newest_mtime = mtime;
+        node
+    }
+
+    /// Immediate children only. Nested trees stay on the walker until the scan finishes.
+    #[must_use]
+    pub fn preview(&self) -> Self {
+        Self {
+            path: self.path.clone(),
+            logical_bytes: self.logical_bytes,
+            files: self.files,
+            directories: self.directories,
+            newest_mtime: self.newest_mtime,
+            newest_source_mtime: self.newest_source_mtime,
+            newest_generated_mtime: self.newest_generated_mtime,
+            category: self.category,
+            children: self.children.iter().map(Self::leaf).collect(),
+            is_file: self.is_file,
+            incomplete: self.incomplete,
+        }
+    }
+
+    fn leaf(child: &Self) -> Self {
+        Self {
+            path: child.path.clone(),
+            logical_bytes: child.logical_bytes,
+            files: child.files,
+            directories: child.directories,
+            newest_mtime: child.newest_mtime,
+            newest_source_mtime: child.newest_source_mtime,
+            newest_generated_mtime: child.newest_generated_mtime,
+            category: child.category,
+            children: Vec::new(),
+            is_file: child.is_file,
+            incomplete: child.incomplete,
         }
     }
 
@@ -100,6 +153,8 @@ pub struct InventoryReport {
     pub tree: DirectoryNode,
     /// Discovered project roots (directories containing a marker).
     pub projects: Vec<PathBuf>,
+    /// Logical bytes for each discovered project root, even if the inspector tree dropped it.
+    pub project_bytes: Vec<(PathBuf, u64)>,
     /// Entries visited.
     pub entries: u64,
     /// Walk errors (typed, no panic).
@@ -116,6 +171,23 @@ impl InventoryReport {
             let canonical = std::fs::canonicalize(path).ok()?;
             find_node(&self.tree, &canonical)
         })
+    }
+
+    /// Folder size from the scan: project rollup first, then the inspector node.
+    #[must_use]
+    pub fn folder_bytes(&self, path: &Path) -> Option<u64> {
+        self.project_bytes
+            .iter()
+            .find(|(item, _)| item == path)
+            .map(|(_, bytes)| *bytes)
+            .or_else(|| {
+                let canonical = std::fs::canonicalize(path).ok()?;
+                self.project_bytes
+                    .iter()
+                    .find(|(item, _)| item == &canonical)
+                    .map(|(_, bytes)| *bytes)
+            })
+            .or_else(|| self.node(path).map(|node| node.logical_bytes))
     }
 
     /// Source / artifact heat for a discovered project directory.

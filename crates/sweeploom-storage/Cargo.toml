@@ -7,7 +7,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+publish = true
 description = "Filesystem inventory, folder inspector, and project heat via weavatrix-scan"
 
 [lints]

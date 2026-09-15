@@ -1,17 +1,49 @@
-//! Light, dark, and auto palettes. Accent stays SweepLoom gold.
+//! Cool canvas, ink type, gold only as accent.
 
 use eframe::egui::{
-    self, Color32, CornerRadius, CursorIcon, FontFamily, FontId, Stroke, TextStyle, Theme,
+    self, Color32, CornerRadius, CursorIcon, FontFamily, FontId, Shadow, Stroke, TextStyle, Theme,
 };
 
 use crate::prefs::ThemeMode;
 
-const GOLD: Color32 = Color32::from_rgb(196, 140, 64);
+const GOLD: Color32 = Color32::from_rgb(196, 140, 48);
+const GOLD_SOFT: Color32 = Color32::from_rgb(214, 168, 84);
+const INK: Color32 = Color32::from_rgb(17, 18, 22);
 
-/// SweepLoom gold, used for selected chrome and accents.
+/// SweepLoom gold. Use for marks and a single selected rail — not fills.
 #[must_use]
 pub const fn accent() -> Color32 {
     GOLD
+}
+
+/// Softer gold for chips on dark chrome.
+#[must_use]
+pub const fn accent_soft() -> Color32 {
+    GOLD_SOFT
+}
+
+/// Ink used on gold fills and dark chrome.
+#[must_use]
+pub const fn ink() -> Color32 {
+    INK
+}
+
+/// Warning / blocked / critical free space.
+#[must_use]
+pub const fn warn() -> Color32 {
+    Color32::from_rgb(196, 72, 48)
+}
+
+/// Safe / quiet chip.
+#[must_use]
+pub const fn ok() -> Color32 {
+    Color32::from_rgb(46, 128, 88)
+}
+
+/// Dark sidebar / header fill.
+#[must_use]
+pub const fn chrome() -> Color32 {
+    Color32::from_rgb(18, 20, 24)
 }
 
 /// Apply fonts, spacing, and the resolved palette.
@@ -28,30 +60,30 @@ pub fn apply(ctx: &egui::Context, mode: ThemeMode, scale: f32) {
     } else {
         light_visuals()
     };
-    style.spacing.item_spacing = egui::vec2(10.0, 8.0);
-    style.spacing.button_padding = egui::vec2(12.0, 7.0);
-    style.spacing.indent = 16.0;
-    style.spacing.interact_size.y = 28.0;
-    style.spacing.scroll.bar_width = 10.0;
+    style.spacing.item_spacing = egui::vec2(12.0, 8.0);
+    style.spacing.button_padding = egui::vec2(12.0, 6.0);
+    style.spacing.indent = 18.0;
+    style.spacing.interact_size.y = 26.0;
+    style.spacing.scroll.bar_width = 8.0;
     style.interaction.selectable_labels = false;
     style.text_styles.insert(
         TextStyle::Heading,
-        FontId::new(26.0, FontFamily::Proportional),
+        FontId::new(22.0, FontFamily::Proportional),
     );
     style
         .text_styles
-        .insert(TextStyle::Body, FontId::new(16.0, FontFamily::Proportional));
+        .insert(TextStyle::Body, FontId::new(15.0, FontFamily::Proportional));
     style.text_styles.insert(
         TextStyle::Button,
-        FontId::new(15.5, FontFamily::Proportional),
+        FontId::new(14.5, FontFamily::Proportional),
     );
     style.text_styles.insert(
         TextStyle::Small,
-        FontId::new(13.0, FontFamily::Proportional),
+        FontId::new(12.5, FontFamily::Proportional),
     );
     style.text_styles.insert(
         TextStyle::Monospace,
-        FontId::new(14.5, FontFamily::Monospace),
+        FontId::new(13.5, FontFamily::Monospace),
     );
     ctx.set_style(style);
 }
@@ -59,49 +91,102 @@ pub fn apply(ctx: &egui::Context, mode: ThemeMode, scale: f32) {
 /// Secondary label color that follows the active theme.
 #[must_use]
 pub fn muted(ui: &egui::Ui) -> Color32 {
-    ui.visuals().weak_text_color()
+    if ui.visuals().dark_mode {
+        Color32::from_rgb(148, 154, 164)
+    } else {
+        Color32::from_rgb(92, 98, 110)
+    }
+}
+
+/// Card surface: white in light, lifted charcoal in dark.
+#[must_use]
+pub fn card_fill(ui: &egui::Ui) -> Color32 {
+    if ui.visuals().dark_mode {
+        Color32::from_rgb(24, 28, 34)
+    } else {
+        Color32::WHITE
+    }
+}
+
+/// Hairline around cards.
+#[must_use]
+pub fn card_stroke(ui: &egui::Ui) -> Stroke {
+    Stroke::new(
+        1.0_f32,
+        if ui.visuals().dark_mode {
+            Color32::from_rgb(42, 48, 58)
+        } else {
+            Color32::from_rgb(226, 230, 236)
+        },
+    )
+}
+
+/// Soft card lift. egui has no real material, so keep this faint.
+#[must_use]
+pub fn card_shadow(ui: &egui::Ui) -> Shadow {
+    if ui.visuals().dark_mode {
+        Shadow::NONE
+    } else {
+        Shadow {
+            offset: [0, 1],
+            blur: 10,
+            spread: 0,
+            color: Color32::from_black_alpha(18),
+        }
+    }
 }
 
 fn dark_visuals() -> egui::Visuals {
     let mut visuals = egui::Visuals::dark();
-    visuals.window_fill = Color32::from_rgb(18, 20, 24);
-    visuals.panel_fill = Color32::from_rgb(22, 24, 30);
-    visuals.extreme_bg_color = Color32::from_rgb(14, 15, 18);
-    visuals.faint_bg_color = Color32::from_rgb(32, 35, 42);
-    visuals.widgets.hovered.bg_fill = Color32::from_rgb(40, 44, 54);
-    visuals.widgets.active.bg_fill = Color32::from_rgb(50, 54, 66);
-    paint_widgets(&mut visuals, Color32::from_rgb(226, 228, 234), true);
+    visuals.window_fill = Color32::from_rgb(12, 14, 18);
+    visuals.panel_fill = Color32::from_rgb(16, 18, 22);
+    visuals.extreme_bg_color = Color32::from_rgb(10, 12, 16);
+    visuals.faint_bg_color = Color32::from_rgb(24, 28, 34);
+    visuals.widgets.inactive.bg_fill = Color32::from_rgb(28, 32, 40);
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(38, 44, 54);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(48, 54, 66);
+    paint_widgets(&mut visuals, Color32::from_rgb(232, 234, 238), true);
     visuals
 }
 
 fn light_visuals() -> egui::Visuals {
     let mut visuals = egui::Visuals::light();
-    visuals.window_fill = Color32::from_rgb(244, 245, 248);
-    visuals.panel_fill = Color32::from_rgb(252, 252, 254);
-    visuals.extreme_bg_color = Color32::from_rgb(232, 234, 238);
-    visuals.faint_bg_color = Color32::from_rgb(236, 238, 242);
-    visuals.widgets.hovered.bg_fill = Color32::from_rgb(232, 226, 214);
-    visuals.widgets.active.bg_fill = Color32::from_rgb(224, 214, 196);
-    paint_widgets(&mut visuals, Color32::from_rgb(32, 36, 42), false);
+    visuals.window_fill = Color32::from_rgb(244, 246, 248);
+    visuals.panel_fill = Color32::from_rgb(244, 246, 248);
+    visuals.extreme_bg_color = Color32::from_rgb(232, 236, 240);
+    visuals.faint_bg_color = Color32::WHITE;
+    visuals.widgets.inactive.bg_fill = Color32::WHITE;
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(236, 240, 244);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(226, 232, 238);
+    paint_widgets(&mut visuals, Color32::from_rgb(20, 22, 28), false);
     visuals
 }
 
 fn paint_widgets(visuals: &mut egui::Visuals, text: Color32, dark: bool) {
     visuals.override_text_color = Some(text);
     visuals.selection.bg_fill = if dark {
-        Color32::from_rgb(58, 48, 36)
+        Color32::from_rgb(48, 40, 28)
     } else {
-        Color32::from_rgb(245, 232, 210)
+        Color32::from_rgb(255, 244, 220)
     };
     visuals.selection.stroke = Stroke::new(1.0_f32, GOLD);
     visuals.hyperlink_color = GOLD;
     visuals.widgets.inactive.corner_radius = CornerRadius::same(8);
     visuals.widgets.hovered.corner_radius = CornerRadius::same(8);
     visuals.widgets.active.corner_radius = CornerRadius::same(8);
+    visuals.window_corner_radius = CornerRadius::same(10);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(
+        1.0_f32,
+        if dark {
+            Color32::from_rgb(48, 54, 64)
+        } else {
+            Color32::from_rgb(214, 220, 228)
+        },
+    );
     visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, text);
     visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, text);
-    visuals.widgets.hovered.expansion = 1.0;
-    visuals.widgets.active.expansion = 1.0;
+    visuals.widgets.hovered.expansion = 0.0;
+    visuals.widgets.active.expansion = 0.0;
     visuals.interact_cursor = Some(CursorIcon::PointingHand);
 }
 

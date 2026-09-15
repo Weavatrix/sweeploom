@@ -1,20 +1,22 @@
 # SweepLoom architecture
 
-SweepLoom is a local-first workstation resource manager. The full product
+SweepLoom is a local-first workstation resource manager published by
+**Weavatrix** (the company). SweepLoom is the product. The full product
 plan lives in [`product/`](product/README.md), split so every file stays
 under 300 lines.
+
+Agent-facing UI is the [Codex plugin](PLUGIN.md) (MCP + skills). The egui
+desktop app is an optional local reviewer. A web UI is a later product.
 
 ## License boundary
 
 | Code | License |
 | --- | --- |
 | SweepLoom (`Weavatrix/sweeploom`) | MPL-2.0 |
-| Weavatrix crates (`weavatrix-scan`, `weavatrix-git`, …) | MIT — **do not relicense** |
+| Other Weavatrix libraries (`weavatrix-scan`, `weavatrix-git`, …) | MIT — **do not relicense** |
 
-Missing Git/scan APIs are implemented in those crates and consumed here.
-
-SweepLoom depends on Weavatrix libraries. It does not vendor, fork, or
-relicense them.
+Missing Git/scan APIs live in those libraries and are consumed here.
+SweepLoom does not vendor, fork, or relicense them.
 
 ## Crate map
 

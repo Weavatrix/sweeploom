@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::apply::take_apply;
+use crate::apply::take_apply_for;
 use crate::message::{ExtensionMessage, HostMessage};
 use crate::tab::CompanionTabs;
 
@@ -21,6 +21,12 @@ pub struct StoredCompanion {
     pub written_unix_ms: u64,
     /// Tabs.
     pub tabs: CompanionTabs,
+    /// Browser installation / profile that wrote this snapshot.
+    #[serde(default)]
+    pub instance_id: String,
+    /// Connection epoch.
+    #[serde(default)]
+    pub epoch: u64,
 }
 
 impl StoredCompanion {
@@ -39,10 +45,22 @@ pub fn snapshot_path(app_data: &Path) -> PathBuf {
 
 /// Write tabs from the host. Creates `app_data` if needed.
 pub fn save_snapshot(app_data: &Path, tabs: CompanionTabs) -> io::Result<()> {
+    save_snapshot_from(app_data, tabs, "", 0)
+}
+
+/// Write tabs from a named browser connection.
+pub fn save_snapshot_from(
+    app_data: &Path,
+    tabs: CompanionTabs,
+    instance_id: impl Into<String>,
+    epoch: u64,
+) -> io::Result<()> {
     fs::create_dir_all(app_data)?;
     let stored = StoredCompanion {
         written_unix_ms: unix_ms(),
         tabs,
+        instance_id: instance_id.into(),
+        epoch,
     };
     let bytes = serde_json::to_vec_pretty(&stored)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
@@ -66,21 +84,27 @@ pub fn handle_extension_json(raw: &[u8], app_data: &Path) -> Result<Vec<u8>, Str
     let message: ExtensionMessage =
         serde_json::from_slice(raw).map_err(|error| error.to_string())?;
     let reply = match message {
-        ExtensionMessage::Hello { version } => HostMessage::Ack {
+        ExtensionMessage::Hello {
+            version,
+            instance_id,
+            epoch,
+        } => HostMessage::Ack {
             ok: true,
-            detail: format!("hello {version}"),
+            detail: format!("hello {version} {instance_id}@{epoch}"),
         },
         ExtensionMessage::Tabs {
             tabs,
             active_tab_id,
+            instance_id,
+            epoch,
         } => {
             let body = CompanionTabs {
                 tabs,
                 active_tab_id,
             };
-            match save_snapshot(app_data, body) {
+            match save_snapshot_from(app_data, body, &instance_id, epoch) {
                 Ok(()) => {
-                    let actions = take_apply(app_data).unwrap_or_default();
+                    let actions = take_apply_for(app_data, &instance_id, epoch).unwrap_or_default();
                     if actions.is_empty() {
                         HostMessage::Ack {
                             ok: true,
@@ -138,10 +162,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         crate::save_apply(
             &dir,
-            vec![crate::TabCommand {
-                tab_id: 9,
-                action: crate::TabAction::Discard,
-            }],
+            vec![crate::TabCommand::new(9, crate::TabAction::Discard, "", 0)],
         )
         .unwrap();
         let reply =
@@ -159,6 +180,8 @@ mod tests {
         let stored = StoredCompanion {
             written_unix_ms: 0,
             tabs: CompanionTabs::default(),
+            instance_id: String::new(),
+            epoch: 0,
         };
         assert!(!stored.is_fresh(FRESH_MS + 1));
     }

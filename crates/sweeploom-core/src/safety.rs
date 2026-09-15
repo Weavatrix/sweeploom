@@ -48,6 +48,10 @@ pub enum Blocker {
     SharedBuildDirectoryInUse,
     /// Kernel, desktop shell, security software, or unknown elevated OS process.
     SystemCriticalProcess,
+    /// Required process or identity evidence is missing.
+    UnknownEvidence,
+    /// Path is not an authorized generated artifact.
+    OutOfArtifactScope,
 }
 
 impl Blocker {
@@ -69,6 +73,8 @@ impl Blocker {
             Self::UserPinned => "pinned",
             Self::SharedBuildDirectoryInUse => "shared build in use",
             Self::SystemCriticalProcess => "system process",
+            Self::UnknownEvidence => "unknown evidence",
+            Self::OutOfArtifactScope => "outside artifact scope",
         }
     }
 }

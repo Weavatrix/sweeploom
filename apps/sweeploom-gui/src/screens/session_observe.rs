@@ -1,13 +1,16 @@
 //! Observed RAM/CPU/disk for a selected session. Never back-filled.
 
-use eframe::egui;
+use eframe::egui::{self, RichText};
 use sweeploom_core::LiveSession;
-use sweeploom_history::summarize_cpu;
+use sweeploom_history::{fold_recent, summarize_cpu, summarize_rss};
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 
+use super::session_pressure;
+
 pub fn draw(app: &SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
+    draw_share(app, ui, session);
     draw_history(app, ui, session);
     ui.label(format!(
         "Disk this interval  read {}  write {}",
@@ -17,44 +20,71 @@ pub fn draw(app: &SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
     draw_network(ui, session);
 }
 
+fn draw_share(app: &SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
+    let Some(snapshot) = &app.snapshot else {
+        return;
+    };
+    ui.add(
+        egui::Label::new(
+            RichText::new(session_pressure::share_line(
+                session,
+                snapshot.memory.used_bytes,
+                snapshot.memory.total_bytes,
+                snapshot.cpu.usage_percent,
+            ))
+            .color(crate::theme::muted(ui)),
+        )
+        .wrap(),
+    );
+}
+
 fn draw_history(app: &SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
-    let Some(key) = session.processes.first() else {
+    let series: Vec<_> = session
+        .processes
+        .iter()
+        .filter_map(|key| app.history.get(*key).map(|hist| hist.fast.chrono()))
+        .collect();
+    if series.is_empty() {
+        ui.label("CPU/RAM history starts when SweepLoom first sees these processes.");
         return;
-    };
-    let Some(hist) = app.history.get(*key) else {
-        ui.label("CPU/RAM history starts when SweepLoom first sees this process.");
-        return;
-    };
-    let fast = hist.fast.chrono();
-    let Some(last) = fast.last() else {
-        return;
-    };
-    if let Some(first) = fast.first() {
-        ui.label(format!(
-            "Observed {} → {} RSS over {} samples",
-            format_bytes(first.rss_bytes),
-            format_bytes(last.rss_bytes),
-            fast.len()
-        ));
     }
-    let cpu = summarize_cpu(&fast, &hist.slow.chrono(), last.at_unix_ms);
+    let folded = fold_recent(&series, 40);
+    let Some(last) = folded.last() else {
+        return;
+    };
+    let rss = summarize_rss(&folded);
+    let cpu = summarize_cpu(&folded, &[], last.at_unix_ms);
+    ui.label(format!(
+        "Session RAM observed {} → {} (peak {}) over {} samples · now {}",
+        format_bytes(rss.first),
+        format_bytes(rss.now),
+        format_bytes(rss.peak),
+        rss.fast_samples,
+        format_bytes(session.rss_bytes)
+    ));
     ui.horizontal(|ui| {
         ui.label(format!(
-            "CPU now {:.1}%  peak {:.1}%  {}",
-            cpu.now,
+            "Session CPU now {:.1}%  peak {:.1}%  {}",
+            session.cpu_percent,
             cpu.peak,
             avg_label("5m", cpu.avg_5m)
         ));
-        let spark: Vec<f32> = fast
-            .iter()
-            .rev()
-            .take(40)
-            .map(|item| item.cpu_percent)
-            .collect();
-        let spark: Vec<f32> = spark.into_iter().rev().collect();
-        crate::widgets::sparkline(ui, &spark, egui::vec2(140.0, 20.0), crate::theme::accent());
+        spark(ui, &folded, |item| item.cpu_percent);
     });
-    ui.label(avg_label("1h", cpu.avg_1h));
+    ui.horizontal(|ui| {
+        ui.label("RAM");
+        spark(ui, &folded, |item| item.rss_bytes as f32);
+        ui.label(avg_label("1h", cpu.avg_1h));
+    });
+}
+
+fn spark(
+    ui: &mut egui::Ui,
+    folded: &[sweeploom_history::Sample],
+    pick: fn(&sweeploom_history::Sample) -> f32,
+) {
+    let values: Vec<f32> = folded.iter().map(pick).collect();
+    crate::widgets::sparkline(ui, &values, egui::vec2(140.0, 20.0), crate::theme::accent());
 }
 
 fn avg_label(window: &str, value: Option<f32>) -> String {

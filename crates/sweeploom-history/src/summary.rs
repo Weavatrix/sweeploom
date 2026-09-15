@@ -17,6 +17,55 @@ pub struct CpuSummary {
     pub fast_samples: usize,
 }
 
+/// Observed RSS for one process. Missing windows stay `None`, not zero.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RssSummary {
+    /// Latest sample.
+    pub now: u64,
+    /// Peak among fast samples.
+    pub peak: u64,
+    /// First sample in the fast ring.
+    pub first: u64,
+    /// Fast-ring length.
+    pub fast_samples: usize,
+}
+
+/// Summarize RSS. Never invents a baseline from before SweepLoom started.
+#[must_use]
+pub fn summarize_rss(fast: &[Sample]) -> RssSummary {
+    RssSummary {
+        now: fast.last().map(|item| item.rss_bytes).unwrap_or(0),
+        peak: fast.iter().map(|item| item.rss_bytes).max().unwrap_or(0),
+        first: fast.first().map(|item| item.rss_bytes).unwrap_or(0),
+        fast_samples: fast.len(),
+    }
+}
+
+/// Sum the last `n` samples across processes, aligned from the newest point.
+#[must_use]
+pub fn fold_recent(series: &[Vec<Sample>], n: usize) -> Vec<Sample> {
+    let len = series.iter().map(Vec::len).max().unwrap_or(0).min(n);
+    (0..len)
+        .map(|offset| {
+            let mut rss = 0_u64;
+            let mut cpu = 0.0_f32;
+            let mut at = 0_u64;
+            for ring in series {
+                if let Some(sample) = ring.iter().rev().nth(len - 1 - offset) {
+                    rss = rss.saturating_add(sample.rss_bytes);
+                    cpu += sample.cpu_percent;
+                    at = at.max(sample.at_unix_ms);
+                }
+            }
+            Sample {
+                at_unix_ms: at,
+                cpu_percent: cpu,
+                rss_bytes: rss,
+            }
+        })
+        .collect()
+}
+
 /// Summarize CPU. `now_ms` is the latest sample timestamp.
 #[must_use]
 pub fn summarize_cpu(fast: &[Sample], slow: &[Sample], now_ms: u64) -> CpuSummary {
@@ -78,5 +127,29 @@ mod tests {
         let summary = summarize_cpu(&fast, &[], 120_000);
         assert_eq!(summary.avg_5m, Some(20.0));
         assert_eq!(summary.avg_1h, None);
+    }
+
+    #[test]
+    fn fold_recent_sums_member_rss() {
+        let left = vec![
+            Sample {
+                at_unix_ms: 1,
+                cpu_percent: 1.0,
+                rss_bytes: 100,
+            },
+            Sample {
+                at_unix_ms: 2,
+                cpu_percent: 2.0,
+                rss_bytes: 200,
+            },
+        ];
+        let right = vec![Sample {
+            at_unix_ms: 2,
+            cpu_percent: 3.0,
+            rss_bytes: 50,
+        }];
+        let folded = fold_recent(&[left, right], 40);
+        assert_eq!(folded.last().map(|item| item.rss_bytes), Some(250));
+        assert_eq!(folded.last().map(|item| item.cpu_percent), Some(5.0));
     }
 }

@@ -78,4 +78,20 @@ strategy = "permanent-generated"
         assert_eq!(pack.cleaner[0].id, "vite-cache");
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn shipped_common_packs_parse() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../rules");
+        let files = load_packs(&root).unwrap();
+        assert!(
+            files.len() >= 4,
+            "expected vite + cargo + node + python packs, got {}",
+            files.len()
+        );
+        for file in &files {
+            file.pack
+                .as_ref()
+                .unwrap_or_else(|error| panic!("{}: {error}", file.path.display()));
+        }
+    }
 }

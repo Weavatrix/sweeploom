@@ -37,7 +37,8 @@ pub fn run(root: &Path) {
         }
         for offer in node_offers(project, &[]) {
             println!(
-                "  node_modules\t{}\trebuild={:?}{}",
+                "  {}\t{}\trebuild={:?}{}",
+                offer.label,
                 format_bytes(offer.logical_bytes),
                 offer.rebuild,
                 if offer.blocked { "\tBLOCKED" } else { "" }
