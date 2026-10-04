@@ -57,7 +57,10 @@ pub fn classify_path_component(name: &str) -> PathCategory {
 /// home scan cannot freeze the UI with a hundred-thousand-node tree.
 #[must_use]
 pub fn keep_nested_children(path: &Path) -> bool {
-    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+    // Accept both separators: a Windows path can arrive in a scan report
+    // inspected on a Unix host, where `Path::file_name` treats '\\' as text.
+    let text = path.to_string_lossy();
+    let Some(name) = text.rsplit(['/', '\\']).find(|part| !part.is_empty()) else {
         return true;
     };
     if matches!(
@@ -82,9 +85,9 @@ pub fn keep_nested_children(path: &Path) -> bool {
     ) {
         return false;
     }
-    path.parent()
-        .and_then(|parent| parent.file_name())
-        .and_then(|parent| parent.to_str())
+    text.trim_end_matches(['/', '\\'])
+        .rsplit_once(['/', '\\'])
+        .and_then(|(parent, _)| parent.rsplit(['/', '\\']).find(|part| !part.is_empty()))
         .is_none_or(|parent| !parent.eq_ignore_ascii_case("packages"))
 }
 

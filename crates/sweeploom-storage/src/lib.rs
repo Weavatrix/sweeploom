@@ -8,6 +8,7 @@
 
 mod classify;
 mod inventory;
+mod staging;
 
 pub use classify::{
     PathCategory, classify_path_component, is_project_marker, is_source_extension,
@@ -17,6 +18,7 @@ pub use inventory::{
     DirectoryNode, InventoryLimits, InventoryReport, ScanTick, developer_roots, discover_projects,
     discover_projects_from, review_scan_roots, scan_inventory, scan_inventory_with,
 };
+pub use staging::{GeneratedBuild, scan_staging_builds};
 
 use weavatrix_scan::{IgnorePolicy, ScanOptions, StandardSkips};
 

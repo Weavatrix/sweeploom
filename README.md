@@ -25,6 +25,19 @@ sweeploom clean .               # look first
 sweeploom clean . --apply       # then delete SAFE generated rows
 ```
 
+For a Hostwatch node, the storage crate also builds a small read-only scanner:
+
+```text
+cargo build -p sweeploom-storage --bin sweeploom-staging-scan --release
+sweeploom-staging-scan /srv/staging 48
+```
+
+It emits JSON for old `runtime/.next` directories in deployment staging,
+including their exact paths and allocated disk bytes on Unix. It does not
+delete files or classify container images as build cache. Hostwatch can run
+this binary beside its Go agent; the Go agent has a native fallback on nodes
+where the binary has not been installed.
+
 Weavatrix is the **company**. SweepLoom is the **product**.
 
 The rest of this README is the idea, then **full CLI transcripts** from a
