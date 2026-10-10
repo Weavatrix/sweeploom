@@ -7,15 +7,21 @@
 #![cfg_attr(not(test), warn(missing_docs))]
 
 mod classify;
+mod disk_usage;
 mod inventory;
+mod parallel;
+
+pub use disk_usage::{DiskUsage, directory_disk_usage};
+pub use parallel::{parallel_map, walk_workers};
 
 pub use classify::{
-    PathCategory, classify_path_component, is_project_marker, is_source_extension,
-    keep_nested_children,
+    PathCategory, classify_path_component, is_project_marker, is_project_marker_name,
+    is_source_extension, keep_nested_children,
 };
 pub use inventory::{
     DirectoryNode, InventoryLimits, InventoryReport, ScanTick, developer_roots, discover_projects,
-    discover_projects_from, review_scan_roots, scan_inventory, scan_inventory_with,
+    discover_projects_from, is_discoverable_below, review_scan_roots, scan_inventory,
+    scan_inventory_with,
 };
 
 use weavatrix_scan::{IgnorePolicy, ScanOptions, StandardSkips};
@@ -41,17 +47,41 @@ pub fn source_heat_scan_options() -> ScanOptions {
         .with_standard_skips(StandardSkips::Enabled)
 }
 
-/// Project marker files used for discovery.
+/// Project marker names used for discovery. `.git` covers repositories
+/// without a recognised build file.
 pub const PROJECT_MARKERS: &[&str] = &[
     "Cargo.toml",
     "package.json",
     "pyproject.toml",
+    "setup.py",
+    "Pipfile",
     "go.mod",
     "pom.xml",
     "build.gradle",
     "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
     "Package.swift",
+    "Podfile",
     "CMakeLists.txt",
+    "Gemfile",
+    "composer.json",
+    "pubspec.yaml",
+    "mix.exs",
+    "deno.json",
+    "build.zig",
+    ".git",
+];
+
+/// Marker extensions: Xcode projects/workspaces and .NET solutions/projects.
+pub const PROJECT_MARKER_EXTENSIONS: &[&str] = &[
+    "xcodeproj",
+    "xcworkspace",
+    "playground",
+    "sln",
+    "csproj",
+    "fsproj",
+    "vbproj",
 ];
 
 #[cfg(test)]

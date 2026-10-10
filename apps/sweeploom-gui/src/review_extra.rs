@@ -3,82 +3,72 @@
 use std::path::{Path, PathBuf};
 
 use sweeploom_ai::inspect_offers;
-use sweeploom_core::ProcessSnapshot;
-use sweeploom_dev::{ReviewRow, collect_review};
+use sweeploom_dev::ReviewRow;
 use sweeploom_general::collect_offers;
 use sweeploom_platform::UserLocations;
-use sweeploom_storage::{discover_projects_from, review_scan_roots};
+use sweeploom_storage::{
+    discover_projects_from, is_discoverable_below, is_project_marker_name, review_scan_roots,
+};
 
-const MAX_PROJECTS: usize = 512;
+/// Discovery gives every top-level tree its own budget; this caps the total.
+const MAX_PROJECTS: usize = 2048;
 
-/// Result of Review discovery.
-pub struct ReviewBuild {
-    /// Project roots that fed the candidate list.
-    pub projects: Vec<PathBuf>,
-    /// Rows shown on Storage review.
-    pub rows: Vec<ReviewRow>,
-}
-
-/// Build the Review list for `scan_root`.
-#[must_use]
-pub fn all_rows(
-    scan_root: &Path,
-    locations: &UserLocations,
-    inventory_projects: &[PathBuf],
-    processes: &[ProcessSnapshot],
-) -> Vec<ReviewRow> {
-    assemble(scan_root, locations, inventory_projects, None, processes).rows
-}
-
-/// Discover projects (preferring the current workspace) and collect review rows.
-#[must_use]
-pub fn assemble(
-    scan_root: &Path,
+/// Discover project roots before the slower cleanup/store measurements start.
+///
+/// Discovery always covers the developer folders under home plus the launch
+/// folder and current project. It never depends on the Explorer root: projects
+/// from the last Explorer scan (rooted at `inventory_root`) are merged in.
+pub fn project_roots(
+    inventory_root: Option<&Path>,
     locations: &UserLocations,
     inventory_projects: &[PathBuf],
     current_project: Option<&Path>,
-    processes: &[ProcessSnapshot],
-) -> ReviewBuild {
-    let mut roots = review_scan_roots(scan_root, &locations.home);
-    prepend_unique(&mut roots, current_project);
-    if let Ok(cwd) = std::env::current_dir() {
-        prepend_unique(&mut roots, Some(cwd.as_path()));
+) -> Vec<PathBuf> {
+    let cwd = std::env::current_dir().ok();
+    let roots = discovery_roots(&locations.home, current_project, cwd.as_deref());
+    let mut projects = discover_projects_from(&roots, MAX_PROJECTS);
+    if let Some(root) = inventory_root {
+        merge_inventory(&mut projects, root, inventory_projects);
     }
-    let mut projects = if inventory_projects.is_empty() {
-        discover_projects_from(&roots, MAX_PROJECTS)
-    } else {
-        inventory_projects
-            .iter()
-            .take(MAX_PROJECTS)
-            .cloned()
-            .collect()
-    };
     prepend_project(&mut projects, current_project);
-    if let Ok(cwd) = std::env::current_dir() {
-        prepend_project(&mut projects, Some(cwd.as_path()));
+    prepend_project(&mut projects, cwd.as_deref());
+    projects.truncate(MAX_PROJECTS);
+    projects
+}
+
+fn discovery_roots(home: &Path, current: Option<&Path>, cwd: Option<&Path>) -> Vec<PathBuf> {
+    let mut roots = review_scan_roots(home, home);
+    for path in [current, cwd].into_iter().flatten() {
+        prepend_unique(&mut roots, path, home);
     }
-    let mut rows = collect_review(&projects, processes);
-    rows.extend(extra_rows(locations));
-    ReviewBuild { projects, rows }
+    roots
+}
+
+/// Explorer projects join discovery; registry checkouts and hidden tool homes do not.
+fn merge_inventory(projects: &mut Vec<PathBuf>, root: &Path, inventory: &[PathBuf]) {
+    let mut known: std::collections::HashSet<PathBuf> = projects.iter().cloned().collect();
+    for project in inventory {
+        if is_discoverable_below(root, project) && known.insert(project.clone()) {
+            projects.push(project.clone());
+        }
+    }
 }
 
 fn looks_like_project(path: &Path) -> bool {
-    [
-        "Cargo.toml",
-        "package.json",
-        "pyproject.toml",
-        "Pipfile",
-        "go.mod",
-    ]
-    .iter()
-    .any(|marker| path.join(marker).is_file())
+    std::fs::read_dir(path).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(is_project_marker_name)
+        })
+    })
 }
 
-fn prepend_unique(roots: &mut Vec<PathBuf>, path: Option<&Path>) {
-    let Some(path) = path else {
-        return;
-    };
-    if !path.is_dir() {
+fn prepend_unique(roots: &mut Vec<PathBuf>, path: &Path, home: &Path) {
+    // Finder launches apps in `/`, and home itself is covered by its developer
+    // folders; walking either would spend the budget on Library and media.
+    if path.parent().is_none() || path == home || !path.is_dir() {
         return;
     }
     roots.retain(|item| item != path);
@@ -117,3 +107,7 @@ pub fn extra_rows(locations: &UserLocations) -> Vec<ReviewRow> {
     }
     rows
 }
+
+#[cfg(test)]
+#[path = "review_extra_tests.rs"]
+mod tests;

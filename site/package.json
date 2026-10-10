@@ -1,0 +1,40 @@
+{
+  "name": "sweeploom-site",
+  "version": "0.1.0",
+  "private": true,
+  "description": "sweeploom.com: marketing and docs site for SweepLoom, a Weavatrix product. Static export.",
+  "license": "MPL-2.0",
+  "scripts": {
+    "dev": "next dev",
+    "prebuild": "node scripts/sync-legal.mjs",
+    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "changelog": "node scripts/changelog.mjs",
+    "preview": "npx --yes serve@14 out -l 4321",
+    "deploy": "npx --yes wrangler@4 deploy"
+  },
+  "dependencies": {
+    "gray-matter": "4.0.3",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "rehype-slug": "6.0.0",
+    "rehype-stringify": "10.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-parse": "11.0.0",
+    "remark-rehype": "11.1.2",
+    "unified": "11.0.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "postcss": "8.5.29",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

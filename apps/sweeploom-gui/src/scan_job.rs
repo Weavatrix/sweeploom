@@ -1,4 +1,10 @@
 //! Folder scans and Review rebuilds run off the UI thread.
+//!
+//! Results already on screen stay there while a rescan runs; each finished
+//! piece replaces only the rows it covers.
+
+#[path = "scan_merge.rs"]
+mod merge;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
@@ -17,23 +23,30 @@ use crate::review_extra;
 /// Result of a Review-only rebuild. Inventory is left untouched.
 pub type RebuildOutcome = Result<(Vec<PathBuf>, Vec<ReviewRow>), String>;
 
+/// Project discovery is available while cleanup candidates are still being sized.
+#[derive(Debug)]
+pub enum RebuildMsg {
+    /// Discovered roots, before artifact and AI-store measurements.
+    Projects(Vec<PathBuf>),
+    /// One project's (or the extra stores') rows, as soon as they are sized.
+    Rows(Vec<ReviewRow>),
+    /// Final cleanup listing or error.
+    Finished(RebuildOutcome),
+}
+
 /// Progress or finished Explorer walk.
 pub enum ScanMsg {
     /// Counters (and maybe a shallow folder preview) from the walker.
     Progress(ScanTick),
     /// Full inspector tree. Review rows follow later.
     Tree(InventoryReport),
-    /// Review list after the tree, or a walk/review error.
-    Finished(Result<Vec<ReviewRow>, String>),
+    /// The folder walk finished, independently of the Review rebuild.
+    Finished(Result<(), String>),
 }
 
 /// Start a home/folder walk. The UI polls [`Receiver::try_recv`].
 #[must_use]
-pub fn spawn(
-    root: PathBuf,
-    processes: Vec<ProcessSnapshot>,
-    locations: UserLocations,
-) -> Receiver<ScanMsg> {
+pub fn spawn(root: PathBuf) -> Receiver<ScanMsg> {
     let (tx, rx) = unbounded();
     thread::spawn(move || {
         let tick_tx = tx.clone();
@@ -42,12 +55,8 @@ pub fn spawn(
                 let _ = tick_tx.send(ScanMsg::Progress(tick));
             })
             .map_err(|error| error.to_string())?;
-            let projects = report.projects.clone();
-            let scan_root = report.root.clone();
             let _ = tick_tx.send(ScanMsg::Tree(report));
-            Ok(review_extra::all_rows(
-                &scan_root, &locations, &projects, &processes,
-            ))
+            Ok(())
         }))
         .unwrap_or_else(|_| Err("scan panicked".to_owned()));
         let _ = tx.send(ScanMsg::Finished(outcome));
@@ -70,28 +79,41 @@ pub fn spawn_ai(locations: UserLocations) -> Receiver<Result<Vec<sweeploom_ai::A
 }
 
 /// Discover projects and size generated trees without blocking the window.
+/// Rows stream per project; temp / Downloads / AI stores are sized alongside.
 #[must_use]
 pub fn spawn_review(
-    scan_root: PathBuf,
+    inventory_root: Option<PathBuf>,
     inventory_projects: Vec<PathBuf>,
     current_project: Option<PathBuf>,
     processes: Vec<ProcessSnapshot>,
     locations: UserLocations,
-) -> Receiver<RebuildOutcome> {
+) -> Receiver<RebuildMsg> {
     let (tx, rx) = unbounded();
     thread::spawn(move || {
         let outcome = catch_unwind(AssertUnwindSafe(|| {
-            let built = review_extra::assemble(
-                &scan_root,
+            let projects = review_extra::project_roots(
+                inventory_root.as_deref(),
                 &locations,
                 &inventory_projects,
                 current_project.as_deref(),
-                &processes,
             );
-            (built.projects, built.rows)
+            let _ = tx.send(RebuildMsg::Projects(projects.clone()));
+            let (mut rows, extra) = thread::scope(|scope| {
+                let extra = scope.spawn(|| {
+                    let rows = review_extra::extra_rows(&locations);
+                    let _ = tx.send(RebuildMsg::Rows(rows.clone()));
+                    rows
+                });
+                let rows = sweeploom_dev::collect_review_with(&projects, &processes, |rows| {
+                    let _ = tx.send(RebuildMsg::Rows(rows.to_vec()));
+                });
+                (rows, extra.join().unwrap_or_default())
+            });
+            rows.extend(extra);
+            (projects, rows)
         }))
         .map_err(|_| "rebuild review panicked".to_owned());
-        let _ = tx.send(outcome);
+        let _ = tx.send(RebuildMsg::Finished(outcome));
     });
     rx
 }
@@ -108,12 +130,25 @@ pub fn spawn_apply(
             let ctx = ExecutionContext::observed(&processes);
             let plan = build_plan_with(&candidates, None, &ctx);
             let (report, receipt) = apply_plan_with(&plan, &ctx);
+            let details = report
+                .skipped
+                .iter()
+                .map(|(id, reason)| format!("candidate {}: {reason:?}", id.0))
+                .chain(
+                    report
+                        .failures
+                        .iter()
+                        .map(|(id, reason)| format!("candidate {}: {reason}", id.0)),
+                )
+                .collect::<Vec<_>>()
+                .join("; ");
             let summary = format!(
-                "deleted={} skipped_changed={} failed={} planned={}",
+                "deleted={} skipped={} failed={} planned={} {}",
                 report.counts.deleted,
-                report.counts.skipped_changed,
+                report.skipped.len(),
                 report.counts.failed,
-                crate::format::format_bytes(receipt.estimated_physical_bytes)
+                crate::format::format_bytes(receipt.estimated_physical_bytes),
+                details
             );
             (summary, receipt)
         }))
@@ -137,41 +172,46 @@ pub fn spawn_apply(
 }
 
 impl SweepLoomApp {
+    /// Walk `scan_root`. Rescanning the shown root keeps its tree, expansion and
+    /// selection on screen until the new tree replaces them.
     pub(crate) fn run_scan(&mut self) {
-        if self.scanning {
+        if self.scan_rx.is_some() {
             return;
         }
         let root = PathBuf::from(self.scan_root.trim());
-        let processes = self
-            .snapshot
-            .as_ref()
-            .map(|item| item.processes.clone())
-            .unwrap_or_default();
+        let same_root = self.inventory.as_ref().is_some_and(|report| {
+            report.root == root || std::fs::canonicalize(&root).is_ok_and(|path| path == report.root)
+        });
+        if !same_root {
+            self.inventory = None;
+            self.inventory_at = None;
+            self.inventory_cached = false;
+            self.selected_explorer.clear();
+            self.expanded_explorer.clear();
+        }
         self.scanning = true;
         self.scan_entries = 0;
         self.scan_bytes = 0;
         self.scan_hint.clear();
         self.inventory_error = None;
         self.action_message = Some(format!("Scanning {}…", root.display()));
-        self.scan_rx = Some(spawn(root, processes, self.locations.clone()));
+        self.scan_rx = Some(spawn(root));
     }
 
+    /// Re-size AI stores. Earlier offers stay visible until the new listing lands.
     pub(crate) fn run_ai_listing(&mut self) {
         if self.ai_listing {
             return;
         }
         self.ai_listing = true;
-        self.ai_offers = None;
         self.action_message = Some("Sizing AI stores…".to_owned());
         self.ai_rx = Some(spawn_ai(self.locations.clone()));
     }
 
     pub(crate) fn poll_disk(&mut self) {
-        if take_scan(self) {
-            return;
-        }
+        take_scan(self);
         take_ai(self);
-        take_rebuild(self);
+        merge::take_rebuild(self);
         take_apply_job(self);
     }
 }
@@ -185,91 +225,48 @@ fn take_apply_job(app: &mut SweepLoomApp) {
     };
     app.apply_rx = None;
     app.last_receipt = Some(receipt);
+    app.last_cleanup_summary = Some(summary.clone());
     app.action_message = Some(summary);
     app.rebuild_review();
 }
 
-fn take_scan(app: &mut SweepLoomApp) -> bool {
-    let message = {
-        let Some(rx) = &app.scan_rx else {
-            return false;
-        };
-        match rx.try_recv() {
-            Ok(message) => message,
-            Err(_) => return false,
-        }
+fn take_scan(app: &mut SweepLoomApp) {
+    let Some(rx) = app.scan_rx.clone() else {
+        return;
     };
-    match message {
-        ScanMsg::Progress(tick) => apply_tick(app, tick),
-        ScanMsg::Tree(report) => apply_tree(app, report),
-        ScanMsg::Finished(outcome) => apply_finished(app, outcome),
+    let mut latest_tick = None;
+    while let Ok(message) = rx.try_recv() {
+        match message {
+            ScanMsg::Progress(tick) => latest_tick = Some(tick),
+            ScanMsg::Tree(report) => {
+                latest_tick = None;
+                merge::apply_tree(app, report);
+            }
+            ScanMsg::Finished(outcome) => {
+                latest_tick = None;
+                apply_finished(app, outcome);
+                break;
+            }
+        }
     }
-    true
+    if let Some(tick) = latest_tick {
+        merge::apply_tick(app, tick);
+    }
 }
 
-fn apply_finished(app: &mut SweepLoomApp, outcome: Result<Vec<ReviewRow>, String>) {
+fn apply_finished(app: &mut SweepLoomApp, outcome: Result<(), String>) {
     app.scan_rx = None;
-    app.scanning = false;
+    app.scanning = app.rebuild_rx.is_some();
     match outcome {
-        Ok(rows) => {
-            let n = rows.len();
-            app.review = rows;
+        Ok(()) => {
             app.inventory_error = None;
-            app.action_message = Some(format!("{n} candidates"));
+            // Review only reruns when the walk found projects discovery did not know.
+            if app.review_after_scan && app.rebuild_rx.is_none() {
+                app.review_after_scan = false;
+                app.rebuild_review();
+            }
         }
         Err(error) => app.inventory_error = Some(error),
-    }
-}
-
-fn apply_tree(app: &mut SweepLoomApp, report: InventoryReport) {
-    app.scan_entries = report.entries;
-    app.scan_bytes = report.tree.logical_bytes;
-    app.project_roots = report.projects.clone();
-    app.inventory = Some(report);
-    app.expanded_explorer.clear();
-    app.scanning = false;
-    app.action_message = Some("Folders ready. Building Review in the background…".to_owned());
-}
-
-fn apply_tick(app: &mut SweepLoomApp, tick: ScanTick) {
-    app.scan_entries = tick.entries;
-    app.scan_bytes = tick.logical_bytes;
-    app.scan_hint = tick.hint;
-    if let Some(tree) = tick.root {
-        let root = PathBuf::from(app.scan_root.trim());
-        app.inventory = Some(InventoryReport {
-            root,
-            tree,
-            projects: app.project_roots.clone(),
-            project_bytes: app
-                .inventory
-                .as_ref()
-                .map(|item| item.project_bytes.clone())
-                .unwrap_or_default(),
-            entries: tick.entries,
-            errors: 0,
-            capped: false,
-        });
-    }
-}
-
-fn take_rebuild(app: &mut SweepLoomApp) {
-    let Some(rx) = &app.rebuild_rx else {
-        return;
-    };
-    let Ok(outcome) = rx.try_recv() else {
-        return;
-    };
-    app.rebuild_rx = None;
-    app.scanning = false;
-    match outcome {
-        Ok((projects, rows)) => {
-            let n = rows.len();
-            app.project_roots = projects;
-            app.review = rows;
-            app.action_message = Some(format!("{n} candidates"));
-        }
-        Err(error) => app.action_message = Some(error),
     }
 }
 
@@ -288,6 +285,23 @@ fn take_ai(app: &mut SweepLoomApp) {
     match outcome {
         Ok(offers) => {
             let n = offers.len();
+            let values = offers
+                .iter()
+                .flat_map(|offer| {
+                    std::iter::once(crate::scan_history::candidate_value(
+                        &offer.candidate,
+                        !offer.capped,
+                    ))
+                    .chain(offer.entries.iter().map(|entry| {
+                        crate::scan_history::candidate_value(&entry.candidate, !offer.capped)
+                    }))
+                })
+                .collect();
+            app.scan_history.record_batch(
+                crate::scan_history::Source::Ai,
+                values,
+                crate::scan_history::now_ms(),
+            );
             app.ai_offers = Some(offers);
             app.action_message = Some(format!("{n} AI store(s) sized"));
         }
@@ -296,44 +310,5 @@ fn take_ai(app: &mut SweepLoomApp) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use std::time::Duration;
-
-    fn isolated_locations(root: PathBuf) -> UserLocations {
-        UserLocations {
-            downloads: Some(root.join("Downloads")),
-            temp: root.join("tmp"),
-            cache: None,
-            app_config: root.join("cfg"),
-            app_data: root.join("data"),
-            home: root,
-        }
-    }
-
-    #[test]
-    fn review_thread_does_not_panic_on_an_empty_tree() {
-        let root = std::env::temp_dir().join(format!(
-            "sweeploom-rebuild-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|item| item.as_nanos())
-                .unwrap_or(0)
-        ));
-        fs::create_dir_all(root.join("tmp")).unwrap();
-        let rx = spawn_review(
-            root.clone(),
-            Vec::new(),
-            None,
-            Vec::new(),
-            isolated_locations(root.clone()),
-        );
-        let outcome = rx
-            .recv_timeout(Duration::from_secs(30))
-            .expect("rebuild finished");
-        let _ = fs::remove_dir_all(&root);
-        assert!(outcome.is_ok(), "{outcome:?}");
-    }
-}
+#[path = "scan_job_tests.rs"]
+mod tests;

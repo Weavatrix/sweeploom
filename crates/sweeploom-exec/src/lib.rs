@@ -4,6 +4,9 @@
 
 #![cfg_attr(not(test), warn(missing_docs))]
 
+mod manual_trash;
+pub use manual_trash::{TrashTarget, apply_trash_with, prepare_trash, trash_path_reason};
+
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -106,7 +109,11 @@ fn plan_entry(candidate: &Candidate, ctx: &ExecutionContext<'_>) -> CleanPlanEnt
         expected_identity: identity,
         expected_revision: Some(revision),
         expected_is_dir: candidate.path.is_dir(),
-        expected_latest_write: candidate.activity.latest_any_modified,
+        // Directory mtime does not track writes in descendants. The plan's
+        // complete metadata revision is the authoritative baseline.
+        expected_latest_write: revision
+            .max_mtime_unix_ms
+            .map(|ms| UNIX_EPOCH + std::time::Duration::from_millis(ms)),
         expected_bytes: candidate.logical_bytes,
         strategy: candidate.deletion,
         required_safety: required,
@@ -225,12 +232,7 @@ fn live_max_mtime(live: &MetadataRevision, meta: &fs::Metadata) -> Option<System
 }
 
 fn process_blocks(path: &Path, processes: &[ProcessSnapshot]) -> bool {
-    processes.iter().any(|process| {
-        process
-            .cwd
-            .as_ref()
-            .is_some_and(|cwd| cwd.starts_with(path) || path.starts_with(cwd))
-    })
+    processes.iter().any(|process| process.uses_path(path))
 }
 
 fn capture_revision(path: &Path) -> MetadataRevision {
@@ -275,14 +277,7 @@ fn capture_revision(path: &Path) -> MetadataRevision {
             } else {
                 files += 1;
                 bytes = bytes.saturating_add(child_meta.len());
-                if files > 12_000 {
-                    complete = false;
-                    break;
-                }
             }
-        }
-        if !complete && files > 12_000 {
-            break;
         }
     }
     MetadataRevision {
@@ -466,6 +461,26 @@ mod tests {
         assert!(receipt.actual_free_space_delta.is_none());
         assert!(!target.exists(), "generated path must be removed");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn descendant_newer_than_directory_is_not_a_post_plan_write() {
+        let root =
+            std::env::temp_dir().join(format!("sweeploom-exec-dir-mtime-{}", std::process::id()));
+        let target = root.join("target");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("a.bin"), b"stale").unwrap();
+        let old = SystemTime::now() - std::time::Duration::from_secs(86400);
+        fs::File::open(&target)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(old))
+            .unwrap();
+        let mut candidate = generated(55, target.clone(), 5);
+        candidate.activity.latest_any_modified = Some(old);
+        let ctx = ExecutionContext::observed(&[]);
+        let plan = build_plan_with(&[candidate], None, &ctx);
+        assert_eq!(revalidate_with(&plan.entries[0], &ctx), None);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

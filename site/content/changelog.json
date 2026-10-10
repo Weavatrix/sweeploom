@@ -1,0 +1,200 @@
+{
+  "generated": "2026-10-10",
+  "commits": [
+    {
+      "hash": "236a93d",
+      "date": "2026-09-15",
+      "subject": "Ship SweepLoom CLI, MCP, GUI, and verified benchmarks"
+    },
+    {
+      "hash": "5223bd7",
+      "date": "2026-08-26",
+      "subject": "Keep Explorer folders collapsible and stop table columns eating the window"
+    },
+    {
+      "hash": "10c2abd",
+      "date": "2026-08-26",
+      "subject": "Attribute Cargo target size to the workspace root and show parsed bins"
+    },
+    {
+      "hash": "a605195",
+      "date": "2026-08-26",
+      "subject": "Show browser helpers in a table and keep tab URLs on Later"
+    },
+    {
+      "hash": "e862b0d",
+      "date": "2026-08-26",
+      "subject": "Keep session members visible and stop dummy clicks"
+    },
+    {
+      "hash": "fb2e1a2",
+      "date": "2026-08-26",
+      "subject": "Show session member processes and make Overview cards open the right screen"
+    },
+    {
+      "hash": "82159f6",
+      "date": "2026-08-26",
+      "subject": "Give History, Rules, and AI first-class screens instead of Debug dumps"
+    },
+    {
+      "hash": "efbcb67",
+      "date": "2026-08-26",
+      "subject": "Paint native icons and wrap overview cards so the GUI stays on-screen, and build Projects from Review instead of walking disk on click"
+    },
+    {
+      "hash": "6647a33",
+      "date": "2026-08-26",
+      "subject": "Keep working agents unless idle is observed"
+    },
+    {
+      "hash": "49245ae",
+      "date": "2026-08-26",
+      "subject": "Drop GTK from the tray stack so license checks stay on Windows and macOS"
+    },
+    {
+      "hash": "5b048a0",
+      "date": "2026-08-26",
+      "subject": "Silence Linux-only dead-code on tray commands that Windows constructs"
+    },
+    {
+      "hash": "0b865fa",
+      "date": "2026-08-26",
+      "subject": "Isolate AI inventory fixtures so parallel Windows tests do not collide"
+    },
+    {
+      "hash": "22acf46",
+      "date": "2026-08-26",
+      "subject": "Keep a quiet tray daemon and let the GUI follow light, dark, and scale"
+    },
+    {
+      "hash": "43ac59b",
+      "date": "2026-08-26",
+      "subject": "Show observed CPU averages only after SweepLoom has watched"
+    },
+    {
+      "hash": "983f0f3",
+      "date": "2026-08-25",
+      "subject": "List AI store sizes without opening sqlite internals"
+    },
+    {
+      "hash": "aa0c238",
+      "date": "2026-08-25",
+      "subject": "Show observed TCP bytes when ESTATS is available"
+    },
+    {
+      "hash": "74ee87a",
+      "date": "2026-08-25",
+      "subject": "Queue companion Discard without ever sending Close"
+    },
+    {
+      "hash": "70709ba",
+      "date": "2026-08-25",
+      "subject": "Record the GUI dependency on sweeploom-rules in the lockfile"
+    },
+    {
+      "hash": "a560286",
+      "date": "2026-08-25",
+      "subject": "Show declarative TOML rule packs in the Rules screen"
+    },
+    {
+      "hash": "d0bd9b0",
+      "date": "2026-08-25",
+      "subject": "Add Quiet Workstation session planning"
+    },
+    {
+      "hash": "8890b90",
+      "date": "2026-08-25",
+      "subject": "Ship the browser companion extension and a dedicated native host"
+    },
+    {
+      "hash": "d20e34b",
+      "date": "2026-08-25",
+      "subject": "Add native-messaging companion host and fresh tab snapshot UI"
+    },
+    {
+      "hash": "d904b0a",
+      "date": "2026-08-25",
+      "subject": "Ignore the unmaintained paste advisory from netstat2"
+    },
+    {
+      "hash": "29dad0f",
+      "date": "2026-08-25",
+      "subject": "Show browser process pressure without inventing tab counts"
+    },
+    {
+      "hash": "6f2e7ae",
+      "date": "2026-08-25",
+      "subject": "Add Free RAM and Reduce CPU session planners"
+    },
+    {
+      "hash": "68e6ac0",
+      "date": "2026-08-25",
+      "subject": "Discover generated cleanup from developer folders, not a full home walk"
+    },
+    {
+      "hash": "66f1666",
+      "date": "2026-08-25",
+      "subject": "Add explicit force-kill, project attribution from scans, and inspect-only AI stores"
+    },
+    {
+      "hash": "a926757",
+      "date": "2026-08-25",
+      "subject": "Fix rustdoc link to the private directory-size cap"
+    },
+    {
+      "hash": "a27db65",
+      "date": "2026-08-25",
+      "subject": "Sort from table column headers and read Windows listeners"
+    },
+    {
+      "hash": "d2c8917",
+      "date": "2026-08-25",
+      "subject": "Enlarge SweepLoom UI type, add table sorts, and wire observed history"
+    },
+    {
+      "hash": "584938e",
+      "date": "2026-08-25",
+      "subject": "Keep Explorer scan off the UI thread and cap project discovery"
+    },
+    {
+      "hash": "ee47eb2",
+      "date": "2026-08-25",
+      "subject": "Add temp/Downloads review, Free X GB, and volume cards"
+    },
+    {
+      "hash": "4f4e4bd",
+      "date": "2026-08-25",
+      "subject": "Add Python generated-output offers to the Review loop"
+    },
+    {
+      "hash": "81b1e18",
+      "date": "2026-08-25",
+      "subject": "Allow egui font and clipboard licenses in cargo-deny"
+    },
+    {
+      "hash": "e32cdbf",
+      "date": "2026-08-25",
+      "subject": "Add Scan-Review-Clean-Receipt loop for generated artifacts"
+    },
+    {
+      "hash": "a8b010a",
+      "date": "2026-08-25",
+      "subject": "Add Cargo target analyzer, Git-aware project heat, and graceful session stop"
+    },
+    {
+      "hash": "1308a5c",
+      "date": "2026-08-25",
+      "subject": "Split crates and GUI into repo-based modules under the 300/100 budget"
+    },
+    {
+      "hash": "484f63e",
+      "date": "2026-08-25",
+      "subject": "Consume Weavatrix worktree safety and scan ignore helpers"
+    },
+    {
+      "hash": "814e878",
+      "date": "2026-08-25",
+      "subject": "Initial SweepLoom workspace: core model, live sessions, storage inventory, GUI shell"
+    }
+  ]
+}

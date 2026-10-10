@@ -8,9 +8,9 @@ use crate::format::format_bytes;
 use crate::nav::Nav;
 use crate::sort::{Col, Sort, header_cell};
 use crate::theme;
-use crate::widgets::{disclose, page_title, sparkline, table_scroll_height};
+use crate::widgets::{disclose, page_title, sparkline_max, table_scroll_height};
 use eframe::egui::{self, RichText};
-use egui_extras::{Column, TableBuilder};
+use egui_extras::Column;
 
 use super::history_rows::{self, HistRow, Line};
 
@@ -93,31 +93,30 @@ fn draw_table(
 ) {
     let height = table_scroll_height(ui);
     let count = lines.len();
-    TableBuilder::new(ui)
-        .id_salt("history-grid")
+    crate::widgets::table(ui, "history-grid")
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click())
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::remainder().at_least(140.0).clip(true))
-        .column(Column::exact(72.0).clip(true))
-        .column(Column::exact(72.0).clip(true))
-        .column(Column::exact(64.0).clip(true))
-        .column(Column::exact(64.0).clip(true))
+        .column(Column::remainder().at_least(200.0).clip(true))
         .column(Column::exact(88.0).clip(true))
-        .column(Column::exact(64.0).clip(true))
-        .header(32.0, |mut header| {
+        .column(Column::exact(88.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .column(Column::exact(76.0).clip(true))
+        .column(Column::exact(140.0).clip(true))
+        .column(Column::exact(76.0).clip(true))
+        .header(30.0, |mut header| {
             header.col(|ui| header_cell(ui, sort, Col::Name, "Process"));
             header.col(|ui| header_cell(ui, sort, Col::Size, "RSS"));
             header.col(|ui| header_cell(ui, sort, Col::Procs, "Peak"));
             header.col(|ui| header_cell(ui, sort, Col::Cpu, "CPU"));
             header.col(|ui| {
-                ui.strong("5m");
+                ui.strong("5m avg");
             });
             header.col(|ui| {
-                ui.strong("Spark");
+                ui.strong("CPU trend");
             });
             header.col(|ui| header_cell(ui, sort, Col::Status, "Samples"));
         })
@@ -155,14 +154,24 @@ fn fill_group(row: &mut egui_extras::TableRow<'_, '_>, line: &Line, toggle: &mut
         return;
     };
     row.col(|ui| {
-        if disclose(ui, *expanded, theme::accent()) {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        if disclose(ui, *expanded, theme::muted(ui)) {
             *toggle = Some(key.clone());
         }
         crate::brand::show_group(ui, title, *kind, 16.0);
         ui.add(
-            egui::Label::new(RichText::new(format!("{title}  ·  {count}")).strong())
+            egui::Label::new(RichText::new(title.as_str()).strong())
                 .truncate()
                 .selectable(false),
+        );
+        ui.label(
+            RichText::new(if *count == 1 {
+                "1 process".to_owned()
+            } else {
+                format!("{count} processes")
+            })
+                .size(12.0)
+                .color(theme::muted(ui)),
         );
     });
     row.col(|ui| {
@@ -172,13 +181,13 @@ fn fill_group(row: &mut egui_extras::TableRow<'_, '_>, line: &Line, toggle: &mut
         ui.label(format_bytes(*peak));
     });
     row.col(|ui| {
-        ui.label(format!("{cpu:.1}%"));
+        cpu_cell(ui, *cpu);
     });
     row.col(|ui| {
-        ui.label(avg_5m);
+        avg_cell(ui, avg_5m);
     });
     row.col(|ui| {
-        sparkline(ui, spark, egui::vec2(80.0, 18.0), theme::accent());
+        trend_cell(ui, spark);
     });
     row.col(|ui| {
         ui.label(samples.to_string());
@@ -192,11 +201,13 @@ fn fill_item(
     raw: &mut bool,
 ) {
     row.col(|ui| {
-        ui.add_space(16.0);
-        ui.add(
-            egui::Label::new(format!("{}  pid {}", item.name, item.pid))
-                .truncate()
-                .selectable(false),
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.add_space(44.0);
+        ui.add(egui::Label::new(&item.name).truncate().selectable(false));
+        ui.label(
+            RichText::new(format!("pid {}", item.pid))
+                .size(12.0)
+                .color(theme::muted(ui)),
         );
     });
     row.col(|ui| {
@@ -206,13 +217,13 @@ fn fill_item(
         ui.label(format_bytes(item.peak));
     });
     row.col(|ui| {
-        ui.label(format!("{:.1}%", item.cpu));
+        cpu_cell(ui, item.cpu);
     });
     row.col(|ui| {
-        ui.label(&item.avg_5m);
+        avg_cell(ui, &item.avg_5m);
     });
     row.col(|ui| {
-        sparkline(ui, &item.spark, egui::vec2(80.0, 18.0), theme::accent());
+        trend_cell(ui, &item.spark);
     });
     row.col(|ui| {
         ui.label(item.samples.to_string());
@@ -226,6 +237,29 @@ fn fill_item(
 fn avg_short(value: Option<f32>) -> String {
     match value {
         Some(cpu) => format!("{cpu:.1}%"),
-        None => "unavailable".to_owned(),
+        None => "—".to_owned(),
     }
+}
+
+fn cpu_cell(ui: &mut egui::Ui, cpu: f32) {
+    let tone = if cpu >= 80.0 {
+        theme::Tone::Warn
+    } else {
+        theme::Tone::Neutral
+    };
+    ui.label(RichText::new(format!("{cpu:.1}%")).color(theme::tone(ui, tone)));
+}
+
+fn avg_cell(ui: &mut egui::Ui, avg: &str) {
+    if avg == "—" {
+        ui.label(RichText::new(avg).color(theme::muted(ui)))
+            .on_hover_text("Not enough history for a 5-minute average yet.");
+    } else {
+        ui.label(avg);
+    }
+}
+
+fn trend_cell(ui: &mut egui::Ui, spark: &[f32]) {
+    let width = (ui.available_width() - 4.0).max(40.0);
+    sparkline_max(ui, spark, egui::vec2(width, 20.0), theme::series(ui, 0), None);
 }

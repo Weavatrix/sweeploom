@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use sweeploom_core::{Blocker, ProcessSnapshot, RebuildCost, authorize_generated};
 
 use crate::cargo_manifest::{resolved_target_dir, workspace_root};
-use crate::git::{GitSafety, inspect};
+use crate::git::{GitSafety, blocker_for, inspect};
 use crate::size::dir_size;
 
 /// How aggressively generated Cargo output can be trimmed.
@@ -46,18 +46,32 @@ pub struct CargoOffer {
 /// so Review/Projects do not size the same directory once per crate.
 #[must_use]
 pub fn cargo_offers(project: &Path, processes: &[ProcessSnapshot]) -> Vec<CargoOffer> {
+    cargo_offers_with(project, processes, &inspect)
+}
+
+/// [`cargo_offers`] with a shared Git reader. Git is read only when a target exists.
+pub(crate) fn cargo_offers_with(
+    project: &Path,
+    processes: &[ProcessSnapshot],
+    git: &dyn Fn(&Path) -> GitSafety,
+) -> Vec<CargoOffer> {
     if !project.join("Cargo.toml").is_file() {
         return Vec::new();
     }
     let owner = workspace_root(project);
-    let blocker = cargo_blocker(&owner, processes);
-    let blocked = blocker.is_some();
     let mut offers = Vec::new();
     for target in cargo_target_dirs(&owner) {
         if !target.is_dir() {
             continue;
         }
-        push_target_offers(&mut offers, &owner, &target, blocked, blocker);
+        push_target_offers(&mut offers, &owner, &target);
+    }
+    if !offers.is_empty() {
+        let blocker = blocker_for(&owner, processes, &["cargo", "rustc"], git);
+        for offer in &mut offers {
+            offer.blocked = blocker.is_some();
+            offer.blocker = blocker;
+        }
     }
     offers
 }
@@ -88,13 +102,7 @@ fn cargo_target_dirs(project: &Path) -> Vec<PathBuf> {
     dirs
 }
 
-fn push_target_offers(
-    offers: &mut Vec<CargoOffer>,
-    project: &Path,
-    target: &Path,
-    blocked: bool,
-    blocker: Option<Blocker>,
-) {
+fn push_target_offers(offers: &mut Vec<CargoOffer>, project: &Path, target: &Path) {
     for incremental in incremental_dirs(target) {
         push_offer(
             offers,
@@ -102,53 +110,17 @@ fn push_target_offers(
             &incremental,
             CargoTrim::Light,
             RebuildCost::Low,
-            blocked,
-            blocker,
         );
     }
+    let debug = target.join("debug");
     push_offer(
         offers,
         project,
-        &target.join("debug"),
+        &debug,
         CargoTrim::Balanced,
         RebuildCost::Medium,
-        blocked,
-        blocker,
     );
-    push_offer(
-        offers,
-        project,
-        target,
-        CargoTrim::Full,
-        RebuildCost::High,
-        blocked,
-        blocker,
-    );
-}
-
-fn cargo_blocker(project: &Path, processes: &[ProcessSnapshot]) -> Option<Blocker> {
-    if processes
-        .iter()
-        .any(|process| process_blocks(process, project))
-    {
-        return Some(Blocker::ActiveProcess);
-    }
-    let git = inspect(project);
-    if matches!(git, GitSafety::Unknown) {
-        return Some(Blocker::UnknownGitState);
-    }
-    git.assessment().blockers.first().copied()
-}
-
-fn process_blocks(process: &ProcessSnapshot, project: &Path) -> bool {
-    let Some(cwd) = &process.cwd else {
-        return false;
-    };
-    if !cwd.starts_with(project) {
-        return false;
-    }
-    let name = process.name.to_ascii_lowercase();
-    name.contains("cargo") || name.contains("rustc")
+    push_offer(offers, project, target, CargoTrim::Full, RebuildCost::High);
 }
 
 fn push_offer(
@@ -157,8 +129,6 @@ fn push_offer(
     path: &Path,
     mode: CargoTrim,
     rebuild: RebuildCost,
-    blocked: bool,
-    blocker: Option<Blocker>,
 ) {
     if !path.exists() {
         return;
@@ -174,8 +144,8 @@ fn push_offer(
         logical_bytes: size.bytes,
         size_complete: size.complete,
         rebuild,
-        blocked,
-        blocker,
+        blocked: false,
+        blocker: None,
     });
 }
 

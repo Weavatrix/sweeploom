@@ -1,15 +1,19 @@
 # SweepLoom library
 
-Crate: [`sweeploom`](https://crates.io/crates/sweeploom). Same engine as the
-CLI and the MCP server. Weavatrix is the company that publishes it.
+[README](../README.md) · [All docs](../README.md#documentation)
+
+Crate: `sweeploom` (`crates/sweeploom-cli`). Same engine as the CLI and the
+MCP server. Weavatrix is the company that publishes it.
+
+The crate is **not on crates.io yet**. Depend on it from Git:
 
 ```toml
 [dependencies]
-sweeploom = "0.1"
+sweeploom = { git = "https://github.com/Weavatrix/sweeploom" }
 ```
 
 Prefer this facade. Internal crates (`sweeploom-core`, `sweeploom-session`,
-…) are published so the facade can depend on them.
+…) are workspace members the facade depends on.
 
 ## Classify names (no I/O)
 
@@ -17,6 +21,7 @@ Prefer this facade. Internal crates (`sweeploom-core`, `sweeploom-session`,
 use sweeploom::{classify_name, AiClass};
 
 assert_eq!(classify_name("AGENTS.md"), AiClass::Context);
+assert_eq!(classify_name("AGENTS.md").label(), "Context");
 assert_eq!(classify_name("always-on.mdc"), AiClass::Context);
 assert_eq!(classify_name("skills"), AiClass::Context);
 assert_eq!(classify_name("history.jsonl"), AiClass::History);
@@ -206,11 +211,15 @@ assert!(!dry.ok);
 assert_eq!(dry.deleted, 0);
 
 // Only when you mean it. Empty ids = pre-selected SAFE rows.
-let _applied = apply_cleanup(ApplyRequest {
-    confirm: true,
-    root: PathBuf::from("."),
-    ids: vec![3],
-});
+let rows = sweeploom::cleanup_candidates(std::path::Path::new("."));
+if let Some(row) = rows.iter().find(|row| row.selected && !row.blocked) {
+    let report = apply_cleanup(ApplyRequest {
+        confirm: true,
+        root: PathBuf::from("."),
+        ids: vec![row.id],
+    });
+    let _ = report.deleted;
+}
 ```
 
 ## Browser pressure
@@ -236,6 +245,7 @@ use sweeploom::{mcp_tools, WriteClass, CLI_NAME, MCP_SERVER, PRODUCT, TOOLS};
 assert_eq!(PRODUCT, "SweepLoom");
 assert_eq!(CLI_NAME, "sweeploom");
 assert_eq!(MCP_SERVER, "io.github.Weavatrix/sweeploom");
+assert_eq!(mcp_tools().count(), 9);
 
 for tool in TOOLS {
     let _ = (tool.id, tool.cli, tool.mcp, tool.writes);

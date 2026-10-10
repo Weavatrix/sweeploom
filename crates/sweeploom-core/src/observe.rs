@@ -1,6 +1,6 @@
 //! Sample coverage for idle claims. Gaps must not grow proven idle.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, SystemTime};
 
 use crate::ids::ProcessKey;
@@ -33,6 +33,14 @@ impl ObservationTracker {
                 .ok()
                 .is_none_or(|span| span > SAMPLE_GAP)
         });
+        if self.gapped {
+            self.clear_coverage();
+        }
+        let keys: HashSet<_> = keys.into_iter().collect();
+        self.first_seen.retain(|key, _| keys.contains(key));
+        self.last_sample.retain(|key, _| keys.contains(key));
+        self.last_busy.retain(|key, _| keys.contains(key));
+        self.last_network.retain(|key, _| keys.contains(key));
         for key in keys {
             self.first_seen.entry(key).or_insert(at);
             self.last_sample.insert(key, at);
@@ -64,6 +72,9 @@ impl ObservationTracker {
             self.last_busy
                 .get(&key)
                 .copied()
+                .into_iter()
+                .chain(self.last_network.get(&key).copied())
+                .max()
                 .unwrap_or_else(|| self.first_seen.get(&key).copied().unwrap_or(last_sample)),
         )
     }
@@ -82,8 +93,16 @@ impl ObservationTracker {
 
     /// Drop live maps when the UI hides, but remember that coverage broke.
     pub fn mark_gap(&mut self) {
+        self.clear_coverage();
         self.gapped = true;
         self.last_global_sample = None;
+    }
+
+    fn clear_coverage(&mut self) {
+        self.first_seen.clear();
+        self.last_sample.clear();
+        self.last_busy.clear();
+        self.last_network.clear();
     }
 }
 
@@ -109,5 +128,26 @@ mod tests {
         tracker.record([key], [], [], t1);
         assert!(tracker.has_gap());
         assert!(tracker.observed_idle_since(key, t1).is_none());
+        let t2 = t1 + Duration::from_secs(1);
+        tracker.record([key], [], [], t2);
+        assert_eq!(tracker.observed_idle_since(key, t2), Some(t1));
+    }
+
+    #[test]
+    fn hidden_period_and_network_activity_do_not_count_as_idle() {
+        let key = ProcessKey {
+            pid: 8,
+            started_at_unix_ms: 1,
+        };
+        let t0 = SystemTime::UNIX_EPOCH;
+        let mut tracker = ObservationTracker::default();
+        tracker.record([key], [], [], t0);
+        tracker.mark_gap();
+        let t1 = t0 + Duration::from_secs(10_000);
+        tracker.record([key], [], [], t1);
+        assert_eq!(tracker.observed_idle_since(key, t1), Some(t1));
+        let t2 = t1 + Duration::from_secs(1);
+        tracker.record([key], [], [key], t2);
+        assert_eq!(tracker.observed_idle_since(key, t2), Some(t2));
     }
 }

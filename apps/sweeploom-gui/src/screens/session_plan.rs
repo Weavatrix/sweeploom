@@ -8,42 +8,46 @@ use sweeploom_session::{plan_free_ram, plan_quiet_workstation, plan_reduce_cpu};
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
+use crate::widgets;
 use sweeploom_dev::inspect;
 
-/// Compact planner buttons. Extra confirm UI is [`extras`].
+/// Planner group: pre-select sessions by RAM, CPU or quiet target. Confirm UI is [`extras`].
 pub fn controls(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    ui.add(egui::TextEdit::singleline(&mut app.free_ram_gb).desired_width(36.0));
-    ui.label("GB");
-    if hover_btn(
+    ui.label(
+        RichText::new("Select for cleanup")
+            .size(13.0)
+            .color(crate::theme::muted(ui)),
+    );
+    if widgets::input_group(
         ui,
         "Free RAM",
+        Some((&mut app.free_ram_gb, "GB")),
+        "Select",
         "Pre-select forgotten sessions for this much RAM. Terminate is never automatic.",
     ) {
         app.plan_free_ram();
     }
-    ui.add(egui::TextEdit::singleline(&mut app.reduce_cpu).desired_width(32.0));
-    ui.label("%");
-    if hover_btn(
+    if widgets::input_group(
         ui,
-        "Cut CPU",
+        "Cut CPU by",
+        Some((&mut app.reduce_cpu, "%")),
+        "Select",
         "Pre-select forgotten sessions until this CPU share. Terminate is never automatic.",
     ) {
         app.plan_reduce_cpu();
     }
-    if hover_btn(
+    if widgets::input_group(
         ui,
-        "Quiet",
+        "Quiet workstation",
+        None,
+        "Select",
         "Pre-select forgotten sessions. Protects the current project and browsers. Terminate is never automatic.",
     ) {
         app.plan_quiet();
     }
     let (count, rss, cpu) = planned_totals(app);
     if let Some(text) = planned_caption(count, rss, cpu) {
-        ui.label(
-            RichText::new(text)
-                .size(13.0)
-                .color(crate::theme::muted(ui)),
-        );
+        widgets::pill(ui, &format!("Planned {text}"), crate::theme::Tone::Caution);
     }
 }
 
@@ -64,12 +68,6 @@ pub fn extras(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     {
         ui.label(message);
     }
-}
-
-fn hover_btn(ui: &mut egui::Ui, label: &str, help: &str) -> bool {
-    crate::widgets::pointer(ui.button(label))
-        .on_hover_text(help)
-        .clicked()
 }
 
 fn planned_totals(app: &SweepLoomApp) -> (usize, u64, f32) {
@@ -103,10 +101,7 @@ fn is_session_message(text: &str) -> bool {
 pub fn checkbox(ui: &mut egui::Ui, session: &LiveSession, planned: &mut HashSet<ProcessKey>) {
     let mut on = session_planned(session, planned);
     let enabled = !session.safety.terminate_disabled;
-    if ui
-        .add_enabled(enabled, egui::Checkbox::new(&mut on, ""))
-        .changed()
-    {
+    if widgets::check_enabled(ui, &mut on, enabled).changed() {
         set_planned(session, planned, on);
     }
 }
@@ -128,10 +123,7 @@ pub fn checkbox_group(
     let enabled = members
         .iter()
         .any(|session| !session.safety.terminate_disabled);
-    if ui
-        .add_enabled(enabled, egui::Checkbox::new(&mut on, ""))
-        .changed()
-    {
+    if widgets::check_enabled(ui, &mut on, enabled).changed() {
         for session in members {
             if !session.safety.terminate_disabled {
                 set_planned(session, planned, on);
@@ -158,11 +150,7 @@ fn set_planned(session: &LiveSession, planned: &mut HashSet<ProcessKey>, on: boo
 
 fn draw_confirm(app: &mut SweepLoomApp, ui: &mut egui::Ui, planned: &[LiveSession]) {
     if !app.confirm_planned {
-        if crate::widgets::pointer(
-            ui.button(RichText::new("Terminate planned…").color(ui.visuals().warn_fg_color)),
-        )
-        .clicked()
-        {
+        if widgets::danger_button(ui, "Terminate planned…", true).clicked() {
             app.confirm_planned = true;
             app.confirm_terminate = false;
         }
@@ -187,7 +175,7 @@ fn draw_confirm(app: &mut SweepLoomApp, ui: &mut egui::Ui, planned: &[LiveSessio
         if crate::widgets::pointer(ui.button("Cancel")).clicked() {
             app.confirm_planned = false;
         }
-        if crate::widgets::pointer(ui.button("Terminate gracefully")).clicked() {
+        if widgets::apply_button(ui, "Terminate gracefully").clicked() {
             app.terminate_planned();
         }
     });
@@ -275,7 +263,7 @@ mod tests {
         assert_eq!(super::planned_caption(0, 0, 0.0), None);
         assert_eq!(
             super::planned_caption(2, 2 * 1024 * 1024 * 1024, 4.0).as_deref(),
-            Some("2 · 2.0 GB · 4% CPU")
+            Some("2 · 2.1 GB · 4% CPU")
         );
     }
 }

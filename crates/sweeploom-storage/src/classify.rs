@@ -3,7 +3,7 @@
 use std::path::Path;
 
 /// High-level folder category for the inspector.
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PathCategory {
     /// User source.
     Source,
@@ -45,6 +45,8 @@ pub fn classify_path_component(name: &str) -> PathCategory {
         "node_modules" | ".venv" | "venv" | "vendor" | ".gradle" | ".pnpm-store" => {
             PathCategory::Dependencies
         }
+        // `xcodebuild -derivedDataPath DerivedDataUI` and friends.
+        name if name.starts_with("deriveddata") => PathCategory::Generated,
         "cache" | ".cache" | "caches" | "docker" | "overlay2" => PathCategory::Cache,
         "downloads" | "documents" | "desktop" | "pictures" => PathCategory::UserData,
         _ => PathCategory::Unknown,
@@ -88,12 +90,24 @@ pub fn keep_nested_children(path: &Path) -> bool {
         .is_none_or(|parent| !parent.eq_ignore_ascii_case("packages"))
 }
 
-/// True when `path` is a known project marker file.
+/// True when `path` is a known project marker (file, Xcode bundle or `.git`).
 #[must_use]
 pub fn is_project_marker(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| crate::PROJECT_MARKERS.contains(&name))
+        .is_some_and(is_project_marker_name)
+}
+
+/// True when a directory entry named `name` marks its parent as a project.
+#[must_use]
+pub fn is_project_marker_name(name: &str) -> bool {
+    crate::PROJECT_MARKERS.contains(&name)
+        || name.rsplit_once('.').is_some_and(|(stem, ext)| {
+            !stem.is_empty()
+                && crate::PROJECT_MARKER_EXTENSIONS
+                    .iter()
+                    .any(|item| ext.eq_ignore_ascii_case(item))
+        })
 }
 
 /// True when the file looks like user source rather than generated output.
@@ -118,21 +132,32 @@ mod tests {
         assert_eq!(classify_path_component("target"), PathCategory::Generated);
         assert!(is_source_extension(Path::new("src/lib.rs")));
         assert!(is_project_marker(Path::new("/work/app/Cargo.toml")));
+        assert!(is_project_marker(Path::new("/work/ios/App.xcodeproj")));
+        assert!(is_project_marker(Path::new("/work/ios/App.xcworkspace")));
+        assert!(is_project_marker(Path::new("/work/swift/Package.swift")));
+        assert!(is_project_marker(Path::new("/work/net/App.sln")));
+        assert!(is_project_marker(Path::new("/work/repo/.git")));
+        assert!(!is_project_marker(Path::new("/work/repo/.xcodeproj")));
+        assert!(!is_project_marker(Path::new("/work/repo/notes.md")));
+        assert_eq!(
+            classify_path_component("DerivedDataUI"),
+            PathCategory::Generated
+        );
     }
 
     #[test]
     fn bulky_windows_trees_are_leaves() {
         assert!(!keep_nested_children(Path::new(
-            r"C:\Users\me\AppData\Local\Docker"
+            r"C:/Users/me/AppData/Local/Docker"
         )));
         assert!(!keep_nested_children(Path::new(
-            r"C:\Users\me\AppData\Local\Packages\Claude_x"
+            r"C:/Users/me/AppData/Local/Packages/Claude_x"
         )));
         assert!(keep_nested_children(Path::new(
-            r"C:\Users\me\AppData\Local\Packages"
+            r"C:/Users/me/AppData/Local/Packages"
         )));
         assert!(keep_nested_children(Path::new(
-            r"C:\Users\me\Documents\GitHub"
+            r"C:/Users/me/Documents/GitHub"
         )));
     }
 }

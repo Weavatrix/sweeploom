@@ -147,6 +147,14 @@ pub fn builtin_detectors() -> Vec<Box<dyn SessionDetector + Send + Sync>> {
 /// Run all detectors; first match wins.
 #[must_use]
 pub fn classify_process(process: &ProcessSnapshot) -> Option<SessionEvidence> {
+    if let Some(identity) = crate::node_identity(process) {
+        // Loader arguments and arbitrary project path names are not workload
+        // signatures. Node is classified from its actual entrypoint only.
+        return identity.kind.map(|kind| SessionEvidence {
+            kind,
+            detector: "node-workload",
+        });
+    }
     for detector in builtin_detectors() {
         if let Some(evidence) = detector.classify(process) {
             return Some(evidence);
@@ -221,18 +229,7 @@ impl SessionDetector for BrowserDetector {
     }
 
     fn classify(&self, process: &ProcessSnapshot) -> Option<SessionEvidence> {
-        const NAMES: &[&str] = &[
-            "chrome",
-            "chrome.exe",
-            "msedge",
-            "msedge.exe",
-            "firefox",
-            "firefox.exe",
-            "brave",
-            "brave.exe",
-            "safari",
-        ];
-        if name_matches(&process.name, process.exe.as_deref(), NAMES) {
+        if sweeploom_core::browser_identity(process).is_some() {
             Some(SessionEvidence {
                 kind: SessionKind::Browser,
                 detector: self.id(),

@@ -9,12 +9,13 @@ use sweeploom_core::{
     UserPolicy,
 };
 
-use crate::cargo::{CargoOffer, CargoTrim, cargo_offers};
+use crate::cargo::{CargoOffer, CargoTrim, cargo_offers_with};
 use crate::cargo_manifest::workspace_root;
-use crate::node::{NodeOffer, node_offers};
-use crate::python::{PythonOffer, python_offers};
+use crate::git::GitMemo;
+use crate::node::{NodeOffer, node_offers_with};
+use crate::python::{PythonOffer, python_offers_with};
 use crate::size::path_mtime;
-use sweeploom_storage::discover_projects;
+use sweeploom_storage::{discover_projects, parallel_map, walk_workers};
 
 /// A review row: candidate plus whether the UI pre-selects it.
 #[derive(Clone, Debug)]
@@ -43,28 +44,61 @@ pub fn collect_review(
     projects: &[impl AsRef<Path>],
     processes: &[ProcessSnapshot],
 ) -> Vec<ReviewRow> {
-    let mut rows = Vec::new();
-    let mut id = 1_u64;
+    collect_review_with(projects, processes, |_| {})
+}
+
+/// [`collect_review`] on parallel workers. `on_project` receives each project's
+/// rows as soon as they are sized (any thread, any order, ids not final); the
+/// returned list keeps project order with ids `1..`.
+///
+/// Workspace members share the root `target`, so each owner is sized once. Git
+/// state is read once per repository and only when something is offered.
+#[must_use]
+pub fn collect_review_with(
+    projects: &[impl AsRef<Path>],
+    processes: &[ProcessSnapshot],
+    on_project: impl Fn(&[ReviewRow]) + Sync,
+) -> Vec<ReviewRow> {
+    let projects: Vec<PathBuf> = projects
+        .iter()
+        .map(|item| item.as_ref().to_path_buf())
+        .collect();
+    let workers = walk_workers();
+    let owners = parallel_map(projects.clone(), workers, |project| {
+        project
+            .join("Cargo.toml")
+            .is_file()
+            .then(|| workspace_root(&project))
+    });
     let mut cargo_owners = HashSet::<PathBuf>::new();
-    for project in projects {
-        let project = project.as_ref();
-        if project.join("Cargo.toml").is_file() {
-            let owner = workspace_root(project);
-            if cargo_owners.insert(owner.clone()) {
-                for offer in cargo_offers(&owner, processes) {
-                    rows.push(cargo_row(offer, id));
-                    id += 1;
-                }
-            }
+    let jobs: Vec<(PathBuf, Option<PathBuf>)> = projects
+        .into_iter()
+        .zip(owners)
+        .map(|(project, owner)| {
+            let owner = owner.filter(|owner| cargo_owners.insert(owner.clone()));
+            (project, owner)
+        })
+        .collect();
+    let memo = GitMemo::default();
+    let git = |path: &Path| memo.inspect(path);
+    let found = parallel_map(jobs, workers, |(project, owner)| {
+        let mut rows = Vec::new();
+        if let Some(owner) = owner {
+            let offers = cargo_offers_with(&owner, processes, &git);
+            rows.extend(offers.into_iter().map(|offer| cargo_row(offer, 0)));
         }
-        for offer in node_offers(project, processes) {
-            rows.push(node_row(offer, id));
-            id += 1;
+        let offers = node_offers_with(&project, processes, &git);
+        rows.extend(offers.into_iter().map(|offer| node_row(offer, 0)));
+        let offers = python_offers_with(&project, processes, &git);
+        rows.extend(offers.into_iter().map(|offer| python_row(offer, 0)));
+        if !rows.is_empty() {
+            on_project(&rows);
         }
-        for offer in python_offers(project, processes) {
-            rows.push(python_row(offer, id));
-            id += 1;
-        }
+        rows
+    });
+    let mut rows: Vec<ReviewRow> = found.into_iter().flatten().collect();
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.candidate.id = CandidateId(index as u64 + 1);
     }
     rows
 }
@@ -110,6 +144,11 @@ fn node_row(offer: NodeOffer, id: u64) -> ReviewRow {
     } else {
         format!("node_modules · {}", offer.path.display())
     };
+    let title = if offer.size_complete {
+        title
+    } else {
+        format!("{title} · ≥")
+    };
     let safety = safety_of(offer.blocked, offer.blocker);
     let activity = generated_activity(&offer.path);
     ReviewRow {
@@ -145,6 +184,11 @@ fn node_row(offer: NodeOffer, id: u64) -> ReviewRow {
 
 fn python_row(offer: PythonOffer, id: u64) -> ReviewRow {
     let title = format!("Python {} · {}", offer.label, offer.path.display());
+    let title = if offer.size_complete {
+        title
+    } else {
+        format!("{title} · ≥")
+    };
     let safety = safety_of(offer.blocked, offer.blocker);
     let activity = generated_activity(&offer.path);
     let kind = if offer.rebuild == RebuildCost::High {

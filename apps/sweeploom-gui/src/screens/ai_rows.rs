@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, HashSet};
 
 use sweeploom_ai::{AiClass, AiOffer};
-use sweeploom_core::DeletionStrategy;
 
 use crate::sort::{Col, Sort};
 
@@ -54,7 +53,8 @@ pub enum Line {
 #[must_use]
 pub fn table_lines(offers: &mut [AiOffer], sort: Sort, group: AiGroup) -> Vec<Line> {
     sort_entries(offers, sort);
-    flatten(offers, group)
+    let lines = flatten(offers, group);
+    sorted_lines(lines, offers, sort)
 }
 
 /// Visible lines after collapsing groups.
@@ -75,25 +75,21 @@ pub fn visible_lines(lines: &[Line], collapsed: &HashSet<String>) -> Vec<Line> {
     out
 }
 
-/// True when this child may be checked for an explicit clean.
-#[must_use]
-pub fn can_clean(offer: &AiOffer, entry: usize) -> bool {
-    offer.entries.get(entry).is_some_and(|item| {
-        item.class.can_clean()
-            && item.candidate.deletion != DeletionStrategy::InspectOnly
-            && !item.candidate.safety.is_blocked()
-    })
-}
-
 fn sort_entries(offers: &mut [AiOffer], sort: Sort) {
     for offer in offers.iter_mut() {
         offer.entries.sort_by(|left, right| match sort.col {
-            Col::Name => left.relative.cmp(&right.relative),
-            Col::Status | Col::Procs => left.class.label().cmp(right.class.label()),
-            Col::Size | Col::Cpu => left
+            Col::Name => left
+                .relative
+                .to_lowercase()
+                .cmp(&right.relative.to_lowercase()),
+            Col::Status => left.class.label().cmp(right.class.label()),
+            Col::Procs => left.candidate.file_count.cmp(&right.candidate.file_count),
+            Col::Safety => left
                 .candidate
-                .logical_bytes
-                .cmp(&right.candidate.logical_bytes),
+                .safety
+                .level
+                .cmp(&right.candidate.safety.level),
+            _ => bytes(&left.candidate).cmp(&bytes(&right.candidate)),
         });
         if sort.desc {
             offer.entries.reverse();
@@ -122,7 +118,7 @@ fn flatten_tool(offers: &[AiOffer]) -> Vec<Line> {
         lines.push(Line::Group {
             key: format!("tool:{index}:{tool}"),
             title: tool.to_owned(),
-            bytes: offer.candidate.logical_bytes,
+            bytes: bytes(&offer.candidate),
             files: offer.candidate.file_count,
             count: offer.entries.len(),
         });
@@ -142,7 +138,7 @@ fn flatten_category(offers: &[AiOffer]) -> Vec<Line> {
     for (class, items) in buckets {
         let bytes: u64 = items
             .iter()
-            .map(|&(offer, entry)| offers[offer].entries[entry].candidate.logical_bytes)
+            .map(|&(offer, entry)| bytes(&offers[offer].entries[entry].candidate))
             .sum();
         let files: u64 = items
             .iter()
@@ -162,6 +158,72 @@ fn flatten_category(offers: &[AiOffer]) -> Vec<Line> {
         );
     }
     lines
+}
+
+fn bytes(candidate: &sweeploom_core::Candidate) -> u64 {
+    candidate.allocated_bytes.unwrap_or(candidate.logical_bytes)
+}
+
+fn sorted_lines(lines: Vec<Line>, offers: &[AiOffer], sort: Sort) -> Vec<Line> {
+    let compare_items = |a: &Line, b: &Line| {
+        let (Line::Item(ao, ae), Line::Item(bo, be)) = (a, b) else {
+            return std::cmp::Ordering::Equal;
+        };
+        let a = &offers[*ao].entries[*ae];
+        let b = &offers[*bo].entries[*be];
+        let order = match sort.col {
+            Col::Name => a.relative.to_lowercase().cmp(&b.relative.to_lowercase()),
+            Col::Status => a.class.label().cmp(b.class.label()),
+            Col::Procs => a.candidate.file_count.cmp(&b.candidate.file_count),
+            Col::Safety => a.candidate.safety.level.cmp(&b.candidate.safety.level),
+            _ => bytes(&a.candidate).cmp(&bytes(&b.candidate)),
+        }
+        .then(a.candidate.path.cmp(&b.candidate.path));
+        if sort.desc { order.reverse() } else { order }
+    };
+    if lines.iter().all(|line| matches!(line, Line::Item(_, _))) {
+        let mut lines = lines;
+        lines.sort_by(compare_items);
+        return lines;
+    }
+    let mut groups: Vec<Vec<Line>> = Vec::new();
+    for line in lines {
+        if matches!(line, Line::Group { .. }) {
+            groups.push(vec![line]);
+        } else if let Some(group) = groups.last_mut() {
+            group.push(line);
+        }
+    }
+    for group in &mut groups {
+        group[1..].sort_by(compare_items);
+    }
+    groups.sort_by(|a, b| {
+        let (
+            Line::Group {
+                title: an,
+                bytes: ab,
+                files: af,
+                ..
+            },
+            Line::Group {
+                title: bn,
+                bytes: bb,
+                files: bf,
+                ..
+            },
+        ) = (&a[0], &b[0])
+        else {
+            return std::cmp::Ordering::Equal;
+        };
+        let order = match sort.col {
+            Col::Size => ab.cmp(bb),
+            Col::Procs => af.cmp(bf),
+            _ => an.to_lowercase().cmp(&bn.to_lowercase()),
+        }
+        .then(an.cmp(bn));
+        if sort.desc { order.reverse() } else { order }
+    });
+    groups.into_iter().flatten().collect()
 }
 
 fn tool_name(offer: &AiOffer) -> &str {

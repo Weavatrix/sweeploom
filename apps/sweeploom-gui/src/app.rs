@@ -22,7 +22,7 @@ use crate::chrome;
 use crate::live;
 use crate::nav::Nav;
 use crate::prefs::Prefs;
-use crate::scan_job::{RebuildOutcome, ScanMsg};
+use crate::scan_job::{RebuildMsg, ScanMsg};
 use crate::screens::{AiGroup, BrowserUi, ProjectCard, ProjectGroup};
 use crate::sort::Sort;
 use crate::theme;
@@ -36,8 +36,10 @@ pub struct SweepLoomApp {
     pub(crate) last_quiet: Instant,
     pub(crate) snapshot: Option<ProcessSnapshotSet>,
     pub(crate) sessions: Vec<LiveSession>,
+    pub(crate) node_versions: crate::node_versions::NodeVersions,
     pub(crate) selected_session: Option<SessionId>,
     pub(crate) group_raw: bool,
+    pub(crate) session_search: String,
     pub(crate) show_all_apps: bool,
     pub(crate) session_sort: Sort,
     pub(crate) review_sort: Sort,
@@ -46,18 +48,28 @@ pub struct SweepLoomApp {
     pub(crate) collapsed_project_groups: HashSet<String>,
     pub(crate) project_cards: Vec<ProjectCard>,
     pub(crate) project_card_stamp: u64,
+    pub(crate) project_sizes: crate::project_sizes::ProjectSizes,
     pub(crate) ai_sort: Sort,
     pub(crate) ai_group: AiGroup,
     pub(crate) collapsed_ai_groups: HashSet<String>,
     pub(crate) expanded_history: HashSet<String>,
     pub(crate) expanded_sessions: HashSet<String>,
     pub(crate) explorer_sort: Sort,
+    pub(crate) selected_explorer: HashSet<PathBuf>,
+    pub(crate) selected_projects: HashSet<PathBuf>,
+    pub(crate) native_cleanup: crate::native_cleanup::NativeCleanup,
+    pub(crate) disk_actions: crate::disk_actions::DiskActions,
     pub(crate) expanded_explorer: HashSet<String>,
     pub(crate) process_sort: Sort,
     pub(crate) history_sort: Sort,
     pub(crate) history: HistoryStore,
     pub(crate) inventory: Option<InventoryReport>,
     pub(crate) inventory_error: Option<String>,
+    pub(crate) scan_history: crate::scan_history::ScanHistory,
+    pub(crate) inventory_at: Option<u64>,
+    pub(crate) inventory_cached: bool,
+    pub(crate) disk_history_filter: String,
+    pub(crate) disk_history_selected: Option<(crate::scan_history::Source, PathBuf)>,
     pub(crate) scan_root: String,
     pub(crate) locations: UserLocations,
     pub(crate) confirm_terminate: bool,
@@ -68,6 +80,7 @@ pub struct SweepLoomApp {
     pub(crate) action_message: Option<String>,
     pub(crate) review: Vec<ReviewRow>,
     pub(crate) last_receipt: Option<Receipt>,
+    pub(crate) last_cleanup_summary: Option<String>,
     pub(crate) free_gb: String,
     pub(crate) free_ram_gb: String,
     pub(crate) reduce_cpu: String,
@@ -93,7 +106,8 @@ pub struct SweepLoomApp {
     pub(crate) force_quit: bool,
     start_hidden: bool,
     pub(crate) scan_rx: Option<Receiver<ScanMsg>>,
-    pub(crate) rebuild_rx: Option<Receiver<RebuildOutcome>>,
+    pub(crate) rebuild_rx: Option<Receiver<RebuildMsg>>,
+    pub(crate) review_after_scan: bool,
     pub(crate) apply_rx: Option<Receiver<(String, Receipt)>>,
     pub(crate) ai_rx: Option<Receiver<Result<Vec<AiOffer>, String>>>,
 }
@@ -103,6 +117,11 @@ impl SweepLoomApp {
     pub fn new(cc: &eframe::CreationContext<'_>, start_hidden: bool) -> Self {
         let locations = UserLocations::current();
         let prefs = Prefs::load(&locations.app_config.join("prefs.json"));
+        let scan_history =
+            crate::scan_history::ScanHistory::load(locations.app_data.join("scan-history.json"));
+        let saved = scan_history.scans().last().cloned();
+        let cached_projects = scan_history.projects().to_vec();
+        let cached_sizes = crate::project_sizes::ProjectSizes::restore(&scan_history);
         theme::apply(&cc.egui_ctx, prefs.theme, prefs.ui_scale);
         tray::install_wake(cc.egui_ctx.clone());
         let mut sampler = ProcessSampler::new();
@@ -114,8 +133,10 @@ impl SweepLoomApp {
             last_quiet: Instant::now(),
             snapshot: Some(snapshot),
             sessions,
+            node_versions: Default::default(),
             selected_session: None,
             group_raw: false,
+            session_search: String::new(),
             show_all_apps: false,
             session_sort: Sort::size_desc(),
             review_sort: Sort::size_desc(),
@@ -124,19 +145,32 @@ impl SweepLoomApp {
             collapsed_project_groups: HashSet::new(),
             project_cards: Vec::new(),
             project_card_stamp: u64::MAX,
+            project_sizes: Default::default(),
             ai_sort: Sort::size_desc(),
             ai_group: AiGroup::Tool,
             collapsed_ai_groups: HashSet::new(),
             expanded_history: HashSet::new(),
             expanded_sessions: HashSet::new(),
             explorer_sort: Sort::size_desc(),
+            selected_explorer: HashSet::new(),
+            selected_projects: HashSet::new(),
+            disk_actions: Default::default(),
+            native_cleanup: Default::default(),
             expanded_explorer: HashSet::new(),
             process_sort: Sort::size_desc(),
             history_sort: Sort::size_desc(),
             history: HistoryStore::default(),
-            inventory: None,
+            inventory: saved.as_ref().map(|saved| saved.report.clone()),
             inventory_error: None,
-            scan_root: locations.home.display().to_string(),
+            inventory_at: saved.as_ref().map(|saved| saved.at),
+            inventory_cached: saved.is_some(),
+            disk_history_filter: String::new(),
+            disk_history_selected: None,
+            scan_root: saved.as_ref().map_or_else(
+                || locations.home.display().to_string(),
+                |saved| saved.report.root.display().to_string(),
+            ),
+            scan_history,
             locations,
             confirm_terminate: false,
             pending_stop: None,
@@ -146,6 +180,7 @@ impl SweepLoomApp {
             action_message: None,
             review: Vec::new(),
             last_receipt: None,
+            last_cleanup_summary: None,
             free_gb: "1".to_owned(),
             free_ram_gb: "2".to_owned(),
             reduce_cpu: "10".to_owned(),
@@ -155,7 +190,7 @@ impl SweepLoomApp {
             confirm_helpers: false,
             browser: BrowserUi::default(),
             current_project: live::current_project(),
-            project_roots: Vec::new(),
+            project_roots: cached_projects,
             last_busy: HashMap::new(),
             volumes: volume_space(),
             scanning: false,
@@ -172,11 +207,14 @@ impl SweepLoomApp {
             start_hidden,
             scan_rx: None,
             rebuild_rx: None,
+            review_after_scan: false,
             apply_rx: None,
             ai_rx: None,
         };
         live::stamp_first(&mut app);
         app.rebuild_review();
+        // Startup Review refresh must not erase persisted folder measurements.
+        app.project_sizes = cached_sizes;
         app
     }
 
@@ -214,7 +252,8 @@ impl SweepLoomApp {
         self.hidden = true;
         self.hid_at = Instant::now();
         self.history = HistoryStore::default();
-        self.ai_offers = None;
+        // Disk results (AI stores, Review, Projects, Explorer) survive the tray;
+        // only live process state is dropped.
         self.snapshot = None;
         self.sessions.clear();
         self.planned_keys.clear();
@@ -267,7 +306,15 @@ impl SweepLoomApp {
 }
 
 impl eframe::App for SweepLoomApp {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.poll_native();
+        self.project_sizes
+            .poll(&[], &egui::Context::default(), &mut self.scan_history);
+        self.scan_history.flush();
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.scan_history.poll_save();
         self.ensure_tray();
         if self.start_hidden {
             self.start_hidden = false;
@@ -275,6 +322,7 @@ impl eframe::App for SweepLoomApp {
         }
         self.handle_tray(ctx);
         if self.stay_background(ctx) {
+            self.poll_native();
             self.poll_disk();
             return;
         }
@@ -291,6 +339,12 @@ impl eframe::App for SweepLoomApp {
             });
         }
         chrome::draw(ctx, self);
+        self.disk_dialog(ctx);
+        self.native_dialog(ctx);
+        self.poll_native();
+        self.poll_trash();
         self.poll_disk();
+        self.project_sizes
+            .poll(&self.project_roots, ctx, &mut self.scan_history);
     }
 }

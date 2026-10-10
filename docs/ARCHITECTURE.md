@@ -1,5 +1,7 @@
 # SweepLoom architecture
 
+[README](../README.md) · [All docs](../README.md#documentation)
+
 SweepLoom is a local-first workstation resource manager published by
 **Weavatrix** (the company). SweepLoom is the product. The full product
 plan lives in [`product/`](product/README.md), split so every file stays
@@ -28,6 +30,13 @@ sweeploom-session     logical grouping + forgotten score
 sweeploom-network     capability-gated connections
 sweeploom-storage     weavatrix-scan inventory
 sweeploom-exec        plan / revalidate / receipt
+sweeploom-dev         Cargo / Node / Python workspace analyzers
+sweeploom-ai          inspect-first AI stores, classify, token tax
+sweeploom-general     temp, logs, dumps, Downloads review
+sweeploom-rules       declarative TOML cleaner rules
+sweeploom-browser     companion protocol: tab heat, discard, Later
+sweeploom-history     bounded in-memory observed history
+sweeploom (cli)       CLI, MCP server, Rust library facade
 sweeploom-gui         egui + eframe (glow)
 ```
 

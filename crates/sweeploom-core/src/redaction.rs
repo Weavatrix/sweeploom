@@ -81,9 +81,12 @@ fn secret_flag_value(arg: &str) -> Option<String> {
 }
 
 fn looks_like_secret_assignment(arg: &str) -> bool {
-    SECRET_ENV_PREFIXES
-        .iter()
-        .any(|prefix| arg.len() >= prefix.len() && arg[..prefix.len()].eq_ignore_ascii_case(prefix))
+    // `get` instead of indexing: process arguments may carry multibyte UTF-8 at
+    // the prefix boundary, and a byte-index panic aborts the release GUI.
+    SECRET_ENV_PREFIXES.iter().any(|prefix| {
+        arg.get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+    })
 }
 
 fn redact_assignment(arg: &str) -> String {
@@ -122,6 +125,16 @@ mod tests {
     fn redacts_uri_userinfo() {
         let cmd = redact_command(&["curl", "https://user:hunter2@example.com/x"]);
         assert_eq!(cmd, ["curl", "https://***@example.com/x"]);
+    }
+
+    #[test]
+    fn multibyte_args_do_not_panic() {
+        let args = ["Тест", "AUT€", "ключ=значение", "PASSWORD=秘密", "🙂🙂🙂🙂"];
+        let cmd = redact_command(&args);
+        assert_eq!(
+            cmd,
+            ["Тест", "AUT€", "ключ=значение", "PASSWORD=***", "🙂🙂🙂🙂"]
+        );
     }
 
     #[test]

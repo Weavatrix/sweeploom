@@ -13,9 +13,14 @@ fn card(path: &str, bytes: u64, kind: &'static str) -> ProjectCard {
     ProjectCard {
         folder: cluster_title(parent),
         folder_key,
-        cluster_bytes: 0,
         path,
-        bytes,
+        bytes: Some(sweeploom_storage::DiskUsage {
+            bytes,
+            logical_bytes: bytes,
+            ..Default::default()
+        }),
+        size_error: None,
+        artifact_bytes: 0,
         kinds: kind.to_owned(),
         group_kind: kind,
         artifacts: "none".to_owned(),
@@ -79,4 +84,104 @@ fn folder_groups_use_the_parent_name() {
         },
     );
     assert_eq!(keys(&lines), ["g:lib", "p:1", "g:src", "p:0"]);
+}
+
+#[test]
+fn folder_size_sort_uses_the_size_displayed_and_reverses_names() {
+    let cards = [
+        card("a/small-project", 10, "Node"),
+        card("z/large-project", 100, "Node"),
+    ];
+    let lines = table_lines(
+        &cards,
+        ProjectGroup::Parent,
+        &HashSet::new(),
+        Sort::size_desc(),
+    );
+    assert_eq!(keys(&lines), ["g:z", "p:1", "g:a", "p:0"]);
+    let names = table_lines(
+        &cards,
+        ProjectGroup::Parent,
+        &HashSet::new(),
+        Sort {
+            col: Col::Name,
+            desc: true,
+        },
+    );
+    assert_eq!(keys(&names), ["g:z", "p:1", "g:a", "p:0"]);
+    let kinds = table_lines(
+        &cards,
+        ProjectGroup::Kind,
+        &HashSet::new(),
+        Sort::size_desc(),
+    );
+    assert!(matches!(&kinds[0], Line::Group { bytes: Some(usage), .. } if usage.bytes == 110));
+}
+
+#[test]
+fn unknown_sizes_stay_unknown_and_sort_below_measured_sizes_in_both_directions() {
+    use super::project_rows::{size_caption, sort_cards};
+    let mut cards = [
+        card("repos/pending", 0, "Node"),
+        card("repos/empty", 0, "Node"),
+        card("repos/full", 20, "Node"),
+    ];
+    cards[0].bytes = None;
+    assert_eq!(size_caption(cards[0].bytes, None), "Measuring…");
+    assert_eq!(size_caption(None, Some("denied")), "Unavailable");
+    assert_eq!(size_caption(cards[1].bytes, None), "0 KB");
+    sort_cards(&mut cards, Sort::size_desc());
+    assert_eq!(cards[0].name(), "full");
+    assert_eq!(cards[2].name(), "pending");
+    sort_cards(
+        &mut cards,
+        Sort {
+            col: Col::Size,
+            desc: false,
+        },
+    );
+    assert_eq!(cards[0].name(), "empty");
+    assert_eq!(cards[2].name(), "pending");
+}
+
+#[test]
+fn group_totals_are_lower_bounds_until_root_projects_are_measured() {
+    let mut cards = [
+        card("repos/app", 100, "Node"),
+        card("repos/app/child", 20, "Node"),
+        card("repos/pending", 0, "Node"),
+    ];
+    cards[2].bytes = None;
+    let lines = table_lines(
+        &cards,
+        ProjectGroup::Kind,
+        &HashSet::new(),
+        Sort::size_desc(),
+    );
+    let Line::Group {
+        bytes: Some(usage), ..
+    } = lines[0]
+    else {
+        panic!("group size");
+    };
+    assert_eq!(usage.bytes, 100);
+    assert!(!usage.complete);
+    cards[2].bytes = Some(sweeploom_storage::DiskUsage {
+        bytes: 50,
+        ..Default::default()
+    });
+    let lines = table_lines(
+        &cards,
+        ProjectGroup::Kind,
+        &HashSet::new(),
+        Sort::size_desc(),
+    );
+    let Line::Group {
+        bytes: Some(usage), ..
+    } = lines[0]
+    else {
+        panic!("group size");
+    };
+    assert_eq!(usage.bytes, 150);
+    assert!(usage.complete);
 }

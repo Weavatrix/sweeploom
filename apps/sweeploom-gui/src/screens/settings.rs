@@ -6,13 +6,24 @@ use crate::app::SweepLoomApp;
 use crate::autostart;
 use crate::prefs::{SCALE_CHOICES, ThemeMode};
 use crate::tray;
-use crate::widgets::{page_title, pointer, section};
+use crate::widgets::{self, page_title, section};
 
 pub fn ui_settings(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(ui, "Settings", "Local-only. Telemetry stays off.");
+    ui.set_max_width(760.0);
     appearance(app, ui);
     background(app, ui);
     about(app, ui);
+}
+
+fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal(|ui| {
+        ui.add_sized(
+            egui::vec2(132.0, 28.0),
+            egui::Label::new(RichText::new(label).color(crate::theme::muted(ui))),
+        );
+        add(ui);
+    });
 }
 
 fn appearance(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -21,25 +32,37 @@ fn appearance(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Appearance",
         "Theme and size apply immediately and are stored in prefs.json.",
         |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Theme");
-                for mode in [ThemeMode::Auto, ThemeMode::Dark, ThemeMode::Light] {
-                    if pointer(ui.selectable_label(app.prefs.theme == mode, mode.label())).clicked()
-                    {
-                        app.prefs.theme = mode;
-                        app.persist_prefs();
-                    }
+            row(ui, "Theme", |ui| {
+                let mut mode = app.prefs.theme;
+                if widgets::segmented(
+                    ui,
+                    &mut mode,
+                    &[
+                        (ThemeMode::Auto, "Auto"),
+                        (ThemeMode::Dark, "Dark"),
+                        (ThemeMode::Light, "Light"),
+                    ],
+                ) {
+                    app.prefs.theme = mode;
+                    app.persist_prefs();
                 }
             });
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.label("Interface size");
-                for (label, scale) in SCALE_CHOICES {
-                    let selected = (app.prefs.ui_scale - *scale).abs() < 0.01;
-                    if pointer(ui.selectable_label(selected, *label)).clicked() {
-                        app.prefs.ui_scale = *scale;
-                        app.persist_prefs();
-                    }
+            ui.add_space(crate::theme::SM);
+            row(ui, "Interface size", |ui| {
+                let mut scale = SCALE_CHOICES
+                    .iter()
+                    .position(|(_, scale)| (app.prefs.ui_scale - *scale).abs() < 0.01)
+                    .unwrap_or(usize::MAX);
+                let options: Vec<(usize, &str)> = SCALE_CHOICES
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (label, _))| (index, *label))
+                    .collect();
+                if widgets::segmented(ui, &mut scale, &options)
+                    && let Some((_, value)) = SCALE_CHOICES.get(scale)
+                {
+                    app.prefs.ui_scale = *value;
+                    app.persist_prefs();
                 }
             });
         },
@@ -57,12 +80,12 @@ fn background(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                 return;
             }
             let mut tray_on = app.prefs.tray_enabled;
-            if ui
-                .checkbox(
-                    &mut tray_on,
-                    "Keep running in the tray when the window closes",
-                )
-                .changed()
+            if widgets::check_label(
+                ui,
+                &mut tray_on,
+                "Keep running in the tray when the window closes",
+            )
+            .changed()
             {
                 app.prefs.tray_enabled = tray_on;
                 app.sync_tray();
@@ -77,15 +100,17 @@ fn background(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             ui.add_space(6.0);
             if autostart::is_supported() {
                 let mut auto = autostart::is_enabled();
-                if ui
-                    .checkbox(&mut auto, "Start SweepLoom in the tray when I sign in")
+                if widgets::check_label(ui, &mut auto, "Start SweepLoom in the tray when I sign in")
                     .changed()
                     && let Err(error) = autostart::set_enabled(auto)
                 {
                     app.action_message = Some(error);
                 }
             } else {
-                ui.label("Sign-in autostart is available on Windows. Launch with --tray to start hidden.");
+                widgets::caption(
+                    ui,
+                    "Sign-in autostart is available on Windows. Launch with --tray to start hidden.",
+                );
             }
         },
     );
@@ -93,13 +118,27 @@ fn background(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
 
 fn about(app: &SweepLoomApp, ui: &mut egui::Ui) {
     section(ui, "About", "", |ui| {
-        ui.label("Telemetry: none.");
-        ui.label("License: MPL-2.0 (SweepLoom). Weavatrix crates remain MIT.");
-        ui.label(format!("Home: {}", app.locations.home.display()));
-        ui.label(format!("Config: {}", app.locations.app_config.display()));
-        if let Some(snapshot) = &app.snapshot {
-            ui.label(format!("Observed processes: {}", snapshot.processes.len()));
-        }
-        ui.label(RichText::new("Hidden launch: sweeploom-gui --tray").italics());
+        egui::Grid::new("settings-about")
+            .num_columns(2)
+            .spacing([crate::theme::LG, 6.0])
+            .show(ui, |ui| {
+                let mut line = |ui: &mut egui::Ui, key: &str, value: String| {
+                    ui.label(RichText::new(key).color(crate::theme::muted(ui)));
+                    ui.label(value);
+                    ui.end_row();
+                };
+                line(ui, "Telemetry", "None".into());
+                line(
+                    ui,
+                    "License",
+                    "MPL-2.0 (SweepLoom). Weavatrix crates remain MIT.".into(),
+                );
+                line(ui, "Home", app.locations.home.display().to_string());
+                line(ui, "Config", app.locations.app_config.display().to_string());
+                if let Some(snapshot) = &app.snapshot {
+                    line(ui, "Observed processes", snapshot.processes.len().to_string());
+                }
+                line(ui, "Hidden launch", "sweeploom-gui --tray".into());
+            });
     });
 }

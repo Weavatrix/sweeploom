@@ -18,6 +18,8 @@ pub enum Col {
     Procs,
     /// Recommendation / rebuild / safety.
     Status,
+    /// Cleanup safety.
+    Safety,
 }
 
 /// Current sort.
@@ -45,7 +47,7 @@ impl Sort {
             self.desc = !self.desc;
         } else {
             self.col = col;
-            self.desc = !matches!(col, Col::Name | Col::Status);
+            self.desc = !matches!(col, Col::Name | Col::Status | Col::Safety);
         }
     }
 }

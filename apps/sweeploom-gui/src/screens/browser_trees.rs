@@ -3,14 +3,16 @@
 use sweeploom_browser::{
     BrowserPressure, can_stop_helper, family_from_name, process_caption, process_role,
 };
-use sweeploom_core::{LiveSession, ProcessSnapshot, SessionId, SessionKind};
+use sweeploom_core::{
+    BrowserPart, LiveSession, ProcessSnapshot, SessionId, SessionKind, browser_identity,
+};
 
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::sort::{Col, Sort, header_cell};
 use crate::widgets::pointer;
 use eframe::egui::RichText;
-use egui_extras::{Column, TableBuilder};
+use egui_extras::Column;
 
 pub(super) struct TreeRow {
     pub(super) id: SessionId,
@@ -25,35 +27,18 @@ pub(super) struct TreeRow {
 }
 
 pub fn draw(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
-    let processes = app
-        .snapshot
-        .as_ref()
-        .map(|item| item.processes.as_slice())
-        .unwrap_or(&[]);
+    let Some(snapshot) = app.snapshot.as_ref() else {
+        ui.spinner();
+        ui.label("Waiting for the first process sample…");
+        return;
+    };
+    let processes = snapshot.processes.as_slice();
     let pressure = BrowserPressure::from_live(&app.sessions, processes);
     if pressure.hosts.is_empty() {
-        ui.label("No browser process trees in this sample.");
+        ui.label("No supported browser executables or browser-specific services were found in the latest process sample.");
         return;
     }
-    ui.label(
-        RichText::new(format!(
-            "Combined RSS {} across {} family(ies). The Browser process stays Keep.",
-            format_bytes(pressure.rss_bytes()),
-            pressure.hosts.len()
-        ))
-        .strong(),
-    );
-    for host in &pressure.hosts {
-        ui.label(format!(
-            "{} · {} · {} session(s) · {} processes · {:.1}% CPU",
-            host.family,
-            format_bytes(host.rss_bytes),
-            host.sessions,
-            host.processes,
-            host.cpu_percent
-        ));
-    }
-    ui.add_space(6.0);
+    summary(ui, &pressure);
     let mut rows = collect_rows(&app.sessions, processes);
     let mut sort = app.browser.tree_sort;
     sort_rows(&mut rows, sort);
@@ -71,16 +56,29 @@ fn collect_rows(sessions: &[LiveSession], processes: &[ProcessSnapshot]) -> Vec<
                 .processes
                 .first()
                 .and_then(|key| processes.iter().find(|process| process.key == *key));
+            let identity = root.and_then(browser_identity);
             let role = root
                 .map(|item| process_role(&item.command))
                 .unwrap_or("Browser");
-            let caption = root
-                .map(|item| process_caption(&item.command))
-                .unwrap_or_else(|| "Browser".to_owned());
+            let caption = if identity.is_some_and(|identity| identity.part == BrowserPart::Service)
+            {
+                format!(
+                    "Background service · {}",
+                    root.map(|item| item.name.as_str()).unwrap_or("Unknown")
+                )
+            } else if identity.is_some_and(|identity| identity.part == BrowserPart::Helper)
+                && role == "Browser"
+            {
+                "Helper".to_owned()
+            } else {
+                root.map(|item| process_caption(&item.command))
+                    .unwrap_or_else(|| "Browser".to_owned())
+            };
             TreeRow {
                 id: session.id,
-                family: root
-                    .map(|item| family_from_name(&item.name))
+                family: identity
+                    .map(|identity| identity.family)
+                    .or_else(|| root.map(|item| family_from_name(&item.name)))
                     .unwrap_or("Browser"),
                 role: caption,
                 pid: root.map(|item| item.pid).unwrap_or(0),
@@ -88,7 +86,8 @@ fn collect_rows(sessions: &[LiveSession], processes: &[ProcessSnapshot]) -> Vec<
                 rss: session.rss_bytes,
                 cpu: session.cpu_percent,
                 status: session.activity.label().to_owned(),
-                stoppable: can_stop_helper(role),
+                stoppable: can_stop_helper(role)
+                    && identity.is_none_or(|identity| identity.part != BrowserPart::Service),
             }
         })
         .collect()
@@ -105,7 +104,7 @@ fn sort_rows(rows: &mut [TreeRow], sort: Sort) {
             .cpu
             .partial_cmp(&right.cpu)
             .unwrap_or(std::cmp::Ordering::Equal),
-        Col::Status => left.status.cmp(&right.status),
+        Col::Status | Col::Safety => left.status.cmp(&right.status),
         Col::Size => left.rss.cmp(&right.rss),
     });
     if sort.desc {
@@ -128,8 +127,7 @@ fn draw_table(
     let count = rows.len();
     let mut selected = std::mem::take(&mut app.browser.tree_ids);
     let mut opened = app.browser.selected_tree;
-    TableBuilder::new(ui)
-        .id_salt("browser-trees-grid")
+    crate::widgets::table(ui, "browser-trees-grid")
         .striped(true)
         .resizable(true)
         .sense(eframe::egui::Sense::click())
@@ -138,15 +136,15 @@ fn draw_table(
         .cell_layout(eframe::egui::Layout::left_to_right(
             eframe::egui::Align::Center,
         ))
-        .column(Column::exact(36.0).clip(true).resizable(false))
-        .column(Column::remainder().at_least(88.0).clip(true))
+        .column(Column::exact(34.0).clip(true).resizable(false))
+        .column(Column::remainder().at_least(160.0).clip(true))
+        .column(Column::exact(96.0).clip(true))
         .column(Column::exact(72.0).clip(true))
-        .column(Column::exact(56.0).clip(true))
-        .column(Column::exact(56.0).clip(true))
-        .column(Column::exact(72.0).clip(true))
-        .column(Column::exact(56.0).clip(true))
+        .column(Column::exact(64.0).clip(true))
         .column(Column::exact(88.0).clip(true))
-        .header(32.0, |mut header| {
+        .column(Column::exact(64.0).clip(true))
+        .column(Column::exact(120.0).clip(true))
+        .header(30.0, |mut header| {
             header.col(|ui| {
                 ui.strong("");
             });
@@ -183,10 +181,7 @@ fn fill_row(
     let mut on = selected.contains(&item.id);
     row.set_selected(*opened == Some(item.id));
     row.col(|ui| {
-        if ui
-            .add_enabled(item.stoppable, eframe::egui::Checkbox::new(&mut on, ""))
-            .changed()
-        {
+        if crate::widgets::check_enabled(ui, &mut on, item.stoppable).changed() {
             if on {
                 selected.insert(item.id);
             } else {
@@ -195,9 +190,11 @@ fn fill_row(
         }
     });
     row.col(|ui| {
-        if pointer(
-            ui.add(eframe::egui::Button::new(RichText::new(&item.role).size(16.0)).frame(false)),
-        )
+        if pointer(ui.add(
+            eframe::egui::Label::new(RichText::new(&item.role))
+                .truncate()
+                .sense(eframe::egui::Sense::click()),
+        ))
         .clicked()
         {
             *opened = Some(item.id);
@@ -207,7 +204,7 @@ fn fill_row(
         ui.label(item.family);
     });
     row.col(|ui| {
-        ui.label(item.pid.to_string());
+        ui.label(RichText::new(item.pid.to_string()).color(crate::theme::muted(ui)));
     });
     row.col(|ui| {
         ui.label(item.procs.to_string());
@@ -219,9 +216,53 @@ fn fill_row(
         ui.label(format!("{:.1}%", item.cpu));
     });
     row.col(|ui| {
-        ui.label(&item.status);
+        crate::widgets::status_pill(ui, &item.status);
     });
     if row.response().clicked() {
         *opened = Some(item.id);
     }
 }
+
+/// Memory by browser family, with per-family notes.
+fn summary(ui: &mut eframe::egui::Ui, pressure: &BrowserPressure) {
+    let segments: Vec<crate::widgets::Segment> = pressure
+        .hosts
+        .iter()
+        .enumerate()
+        .map(|(index, host)| crate::widgets::Segment {
+            label: host.family.to_string(),
+            value: host.rss_bytes as f64,
+            detail: format!(
+                "{} · {} procs · {:.1}% CPU",
+                format_bytes(host.rss_bytes),
+                host.processes,
+                host.cpu_percent
+            ),
+            color: crate::theme::series(ui, index),
+        })
+        .collect();
+    crate::widgets::card(ui, |ui| {
+        let total = format!(
+            "{} across {} {}",
+            format_bytes(pressure.rss_bytes()),
+            pressure.hosts.len(),
+            if pressure.hosts.len() == 1 { "family" } else { "families" }
+        );
+        crate::widgets::breakdown(ui, "Browser memory", &total, &segments);
+        ui.add_space(crate::theme::SM);
+        let mut notes = vec!["Main browser processes stay Keep.".to_owned()];
+        for host in &pressure.hosts {
+            if host.main_processes == 0 && host.background_services > 0 {
+                notes.push(format!("{}: background services only; main browser not observed.", host.family));
+            } else if host.main_processes == 0 {
+                notes.push(format!("{}: helpers only; main browser not observed.", host.family));
+            }
+        }
+        crate::widgets::caption(ui, notes.join(" "));
+    });
+    ui.add_space(crate::theme::MD);
+}
+
+#[cfg(test)]
+#[path = "browser_trees_tests.rs"]
+mod tests;

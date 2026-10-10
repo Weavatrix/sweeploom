@@ -84,7 +84,7 @@ fn offer_from_store(id: u64, tool: &str, path: PathBuf) -> AiOffer {
             owner: CandidateOwner::Application(tool.to_owned()),
             path,
             logical_bytes: listed.logical_bytes,
-            allocated_bytes: None,
+            allocated_bytes: listed.allocated_bytes,
             file_count: listed.file_count,
             activity: ActivityEvidence::default(),
             safety: SafetyAssessment::review(),
@@ -114,7 +114,7 @@ fn entry_from(id: u64, tool: &str, store: &std::path::Path, listed: StoreEntry) 
             SafetyAssessment::review(),
             UserPolicy::AskEveryTime,
         )
-    } else if matches!(class, AiClass::Secret | AiClass::Sqlite) {
+    } else if matches!(class, AiClass::Secret | AiClass::Sqlite) || listed.relative == "worktrees" {
         (
             CandidateKind::AiSession,
             DeletionStrategy::InspectOnly,
@@ -139,7 +139,7 @@ fn entry_from(id: u64, tool: &str, store: &std::path::Path, listed: StoreEntry) 
             owner: CandidateOwner::Application(tool.to_owned()),
             path,
             logical_bytes: listed.logical_bytes,
-            allocated_bytes: None,
+            allocated_bytes: listed.allocated_bytes,
             file_count: listed.file_count,
             activity: ActivityEvidence {
                 latest_any_modified: mtime,
@@ -221,6 +221,8 @@ mod tests {
         fs::create_dir_all(root.join("cache")).unwrap();
         fs::write(root.join("cache").join("a"), b"aa").unwrap();
         fs::write(root.join(".credentials.json"), b"no").unwrap();
+        fs::write(root.join("state.sqlite-wal"), b"wal").unwrap();
+        fs::create_dir_all(root.join("worktrees")).unwrap();
         let offer = offer_from_store(1, "claude", root.clone());
         let cache = offer
             .entries
@@ -241,6 +243,14 @@ mod tests {
         assert_eq!(secret.candidate.deletion, DeletionStrategy::InspectOnly);
         assert!(secret.candidate.safety.is_blocked());
         assert_eq!(offer.candidate.deletion, DeletionStrategy::InspectOnly);
+        for name in ["state.sqlite-wal", "worktrees"] {
+            let entry = offer
+                .entries
+                .iter()
+                .find(|entry| entry.relative == name)
+                .unwrap();
+            assert!(entry.candidate.safety.is_blocked(), "{name}");
+        }
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -177,8 +177,13 @@ fn is_secret(leaf: &str) -> bool {
 }
 
 pub(crate) fn is_sqlite(leaf: &str) -> bool {
-    leaf.ends_with(".sqlite")
+    leaf == "sqlite"
+        || leaf.ends_with(".sqlite")
+        || leaf.ends_with(".sqlite-wal")
+        || leaf.ends_with(".sqlite-shm")
         || leaf.ends_with(".sqlite3")
+        || leaf.ends_with(".sqlite3-wal")
+        || leaf.ends_with(".sqlite3-shm")
         || leaf.ends_with(".db")
         || leaf.ends_with(".db-wal")
         || leaf.ends_with(".db-shm")

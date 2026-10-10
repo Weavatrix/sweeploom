@@ -10,11 +10,14 @@ mod detectors;
 mod forgotten;
 mod group;
 mod idle_agent;
+mod node;
 mod plan;
 
 #[cfg(test)]
 mod session_bench;
 
+#[cfg(test)]
+mod browser_tests;
 #[cfg(test)]
 mod with_without_bench;
 
@@ -23,6 +26,7 @@ pub use detectors::{SessionDetector, SessionEvidence, builtin_detectors, classif
 pub use forgotten::{ForgottenInput, mark_orphan_mcp, score_session};
 pub use group::group_sessions;
 pub use idle_agent::{IDLE_BENCH_KINDS, idle_2gb_agent, idle_agent_survive, naive_idle_reclaim};
+pub use node::{NodeIdentity, is_node, is_tool_installation, node_identity, version_from_path};
 pub use plan::{is_reclaim_candidate, plan_free_ram, plan_quiet_workstation, plan_reduce_cpu};
 
 use sweeploom_core::{LiveSession, ProcessSnapshot};
@@ -69,7 +73,7 @@ mod tests {
         Recommendation, SessionActivity, SessionKind,
     };
 
-    fn proc(
+    pub(super) fn proc(
         pid: u32,
         parent: Option<u32>,
         name: &str,

@@ -1,6 +1,8 @@
 //! Git safety via `weavatrix-git`. SweepLoom does not reimplement Git.
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use sweeploom_core::{Blocker, Confidence, SafetyAssessment, Warning};
 use weavatrix_git::{Repository, WorktreeSafety, WorktreeSafetyLevel};
@@ -15,6 +17,58 @@ pub fn inspect(path: &Path) -> GitSafety {
         },
         Err(_) => classify_open_error(path),
     }
+}
+
+/// Reads Git state lazily, once per repository, for one review pass.
+///
+/// Worktree status covers the whole repository, so nested projects reuse it.
+#[derive(Default)]
+pub(crate) struct GitMemo {
+    known: Mutex<HashMap<PathBuf, GitSafety>>,
+}
+
+impl GitMemo {
+    pub(crate) fn inspect(&self, path: &Path) -> GitSafety {
+        let key = repository_root(path).unwrap_or_else(|| path.to_path_buf());
+        if let Some(known) = self.known.lock().ok().and_then(|map| map.get(&key).cloned()) {
+            return known;
+        }
+        let safety = inspect(path);
+        if let Ok(mut map) = self.known.lock() {
+            map.insert(key, safety.clone());
+        }
+        safety
+    }
+}
+
+fn repository_root(path: &Path) -> Option<PathBuf> {
+    path.ancestors()
+        .take(24)
+        .find(|dir| dir.join(".git").exists())
+        .map(Path::to_path_buf)
+}
+
+/// Process, then Git, blocker for generated output under `project`.
+pub(crate) fn blocker_for(
+    project: &Path,
+    processes: &[sweeploom_core::ProcessSnapshot],
+    tools: &[&str],
+    git: &dyn Fn(&Path) -> GitSafety,
+) -> Option<Blocker> {
+    let busy = processes.iter().any(|process| {
+        process.cwd.as_ref().is_some_and(|cwd| cwd.starts_with(project)) && {
+            let name = process.name.to_ascii_lowercase();
+            tools.iter().any(|tool| name.contains(tool))
+        }
+    });
+    if busy {
+        return Some(Blocker::ActiveProcess);
+    }
+    let git = git(project);
+    if matches!(git, GitSafety::Unknown) {
+        return Some(Blocker::UnknownGitState);
+    }
+    git.assessment().blockers.first().copied()
 }
 
 fn classify_open_error(path: &Path) -> GitSafety {

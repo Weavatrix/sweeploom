@@ -1,6 +1,6 @@
 //! Process snapshot types. Command lines must already be redacted.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use crate::evidence::Confidence;
@@ -90,6 +90,70 @@ pub struct ProcessSnapshot {
     pub session: Option<SessionId>,
     /// Safety class.
     pub safety_class: ProcessSafetyClass,
+}
+
+impl ProcessSnapshot {
+    /// Evidence that a process uses a directory, executable, script or argument path.
+    /// Command lines are tokenized and redacted; path comparison respects components.
+    #[must_use]
+    pub fn uses_path(&self, path: &Path) -> bool {
+        self.cwd
+            .iter()
+            .chain(self.exe.iter())
+            .any(|value| value.starts_with(path))
+            || self.command.iter().any(|argument| {
+                let value = if argument.starts_with('-') {
+                    argument
+                        .split_once('=')
+                        .map_or(argument.as_str(), |(_, value)| value)
+                } else {
+                    argument.as_str()
+                };
+                let value = Path::new(value);
+                value.is_absolute() && value.starts_with(path)
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn executable_and_script_paths_block_cleanup_outside_the_process_cwd() {
+        let root = Path::new("/cache/npx/one");
+        let mut process = ProcessSnapshot {
+            key: ProcessKey::new(1, None),
+            pid: 1,
+            parent: None,
+            name: "node".into(),
+            exe: Some(root.join("bin/node")),
+            cwd: Some(PathBuf::from("/projects/app")),
+            command: vec![],
+            started_at: None,
+            runtime: Duration::ZERO,
+            rss_bytes: 0,
+            virtual_bytes: 0,
+            cpu_percent: 0.0,
+            accumulated_cpu_ms: 0,
+            disk_read_delta: 0,
+            disk_write_delta: 0,
+            network: NetworkSnapshot::default(),
+            project: None,
+            session: None,
+            safety_class: ProcessSafetyClass::DeveloperTool,
+        };
+        assert!(process.uses_path(root));
+        process.exe = Some(PathBuf::from("/usr/bin/node"));
+        process.command = vec![
+            "node".into(),
+            root.join("node_modules/tool/main.js").display().to_string(),
+        ];
+        assert!(process.uses_path(root));
+        process.command = vec![format!("--cache-dir={}", root.display())];
+        assert!(process.uses_path(root));
+        process.command = vec!["/cache/npx/one-other/main.js".into()];
+        assert!(!process.uses_path(root));
+    }
 }
 
 /// Project attribution with confidence. Never guess from process name alone.

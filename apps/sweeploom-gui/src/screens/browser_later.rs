@@ -5,7 +5,7 @@ use sweeploom_browser::{LaterEntry, load_later, open_http_urls, save_later};
 use crate::app::SweepLoomApp;
 use crate::widgets::{pointer, table_scroll_height};
 use eframe::egui::RichText;
-use egui_extras::{Column, TableBuilder};
+use egui_extras::Column;
 
 pub fn draw(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     let mut shelf = load_later(&app.locations.app_data).unwrap_or_default();
@@ -40,8 +40,7 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, entries: &[Late
     let height = table_scroll_height(ui);
     let count = entries.len();
     let mut selected = std::mem::take(&mut app.browser.later_urls);
-    TableBuilder::new(ui)
-        .id_salt("browser-later")
+    crate::widgets::table(ui, "browser-later")
         .striped(true)
         .resizable(true)
         .min_scrolled_height(height)
@@ -70,7 +69,7 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, entries: &[Late
                 };
                 let mut on = selected.contains(&item.url);
                 row.col(|ui| {
-                    if ui.checkbox(&mut on, "").changed() {
+                    if crate::widgets::check(ui, &mut on).changed() {
                         if on {
                             selected.insert(item.url.clone());
                         } else {

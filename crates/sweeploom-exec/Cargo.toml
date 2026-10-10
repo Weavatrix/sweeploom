@@ -17,3 +17,4 @@ workspace = true
 sweeploom-core = { workspace = true }
 sweeploom-platform = { workspace = true }
 sweeploom-dev = { workspace = true }
+trash = "5.2.9"

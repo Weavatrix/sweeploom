@@ -28,9 +28,20 @@ fn draw_tree_detail(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
         .auto_shrink([false, true])
         .show(ui, |ui| {
             ui.separator();
-            ui.label(
-                RichText::new(format!("{}  pid {}", session.kind.label(), session.id.0)).strong(),
-            );
+            let root = app.snapshot.as_ref().and_then(|snapshot| {
+                session.processes.first().and_then(|key| {
+                    snapshot
+                        .processes
+                        .iter()
+                        .find(|process| process.key == *key)
+                })
+            });
+            if let Some(root) = root {
+                ui.label(RichText::new(format!("{} · PID {}", root.name, root.pid)).strong());
+                if let Some(exe) = &root.exe {
+                    ui.label(exe.display().to_string());
+                }
+            }
             super::session_observe::draw(app, ui, &session);
             let processes = app
                 .snapshot

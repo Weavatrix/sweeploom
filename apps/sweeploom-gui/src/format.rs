@@ -22,15 +22,15 @@ pub fn format_bytes_bound(bytes: u64, complete: bool) -> String {
 }
 
 fn format_bytes_inner(bytes: u64) -> String {
-    const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
-    const MIB: f64 = 1024.0 * 1024.0;
+    const GB: f64 = 1_000_000_000.0;
+    const MB: f64 = 1_000_000.0;
     let value = bytes as f64;
-    if value >= GIB {
-        format!("{:.1} GB", value / GIB)
-    } else if value >= MIB {
-        format!("{:.1} MB", value / MIB)
+    if value >= GB {
+        format!("{:.1} GB", value / GB)
+    } else if value >= MB {
+        format!("{:.1} MB", value / MB)
     } else {
-        format!("{} KB", (value / 1024.0).round())
+        format!("{} KB", (value / 1000.0).round())
     }
 }
 
@@ -47,6 +47,18 @@ pub fn row_caption(title: &str) -> String {
     title.split(" · ").next().unwrap_or(title).to_owned()
 }
 
+/// Keep the filename visible when several candidates share a category.
+#[must_use]
+pub fn candidate_caption(title: &str, path: &Path) -> String {
+    let caption = row_caption(title);
+    match path.file_name() {
+        Some(name) if name.to_string_lossy() != caption => {
+            format!("{caption} · {}", name.to_string_lossy())
+        }
+        _ => caption,
+    }
+}
+
 /// True when `text` is a global scan/rebuild status that should not occupy a page.
 #[must_use]
 pub fn is_scan_chatter(text: &str) -> bool {
@@ -55,6 +67,29 @@ pub fn is_scan_chatter(text: &str) -> bool {
         || text.contains("Folders ready")
         || text.starts_with("Scanning ")
         || text.starts_with("Rebuilding review in the background")
+        || text.starts_with("Projects found")
+        || text.starts_with("Sizing AI stores")
+}
+
+/// "just now", "12 min ago", "3 h ago", "4 d ago" between two unix-ms stamps.
+#[must_use]
+pub fn ago(now_ms: u64, at_ms: u64) -> String {
+    let secs = now_ms.saturating_sub(at_ms) / 1000;
+    match secs {
+        0..60 => "just now".into(),
+        60..3600 => format!("{} min ago", secs / 60),
+        3600..86_400 => format!("{} h ago", secs / 3600),
+        _ => format!("{} d ago", secs / 86_400),
+    }
+}
+
+/// Home-relative path for compact captions.
+#[must_use]
+pub fn tilde(path: &Path, home: &Path) -> String {
+    path.strip_prefix(home).map_or_else(
+        |_| short_path(path),
+        |rest| format!("~/{}", rest.display()),
+    )
 }
 
 /// Human safety cell. Avoids Debug truncation.
@@ -80,6 +115,35 @@ pub fn safety_text(assessment: &SafetyAssessment) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gigabytes_use_decimal_disk_units() {
+        assert_eq!(format_bytes(1_000_000_000), "1.0 GB");
+    }
+
+    #[test]
+    fn downloads_keep_distinct_filenames() {
+        let first = Path::new("/Users/example/Downloads/Browser.dmg");
+        let second = Path::new("/Users/example/Downloads/Editor.zip");
+        assert_eq!(
+            candidate_caption(&format!("Downloads · {}", first.display()), first),
+            "Downloads · Browser.dmg"
+        );
+        assert_eq!(
+            candidate_caption(&format!("Downloads · {}", second.display()), second),
+            "Downloads · Editor.zip"
+        );
+    }
+
+    #[test]
+    fn relative_time_and_home_paths_stay_short() {
+        assert_eq!(ago(10_000, 5_000), "just now");
+        assert_eq!(ago(3_600_000 * 3 + 5, 5), "3 h ago");
+        assert_eq!(
+            tilde(Path::new("/Users/a/.codex"), Path::new("/Users/a")),
+            "~/.codex"
+        );
+    }
 
     #[test]
     fn inventory_status_is_chatter() {

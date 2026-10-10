@@ -18,6 +18,10 @@ pub struct Line {
     pub name: String,
     /// Logical bytes.
     pub bytes: u64,
+    /// Logical size, for sparse-file details.
+    pub logical_bytes: u64,
+    /// File instead of folder.
+    pub is_file: bool,
     /// Files under this node.
     pub files: u64,
     /// Folder category.
@@ -52,8 +56,19 @@ fn collect(
     }
     let mut children: Vec<&DirectoryNode> = node.children.iter().collect();
     children.sort_by(|left, right| match sort.col {
-        Col::Name => left.path.file_name().cmp(&right.path.file_name()),
-        _ => left.logical_bytes.cmp(&right.logical_bytes),
+        Col::Name => left
+            .path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_lowercase())
+            .cmp(
+                &right
+                    .path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_lowercase()),
+            ),
+        Col::Status => left.category.label().cmp(right.category.label()),
+        Col::Procs => left.files.cmp(&right.files),
+        _ => left.disk_bytes().cmp(&right.disk_bytes()),
     });
     if sort.desc {
         children.reverse();
@@ -74,7 +89,9 @@ fn collect(
                 .and_then(|name| name.to_str())
                 .unwrap_or(".")
                 .to_owned(),
-            bytes: child.logical_bytes,
+            bytes: child.disk_bytes(),
+            logical_bytes: child.logical_bytes,
+            is_file: child.is_file,
             files: child.files,
             category: child.category,
             has_children,
@@ -94,6 +111,7 @@ mod tests {
         DirectoryNode {
             path: PathBuf::from(name),
             logical_bytes: bytes,
+            allocated_bytes: None,
             files: 1,
             directories: children.len() as u64,
             newest_mtime: None,
@@ -127,5 +145,41 @@ mod tests {
         open.insert(path_key(std::path::Path::new("cache")));
         let nested = visible_lines(&tree, Sort::size_desc(), &open);
         assert_eq!(names(&nested), ["cache", "huggingface"]);
+    }
+    #[test]
+    fn explorer_sorts_disk_size_files_and_names_in_both_directions() {
+        let mut a = node("Alpha", 10000, vec![]);
+        a.allocated_bytes = Some(10);
+        a.files = 100;
+        let mut z = node("Zulu", 100, vec![]);
+        z.allocated_bytes = Some(100);
+        z.files = 2;
+        let root = node("root", 10100, vec![a, z]);
+        assert_eq!(
+            names(&visible_lines(&root, Sort::size_desc(), &HashSet::new())),
+            ["Zulu", "Alpha"]
+        );
+        assert_eq!(
+            names(&visible_lines(
+                &root,
+                Sort {
+                    col: Col::Procs,
+                    desc: true
+                },
+                &HashSet::new()
+            )),
+            ["Alpha", "Zulu"]
+        );
+        assert_eq!(
+            names(&visible_lines(
+                &root,
+                Sort {
+                    col: Col::Name,
+                    desc: true
+                },
+                &HashSet::new()
+            )),
+            ["Zulu", "Alpha"]
+        );
     }
 }

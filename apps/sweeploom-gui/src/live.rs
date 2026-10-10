@@ -7,7 +7,7 @@ use sweeploom_core::{LiveSession, ObservationTracker, ProcessKey, ProcessSnapsho
 use sweeploom_network::enrich_network;
 use sweeploom_platform::UserLocations;
 use sweeploom_process::{ProcessSampler, ProcessSnapshotSet};
-use sweeploom_session::{AttributionRoots, score_session, sessions_from_snapshot};
+use sweeploom_session::{AttributionRoots, mark_orphan_mcp, score_session, sessions_from_snapshot};
 
 use crate::app::SweepLoomApp;
 
@@ -31,21 +31,15 @@ pub fn sample_with(
     (snapshot, sessions)
 }
 
-/// Home plus any inventory project roots.
+/// Home plus any inventory project roots. Runs every sample, so dedupe is O(n).
 pub fn session_roots(app: &SweepLoomApp) -> AttributionRoots {
-    let mut projects = Vec::new();
-    if let Some(report) = &app.inventory {
-        for project in &report.projects {
-            if !projects.iter().any(|item| item == project) {
-                projects.push(project.clone());
-            }
-        }
-    }
-    for project in &app.project_roots {
-        if !projects.iter().any(|item| item == project) {
-            projects.push(project.clone());
-        }
-    }
+    let inventory = app.inventory.iter().flat_map(|report| &report.projects);
+    let mut seen = std::collections::HashSet::new();
+    let projects = inventory
+        .chain(&app.project_roots)
+        .filter(|project| seen.insert(*project))
+        .cloned()
+        .collect();
     AttributionRoots {
         projects,
         current_project: app.current_project.clone(),
@@ -91,7 +85,7 @@ fn note_busy(
 /// Start time is never treated as idle. Unknown idle stays Keep.
 fn apply_idle_clock(
     sessions: &mut [LiveSession],
-    last_busy: &HashMap<ProcessKey, SystemTime>,
+    _last_busy: &HashMap<ProcessKey, SystemTime>,
     observation: &ObservationTracker,
     now: SystemTime,
     current: Option<&ProjectId>,
@@ -106,15 +100,9 @@ fn apply_idle_clock(
             session
                 .processes
                 .iter()
-                .find_map(|key| observation.observed_idle_since(*key, now))
-                .or_else(|| {
-                    session
-                        .processes
-                        .iter()
-                        .filter_map(|key| last_busy.get(key).copied())
-                        .max()
-                        .filter(|_| !observation.has_gap())
-                })
+                .map(|key| observation.observed_idle_since(*key, now))
+                .collect::<Option<Vec<_>>>()
+                .and_then(|times| times.into_iter().max())
         };
         *session = score_session(session, now, current);
     }
@@ -144,6 +132,7 @@ pub fn stamp_first(app: &mut SweepLoomApp) {
         snapshot.captured_at,
         app.current_project.as_ref(),
     );
+    mark_orphan_mcp(&mut app.sessions, &snapshot.processes);
     app.snapshot = Some(snapshot);
 }
 
@@ -166,6 +155,7 @@ pub fn rescore(
         snapshot.captured_at,
         current,
     );
+    mark_orphan_mcp(sessions, &snapshot.processes);
 }
 
 fn record_observation(
@@ -186,4 +176,68 @@ fn record_observation(
         }),
         at,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sweeploom_core::{
+        Recommendation, SessionActivity, SessionDiskUsage, SessionId, SessionKind,
+        SessionNetworkUsage, SessionRecommendation, SessionSafety,
+    };
+
+    fn session(keys: Vec<ProcessKey>) -> LiveSession {
+        LiveSession {
+            id: SessionId(1),
+            kind: SessionKind::DevServer,
+            project: None,
+            processes: keys,
+            started_at: Some(SystemTime::UNIX_EPOCH),
+            observed_last_activity: None,
+            rss_bytes: 2_000_000_000,
+            cpu_percent: 0.0,
+            disk: SessionDiskUsage::default(),
+            network: SessionNetworkUsage::default(),
+            activity: SessionActivity::Unknown,
+            safety: SessionSafety::user(),
+            recommendation: SessionRecommendation {
+                recommendation: Recommendation::Keep,
+                estimated_reclaimable_rss: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn idle_requires_coverage_of_every_member_and_uses_latest_activity() {
+        let root = ProcessKey {
+            pid: 1,
+            started_at_unix_ms: 1,
+        };
+        let child = ProcessKey {
+            pid: 2,
+            started_at_unix_ms: 1,
+        };
+        let start = SystemTime::UNIX_EPOCH;
+        let mut tracker = ObservationTracker::default();
+        tracker.record([root], [], [], start);
+        // Simulate continuous observation, then a recently started/busy child.
+        for secs in (60..=10800).step_by(60) {
+            tracker.record([root], [], [], start + Duration::from_secs(secs));
+        }
+        let now = start + Duration::from_secs(10801);
+        let mut sessions = [session(vec![root, child])];
+        apply_idle_clock(&mut sessions, &HashMap::new(), &tracker, now, None);
+        assert_eq!(sessions[0].observed_last_activity, None);
+        assert_eq!(
+            sessions[0].recommendation.recommendation,
+            Recommendation::Keep
+        );
+        tracker.record([root, child], [child], [], now);
+        apply_idle_clock(&mut sessions, &HashMap::new(), &tracker, now, None);
+        assert_eq!(sessions[0].observed_last_activity, Some(now));
+        assert_eq!(
+            sessions[0].recommendation.recommendation,
+            Recommendation::Keep
+        );
+    }
 }

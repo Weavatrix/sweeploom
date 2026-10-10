@@ -7,6 +7,8 @@ pub enum Nav {
     Overview,
     /// Disk candidates.
     Storage,
+    /// Native disk cleanup.
+    Cleanup,
     /// Logical sessions.
     Sessions,
     /// Project heat.
@@ -17,26 +19,27 @@ pub enum Nav {
     Explorer,
     /// AI storage.
     Ai,
-    /// Declarative rules.
-    Rules,
     /// Observed history.
     History,
+    /// Persisted disk scans and folder growth.
+    DiskHistory,
     /// Local settings.
     Settings,
 }
 
 impl Nav {
     /// Sidebar order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Overview,
         Self::Sessions,
         Self::History,
         Self::Storage,
         Self::Explorer,
         Self::Projects,
+        Self::Cleanup,
+        Self::DiskHistory,
         Self::Browser,
         Self::Ai,
-        Self::Rules,
         Self::Settings,
     ];
 
@@ -46,13 +49,14 @@ impl Nav {
         match self {
             Self::Overview => "Overview",
             Self::Storage => "Review",
+            Self::Cleanup => "Cleanup",
             Self::Sessions => "Sessions",
             Self::Projects => "Projects",
             Self::Browser => "Browser",
             Self::Explorer => "Explorer",
             Self::Ai => "AI",
-            Self::Rules => "Rules",
             Self::History => "History",
+            Self::DiskHistory => "Scan history",
             Self::Settings => "Settings",
         }
     }
@@ -62,8 +66,10 @@ impl Nav {
     pub const fn section(self) -> &'static str {
         match self {
             Self::Overview | Self::Sessions | Self::History => "LIVE",
-            Self::Storage | Self::Explorer | Self::Projects => "DISK",
-            Self::Browser | Self::Ai | Self::Rules => "WORKSPACE",
+            Self::Storage | Self::Explorer | Self::Projects | Self::Cleanup | Self::DiskHistory => {
+                "DISK"
+            }
+            Self::Browser | Self::Ai => "WORKSPACE",
             Self::Settings => "APP",
         }
     }
@@ -74,13 +80,14 @@ impl Nav {
         match self {
             Self::Overview => crate::icons::Glyph::Overview,
             Self::Storage => crate::icons::Glyph::Review,
+            Self::Cleanup => crate::icons::Glyph::Review,
             Self::Sessions => crate::icons::Glyph::Sessions,
             Self::Projects => crate::icons::Glyph::Projects,
             Self::Browser => crate::icons::Glyph::Browser,
             Self::Explorer => crate::icons::Glyph::Explorer,
             Self::Ai => crate::icons::Glyph::Ai,
-            Self::Rules => crate::icons::Glyph::Rules,
             Self::History => crate::icons::Glyph::History,
+            Self::DiskHistory => crate::icons::Glyph::History,
             Self::Settings => crate::icons::Glyph::Settings,
         }
     }

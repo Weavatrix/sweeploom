@@ -15,7 +15,11 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         return;
     }
     ui.add_space(8.0);
-    ui.label(RichText::new("Member processes").size(16.0).strong());
+    ui.label(
+        RichText::new(format!("Member processes · {}", members.len()))
+            .size(16.0)
+            .strong(),
+    );
     if session.kind == SessionKind::Browser {
         ui.label("Tabs are not OS processes. Discard stale tabs on Browser; this tree stays Keep.");
         if pointer(ui.button("Open Browser")).clicked() {
@@ -37,7 +41,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
     );
     let root = session.processes.first().copied();
     let mut selected = std::mem::take(&mut app.helper_keys);
-    for process in members.iter().take(24) {
+    for process in &members {
         draw_member_row(ui, process, root, &mut selected);
     }
     app.helper_keys = selected;
@@ -70,36 +74,87 @@ fn draw_member_row(
     let blocked = process.safety_class == ProcessSafetyClass::SystemCritical;
     let mut on = selected.contains(&process.key);
     let role = member_role(process, root);
-    let cmd = short_command(&process.command);
-    ui.horizontal_wrapped(|ui| {
-        if ui
-            .add_enabled(!blocked, egui::Checkbox::new(&mut on, ""))
-            .changed()
-        {
-            if on {
-                selected.insert(process.key);
-            } else {
-                selected.remove(&process.key);
-            }
-        }
-        ui.vertical(|ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(&process.name).strong());
-                ui.label(
-                    RichText::new(format!(
-                        "{role} · pid {} · {} · {:.1}%",
-                        process.pid,
-                        format_bytes(process.rss_bytes),
-                        process.cpu_percent
-                    ))
-                    .color(crate::theme::muted(ui)),
-                );
+    let cmd = process.command.join(" ");
+    let identity = sweeploom_session::node_identity(process);
+    let title = identity
+        .as_ref()
+        .map(|id| format!("Node · {}", id.workload))
+        .unwrap_or_else(|| process.name.clone());
+    egui::Frame::new()
+        .fill(ui.visuals().faint_bg_color)
+        .corner_radius(8)
+        .inner_margin(10)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_top(|ui| {
+                if ui
+                    .add_enabled(!blocked, egui::Checkbox::new(&mut on, ""))
+                    .changed()
+                {
+                    if on {
+                        selected.insert(process.key);
+                    } else {
+                        selected.remove(&process.key);
+                    }
+                }
+                ui.vertical(|ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(title).strong());
+                        ui.label(RichText::new(role).small().color(crate::theme::muted(ui)));
+                    });
+                    ui.label(
+                        RichText::new(format!(
+                            "PID {} · Parent {} · Running {} · RAM {} · CPU {:.1}%",
+                            process.pid,
+                            process
+                                .parent
+                                .map(|p| p.pid.to_string())
+                                .unwrap_or_else(|| "?".into()),
+                            super::session_label::duration(process.runtime),
+                            format_bytes(process.rss_bytes),
+                            process.cpu_percent
+                        ))
+                        .color(crate::theme::muted(ui)),
+                    );
+                    if !cmd.is_empty() {
+                        egui::CollapsingHeader::new("Process details")
+                            .id_salt(("member-command", process.key))
+                            .show(ui, |ui| {
+                                egui::Grid::new(("member-fields", process.key))
+                                    .num_columns(2)
+                                    .spacing([20.0, 6.0])
+                                    .show(ui, |ui| {
+                                        if let Some(script) =
+                                            identity.as_ref().and_then(|id| id.entrypoint.as_ref())
+                                        {
+                                            super::session_detail::field(
+                                                ui,
+                                                "Script",
+                                                script.display().to_string(),
+                                            );
+                                        }
+                                        super::session_detail::field(ui, "Command", &cmd);
+                                        if let Some(exe) = &process.exe {
+                                            super::session_detail::field(
+                                                ui,
+                                                "Executable",
+                                                exe.display().to_string(),
+                                            );
+                                        }
+                                        if let Some(cwd) = &process.cwd {
+                                            super::session_detail::field(
+                                                ui,
+                                                "Working directory",
+                                                cwd.display().to_string(),
+                                            );
+                                        }
+                                    });
+                            });
+                    }
+                });
             });
-            if !cmd.is_empty() {
-                ui.monospace(cmd);
-            }
         });
-    });
 }
 
 fn member_role(process: &ProcessSnapshot, root: Option<ProcessKey>) -> &'static str {
@@ -109,15 +164,6 @@ fn member_role(process: &ProcessSnapshot, root: Option<ProcessKey>) -> &'static 
     classify_process(process)
         .map(|item| item.kind.label())
         .unwrap_or("helper")
-}
-
-fn short_command(command: &[String]) -> String {
-    let joined = command.join(" ");
-    if joined.chars().count() <= 72 {
-        joined
-    } else {
-        format!("{}…", joined.chars().take(72).collect::<String>())
-    }
 }
 
 fn draw_stop(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {

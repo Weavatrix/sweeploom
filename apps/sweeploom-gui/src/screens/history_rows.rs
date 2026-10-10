@@ -132,7 +132,7 @@ fn avg_5m_of(indexes: &[usize], rows: &[HistRow]) -> String {
     if any {
         format!("{sum:.1}%")
     } else {
-        "unavailable".to_owned()
+        "—".to_owned()
     }
 }
 

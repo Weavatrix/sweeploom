@@ -6,7 +6,7 @@ use crate::sort::Col;
 use crate::sort::header_cell;
 use crate::widgets::table_scroll_height;
 use eframe::egui;
-use egui_extras::{Column, TableBuilder};
+use egui_extras::Column;
 
 pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let Some(snapshot) = &app.snapshot else {
@@ -31,8 +31,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     }
     let rows = order.len();
     let height = table_scroll_height(ui);
-    TableBuilder::new(ui)
-        .id_salt("process-raw")
+    crate::widgets::table(ui, "process-raw")
         .striped(true)
         .resizable(true)
         .min_scrolled_height(height)

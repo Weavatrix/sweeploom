@@ -11,6 +11,11 @@ use sweeploom_core::{NetworkSnapshot, ProcessKey, ProcessSnapshot, redact_comman
 
 use crate::classify::classify_process;
 
+#[path = "cpu_topology.rs"]
+mod cpu_topology;
+pub use cpu_topology::CoreSplit;
+use cpu_topology::topology;
+
 /// Host memory snapshot.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HostMemory {
@@ -23,10 +28,16 @@ pub struct HostMemory {
 }
 
 /// Host CPU snapshot.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct HostCpu {
     /// Global CPU usage percent after at least two refreshes.
     pub usage_percent: f32,
+    /// Per logical core usage percent, in OS order.
+    pub cores: Vec<f32>,
+    /// Physical cores, when the OS reports them.
+    pub physical_cores: Option<usize>,
+    /// Performance / efficiency split (Apple Silicon), detected once.
+    pub split: Option<CoreSplit>,
 }
 
 /// One complete process snapshot plus host totals.
@@ -146,11 +157,15 @@ pub fn host_memory(system: &System) -> HostMemory {
     }
 }
 
-/// Host CPU from a refreshed `System`.
+/// Host CPU from a refreshed `System`. Topology is detected once per process.
 #[must_use]
 pub fn host_cpu(system: &System) -> HostCpu {
+    let (physical_cores, split) = topology();
     HostCpu {
         usage_percent: system.global_cpu_usage(),
+        cores: system.cpus().iter().map(sysinfo::Cpu::cpu_usage).collect(),
+        physical_cores,
+        split,
     }
 }
 

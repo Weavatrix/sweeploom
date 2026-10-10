@@ -5,13 +5,20 @@ mod app_tray;
 mod autostart;
 mod brand;
 mod chrome;
+mod crash_log;
+mod disk_actions;
+mod disk_history;
 mod format;
 mod icons;
 mod live;
 mod mark;
+mod native_cleanup;
 mod nav;
+mod node_versions;
 mod prefs;
+mod project_sizes;
 mod review_extra;
+mod scan_history;
 mod scan_job;
 mod screens;
 mod sort;
@@ -22,6 +29,7 @@ mod widgets;
 use eframe::egui;
 
 fn main() -> eframe::Result<()> {
+    crash_log::install();
     let start_hidden = std::env::args().any(|item| item == "--tray");
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

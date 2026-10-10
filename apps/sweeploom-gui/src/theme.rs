@@ -6,6 +6,10 @@ use eframe::egui::{
 
 use crate::prefs::ThemeMode;
 
+#[path = "theme_palette.rs"]
+mod palette;
+pub use palette::*;
+
 const GOLD: Color32 = Color32::from_rgb(196, 140, 48);
 const GOLD_SOFT: Color32 = Color32::from_rgb(214, 168, 84);
 const INK: Color32 = Color32::from_rgb(17, 18, 22);
@@ -48,7 +52,7 @@ pub const fn chrome() -> Color32 {
 
 /// Apply fonts, spacing, and the resolved palette.
 pub fn apply(ctx: &egui::Context, mode: ThemeMode, scale: f32) {
-    ctx.set_pixels_per_point(scale.clamp(0.8, 1.6));
+    ctx.set_zoom_factor(scale.clamp(0.8, 1.6));
     let dark = match mode {
         ThemeMode::Dark => true,
         ThemeMode::Light => false,
@@ -60,11 +64,15 @@ pub fn apply(ctx: &egui::Context, mode: ThemeMode, scale: f32) {
     } else {
         light_visuals()
     };
-    style.spacing.item_spacing = egui::vec2(12.0, 8.0);
-    style.spacing.button_padding = egui::vec2(12.0, 6.0);
+    style.spacing.item_spacing = egui::vec2(SM, SM);
+    style.spacing.button_padding = egui::vec2(12.0, 5.0);
     style.spacing.indent = 18.0;
-    style.spacing.interact_size.y = 26.0;
+    style.spacing.interact_size.y = 28.0;
+    style.spacing.icon_width = 16.0;
+    style.spacing.icon_width_inner = 9.0;
+    style.spacing.icon_spacing = 6.0;
     style.spacing.scroll.bar_width = 8.0;
+    style.spacing.menu_margin = egui::Margin::same(6);
     style.interaction.selectable_labels = false;
     style.text_styles.insert(
         TextStyle::Heading,
@@ -138,55 +146,71 @@ pub fn card_shadow(ui: &egui::Ui) -> Shadow {
 
 fn dark_visuals() -> egui::Visuals {
     let mut visuals = egui::Visuals::dark();
-    visuals.window_fill = Color32::from_rgb(12, 14, 18);
-    visuals.panel_fill = Color32::from_rgb(16, 18, 22);
-    visuals.extreme_bg_color = Color32::from_rgb(10, 12, 16);
-    visuals.faint_bg_color = Color32::from_rgb(24, 28, 34);
-    visuals.widgets.inactive.bg_fill = Color32::from_rgb(28, 32, 40);
-    visuals.widgets.hovered.bg_fill = Color32::from_rgb(38, 44, 54);
-    visuals.widgets.active.bg_fill = Color32::from_rgb(48, 54, 66);
-    paint_widgets(&mut visuals, Color32::from_rgb(232, 234, 238), true);
+    visuals.window_fill = Color32::from_rgb(22, 26, 32);
+    visuals.panel_fill = Color32::from_rgb(15, 17, 21);
+    visuals.extreme_bg_color = Color32::from_rgb(11, 13, 17);
+    visuals.faint_bg_color = Color32::from_rgb(22, 26, 32);
+    let fills = [
+        Color32::from_rgb(32, 37, 46),
+        Color32::from_rgb(42, 48, 59),
+        Color32::from_rgb(52, 59, 72),
+    ];
+    paint_widgets(&mut visuals, Color32::from_rgb(232, 234, 238), fills, true);
     visuals
 }
 
 fn light_visuals() -> egui::Visuals {
     let mut visuals = egui::Visuals::light();
-    visuals.window_fill = Color32::from_rgb(244, 246, 248);
+    visuals.window_fill = Color32::WHITE;
     visuals.panel_fill = Color32::from_rgb(244, 246, 248);
-    visuals.extreme_bg_color = Color32::from_rgb(232, 236, 240);
-    visuals.faint_bg_color = Color32::WHITE;
-    visuals.widgets.inactive.bg_fill = Color32::WHITE;
-    visuals.widgets.hovered.bg_fill = Color32::from_rgb(236, 240, 244);
-    visuals.widgets.active.bg_fill = Color32::from_rgb(226, 232, 238);
-    paint_widgets(&mut visuals, Color32::from_rgb(20, 22, 28), false);
+    visuals.extreme_bg_color = Color32::WHITE;
+    visuals.faint_bg_color = Color32::from_rgb(249, 250, 252);
+    let fills = [
+        Color32::WHITE,
+        Color32::from_rgb(241, 244, 247),
+        Color32::from_rgb(229, 234, 240),
+    ];
+    paint_widgets(&mut visuals, Color32::from_rgb(20, 22, 28), fills, false);
     visuals
 }
 
-fn paint_widgets(visuals: &mut egui::Visuals, text: Color32, dark: bool) {
-    visuals.override_text_color = Some(text);
-    visuals.selection.bg_fill = if dark {
-        Color32::from_rgb(48, 40, 28)
-    } else {
-        Color32::from_rgb(255, 244, 220)
+fn paint_widgets(visuals: &mut egui::Visuals, text: Color32, fills: [Color32; 3], dark: bool) {
+    let rgb = |d: [u8; 3], l: [u8; 3]| {
+        let [r, g, b] = if dark { d } else { l };
+        Color32::from_rgb(r, g, b)
     };
+    visuals.override_text_color = Some(text);
+    visuals.weak_text_color = Some(rgb([120, 127, 140], [120, 126, 138]));
+    visuals.selection.bg_fill = rgb([52, 42, 26], [255, 241, 212]);
     visuals.selection.stroke = Stroke::new(1.0_f32, GOLD);
-    visuals.hyperlink_color = GOLD;
-    visuals.widgets.inactive.corner_radius = CornerRadius::same(8);
-    visuals.widgets.hovered.corner_radius = CornerRadius::same(8);
-    visuals.widgets.active.corner_radius = CornerRadius::same(8);
-    visuals.window_corner_radius = CornerRadius::same(10);
-    visuals.widgets.inactive.bg_stroke = Stroke::new(
-        1.0_f32,
-        if dark {
-            Color32::from_rgb(48, 54, 64)
-        } else {
-            Color32::from_rgb(214, 220, 228)
-        },
-    );
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, text);
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, text);
-    visuals.widgets.hovered.expansion = 0.0;
-    visuals.widgets.active.expansion = 0.0;
+    visuals.hyperlink_color = if dark { GOLD_SOFT } else { GOLD };
+    visuals.disabled_alpha = 0.42;
+    visuals.window_corner_radius = CornerRadius::same(RADIUS_LG);
+    visuals.menu_corner_radius = CornerRadius::same(8);
+    visuals.window_stroke = Stroke::new(1.0_f32, rgb([48, 54, 64], [214, 220, 228]));
+    let border = rgb([70, 78, 92], [196, 204, 214]);
+    let widgets = &mut visuals.widgets;
+    widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, rgb([38, 44, 54], [226, 230, 236]));
+    widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, text);
+    widgets.noninteractive.corner_radius = CornerRadius::same(RADIUS);
+    for (state, fill) in [
+        &mut widgets.inactive,
+        &mut widgets.hovered,
+        &mut widgets.active,
+    ]
+    .into_iter()
+    .zip(fills)
+    {
+        state.weak_bg_fill = fill;
+        state.bg_fill = fill;
+        state.corner_radius = CornerRadius::same(RADIUS);
+        state.expansion = 0.0;
+        state.fg_stroke = Stroke::new(1.5_f32, text);
+    }
+    widgets.inactive.bg_stroke = Stroke::new(1.0_f32, border);
+    widgets.hovered.bg_stroke = Stroke::new(1.0_f32, rgb([104, 112, 128], [150, 160, 174]));
+    widgets.active.bg_stroke = Stroke::new(1.0_f32, GOLD);
+    widgets.open = widgets.active;
     visuals.interact_cursor = Some(CursorIcon::PointingHand);
 }
 
@@ -201,4 +225,35 @@ pub fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
         mix(a.b(), b.b()),
         mix(a.a(), b.a()),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn interface_scale_preserves_monitor_density() {
+        for mode in [ThemeMode::Light, ThemeMode::Dark] {
+            for scale in [1.0, 1.3] {
+                let ctx = egui::Context::default();
+                for native in [1.0, 2.0, 1.5, 1.0] {
+                    let mut input = egui::RawInput::default();
+                    input
+                        .viewports
+                        .get_mut(&egui::ViewportId::ROOT)
+                        .unwrap()
+                        .native_pixels_per_point = Some(native);
+                    // Zoom changes take effect on the next pass.
+                    for _ in 0..2 {
+                        let _ = ctx.run(input.clone(), |ctx| apply(ctx, mode, scale));
+                    }
+                    assert!(
+                        (ctx.pixels_per_point() - native * scale).abs() < 0.001,
+                        "{mode:?}: native={native}, scale={scale}, actual={}",
+                        ctx.pixels_per_point()
+                    );
+                }
+            }
+        }
+    }
 }

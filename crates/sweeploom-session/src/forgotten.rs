@@ -89,20 +89,47 @@ pub fn mark_orphan_mcp(sessions: &mut [LiveSession], processes: &[ProcessSnapsho
             continue;
         }
         let attached = session.processes.iter().any(|key| {
-            processes.iter().any(|process| {
-                process.key == *key
-                    && process
-                        .parent
-                        .is_some_and(|parent| agent_members.contains(&parent))
-            })
+            let mut parent = processes
+                .iter()
+                .find(|p| p.key == *key)
+                .and_then(|p| p.parent);
+            let mut visited = std::collections::HashSet::new();
+            while let Some(key) = parent {
+                if !visited.insert(key) {
+                    break;
+                }
+                if agent_members.contains(&key) {
+                    return true;
+                }
+                parent = processes
+                    .iter()
+                    .find(|p| p.key == key)
+                    .and_then(|p| p.parent);
+            }
+            false
         });
-        if !attached {
+        if !attached
+            && !matches!(
+                session.activity,
+                SessionActivity::Active
+                    | SessionActivity::NetworkActive
+                    | SessionActivity::RunawayCpu
+            )
+        {
             session.activity = SessionActivity::OrphanCandidate;
             session.recommendation.recommendation = Recommendation::Optional;
             session.recommendation.estimated_reclaimable_rss = estimate_reclaim(session.rss_bytes);
         } else {
             session.recommendation.recommendation = Recommendation::Keep;
             session.recommendation.estimated_reclaimable_rss = 0;
+            if attached
+                && matches!(
+                    session.activity,
+                    SessionActivity::LikelyForgotten | SessionActivity::SleepingMemoryHeavy
+                )
+            {
+                session.activity = SessionActivity::Idle;
+            }
         }
     }
 }
@@ -223,6 +250,32 @@ mod tests {
         assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
         assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
         assert_eq!(scored.activity, SessionActivity::SleepingMemoryHeavy);
+    }
+
+    #[test]
+    fn quiet_mcp_through_wrapper_keeps_live_agent_ownership_after_rescore() {
+        let root = crate::tests::proc(10, None, "codex", None, &["codex"], 1, 0.0);
+        let wrapper = crate::tests::proc(11, Some(10), "helper", None, &["helper"], 1, 0.0);
+        let server =
+            crate::tests::proc(12, Some(11), "node", None, &["node", "mcp-server"], 1, 0.0);
+        let mut agent = session(100_000_000, SessionKind::Codex);
+        agent.processes = vec![root.key];
+        let mut helper = session(2_000_000_000, SessionKind::Mcp);
+        helper.processes = vec![server.key];
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
+        helper = score_session(&helper, now, None);
+        assert_eq!(
+            helper.recommendation.recommendation,
+            Recommendation::Recommended
+        );
+        let mut sessions = [agent, helper];
+        mark_orphan_mcp(&mut sessions, &[root, wrapper, server]);
+        assert_eq!(
+            sessions[1].recommendation.recommendation,
+            Recommendation::Keep
+        );
+        assert_eq!(sessions[1].recommendation.estimated_reclaimable_rss, 0);
+        assert_ne!(sessions[1].activity, SessionActivity::LikelyForgotten);
     }
 
     #[test]
