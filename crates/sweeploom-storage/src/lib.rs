@@ -12,6 +12,7 @@ mod classify;
 mod disk_usage;
 mod inventory;
 mod parallel;
+mod staging;
 
 pub use disk_usage::{DiskUsage, directory_disk_usage};
 pub use parallel::{parallel_map, walk_workers};
@@ -25,6 +26,7 @@ pub use inventory::{
     discover_projects_from, is_discoverable_below, review_scan_roots, scan_inventory,
     scan_inventory_with,
 };
+pub use staging::{GeneratedBuild, scan_staging_builds};
 
 use weavatrix_scan::{IgnorePolicy, ScanOptions, StandardSkips};
 

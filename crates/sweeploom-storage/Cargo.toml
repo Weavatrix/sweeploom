@@ -17,3 +17,8 @@ workspace = true
 serde = { workspace = true }
 sweeploom-core = { workspace = true }
 weavatrix-scan = { workspace = true }
+serde_json = { workspace = true }
+
+[[bin]]
+name = "sweeploom-staging-scan"
+path = "src/bin/staging_scan.rs"
