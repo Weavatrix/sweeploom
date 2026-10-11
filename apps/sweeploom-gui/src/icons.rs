@@ -21,8 +21,6 @@ pub enum Glyph {
     Browser,
     /// AI spark.
     Ai,
-    /// Rules sliders.
-    Rules,
     /// Settings gear.
     Settings,
     /// Memory chip.
@@ -57,7 +55,6 @@ pub fn paint(painter: &egui::Painter, glyph: Glyph, rect: egui::Rect, color: Col
         Glyph::Projects => crate_box(painter, rect, stroke),
         Glyph::Browser => window(painter, rect, stroke, color),
         Glyph::Ai => spark(painter, rect, stroke),
-        Glyph::Rules => sliders(painter, rect, stroke, color),
         Glyph::Settings => gear(painter, rect, stroke, color),
         Glyph::Memory => chip(painter, rect, stroke),
         Glyph::Cpu => bars(painter, rect, color),
@@ -196,17 +193,6 @@ fn spark(painter: &egui::Painter, rect: egui::Rect, stroke: Stroke) {
         ],
         stroke,
     );
-}
-
-fn sliders(painter: &egui::Painter, rect: egui::Rect, stroke: Stroke, color: Color32) {
-    for (i, t) in [0.28_f32, 0.62].into_iter().enumerate() {
-        let x = rect.left() + rect.width() * (0.32 + 0.36 * i as f32);
-        painter.line_segment(
-            [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-            stroke,
-        );
-        painter.circle_filled(Pos2::new(x, rect.top() + rect.height() * t), 2.4, color);
-    }
 }
 
 fn gear(painter: &egui::Painter, rect: egui::Rect, stroke: Stroke, color: Color32) {

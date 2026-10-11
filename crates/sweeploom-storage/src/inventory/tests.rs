@@ -244,3 +244,25 @@ fn bulky_home_trees_do_not_keep_nested_inspector_rows() {
     );
     let _ = fs::remove_dir_all(&root);
 }
+
+#[cfg(unix)]
+#[test]
+fn sparse_file_reports_allocated_blocks_separately() {
+    let root = std::env::temp_dir().join(format!("sweeploom-sparse-{}", std::process::id()));
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("Docker.raw");
+    let file = fs::File::create(&path).unwrap();
+    file.set_len(1024 * 1024 * 1024).unwrap();
+    let report = scan_inventory(&root, InventoryLimits::default()).unwrap();
+    assert_eq!(report.tree.logical_bytes, 1024 * 1024 * 1024);
+    assert!(report.tree.disk_bytes() < 1024 * 1024);
+    assert!(
+        report
+            .tree
+            .children
+            .iter()
+            .any(|child| child.logical_bytes == 1024 * 1024 * 1024
+                && child.disk_bytes() < 1024 * 1024)
+    );
+    fs::remove_dir_all(root).unwrap();
+}

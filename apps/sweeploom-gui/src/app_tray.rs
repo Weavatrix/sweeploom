@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, ViewportCommand};
 
 use crate::app::SweepLoomApp;
-use crate::nav::Nav;
+use crate::nav::Dest;
 use crate::tray::{self, TrayCommand};
 
 impl SweepLoomApp {
@@ -26,12 +26,12 @@ impl SweepLoomApp {
                     self.enter_background(ctx);
                 }
             }
-            TrayCommand::Open(nav) => {
-                self.nav = nav;
+            TrayCommand::Open(dest) => {
+                self.go(dest);
                 self.leave_background(ctx);
             }
             TrayCommand::Rebuild => {
-                self.nav = Nav::Storage;
+                self.go(Dest::ProjectOutput);
                 self.rebuild_review();
                 self.leave_background(ctx);
             }

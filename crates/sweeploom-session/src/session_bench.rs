@@ -67,6 +67,51 @@ fn scored_session(rss: u64, kind: SessionKind) -> LiveSession {
     }
 }
 
+/// Cursor with an attached `--mcp` child plus one stray MCP server.
+fn cursor_mcp_sessions(now: SystemTime, cursor_cpu: f32) -> (ProcessSnapshotSet, Vec<LiveSession>) {
+    let mut snapshot = ProcessSnapshotSet {
+        captured_at: now,
+        processes: vec![
+            proc(1, None, "init", &["init"], 8_000, 0.0),
+            proc(
+                50,
+                Some(1),
+                "Cursor.exe",
+                &["Cursor"],
+                300_000_000,
+                cursor_cpu,
+            ),
+            proc(
+                51,
+                Some(50),
+                "node.exe",
+                &["node", "--mcp", "server.js"],
+                80_000_000,
+                0.0,
+            ),
+            proc(
+                90,
+                Some(1),
+                "node.exe",
+                &["node", "mcp-server"],
+                40_000_000,
+                0.0,
+            ),
+        ],
+        memory: sweeploom_process::HostMemory::default(),
+        cpu: sweeploom_process::HostCpu::default(),
+        total_rss_bytes: 0,
+    };
+    let sessions = sessions_from_snapshot(
+        &mut snapshot,
+        &AttributionRoots {
+            projects: Vec::new(),
+            current_project: None,
+        },
+    );
+    (snapshot, sessions)
+}
+
 #[test]
 fn bench_session_accuracy_and_speed() {
     let cursor =
@@ -119,39 +164,7 @@ fn bench_session_accuracy_and_speed() {
         Recommendation::Keep
     );
 
-    let mut snapshot = ProcessSnapshotSet {
-        captured_at: now,
-        processes: vec![
-            proc(1, None, "init", &["init"], 8_000, 0.0),
-            proc(50, Some(1), "Cursor.exe", &["Cursor"], 300_000_000, 0.2),
-            proc(
-                51,
-                Some(50),
-                "node.exe",
-                &["node", "--mcp", "server.js"],
-                80_000_000,
-                0.0,
-            ),
-            proc(
-                90,
-                Some(1),
-                "node.exe",
-                &["node", "mcp-server"],
-                40_000_000,
-                0.0,
-            ),
-        ],
-        memory: sweeploom_process::HostMemory::default(),
-        cpu: sweeploom_process::HostCpu::default(),
-        total_rss_bytes: 0,
-    };
-    let sessions = sessions_from_snapshot(
-        &mut snapshot,
-        &AttributionRoots {
-            projects: Vec::new(),
-            current_project: None,
-        },
-    );
+    let (snapshot, sessions) = cursor_mcp_sessions(now, 0.2);
     let attached = sessions.iter().any(|session| {
         session.kind == SessionKind::Mcp
             && session.activity != SessionActivity::OrphanCandidate
@@ -168,7 +181,11 @@ fn bench_session_accuracy_and_speed() {
     eprintln!("stray MCP orphan={stray}");
     assert!(attached);
     assert!(stray);
-    let tree = snapshot.processes.clone();
+    assert_grouping_speed(&snapshot.processes);
+}
+
+fn assert_grouping_speed(processes: &[ProcessSnapshot]) {
+    let tree = processes.to_vec();
     let start = std::time::Instant::now();
     let rounds = 8_000_u32;
     let mut sink = 0_u64;
@@ -211,39 +228,7 @@ fn bench_token_policy_keeps_context() {
         assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
     }
 
-    let mut snapshot = ProcessSnapshotSet {
-        captured_at: now,
-        processes: vec![
-            proc(1, None, "init", &["init"], 8_000, 0.0),
-            proc(50, Some(1), "Cursor.exe", &["Cursor"], 300_000_000, 0.0),
-            proc(
-                51,
-                Some(50),
-                "node.exe",
-                &["node", "--mcp", "server.js"],
-                80_000_000,
-                0.0,
-            ),
-            proc(
-                90,
-                Some(1),
-                "node.exe",
-                &["node", "mcp-server"],
-                40_000_000,
-                0.0,
-            ),
-        ],
-        memory: sweeploom_process::HostMemory::default(),
-        cpu: sweeploom_process::HostCpu::default(),
-        total_rss_bytes: 0,
-    };
-    let sessions = sessions_from_snapshot(
-        &mut snapshot,
-        &AttributionRoots {
-            projects: Vec::new(),
-            current_project: None,
-        },
-    );
+    let (_, sessions) = cursor_mcp_sessions(now, 0.0);
     let attached_rss: u64 = sessions
         .iter()
         .filter(|session| {

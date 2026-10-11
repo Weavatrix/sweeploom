@@ -45,12 +45,14 @@ impl InventoryLimits {
 }
 
 /// One aggregated directory (or large file) in the inspector.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DirectoryNode {
     /// Path.
     pub path: PathBuf,
     /// Logical bytes (sum of `metadata.len()`).
     pub logical_bytes: u64,
+    /// Sum of allocated file blocks when available (sparse files may be much smaller).
+    pub allocated_bytes: Option<u64>,
     /// File count under this node (files only).
     pub files: u64,
     /// Direct child directories counted.
@@ -80,6 +82,7 @@ impl DirectoryNode {
         Self {
             path,
             logical_bytes: 0,
+            allocated_bytes: if cfg!(unix) { Some(0) } else { None },
             files: 0,
             directories: 0,
             newest_mtime: None,
@@ -92,13 +95,25 @@ impl DirectoryNode {
         }
     }
 
-    pub(crate) fn file_leaf(path: PathBuf, bytes: u64, mtime: Option<SystemTime>) -> Self {
+    pub(crate) fn file_leaf(
+        path: PathBuf,
+        bytes: u64,
+        allocated: Option<u64>,
+        mtime: Option<SystemTime>,
+    ) -> Self {
         let mut node = Self::new(path);
         node.logical_bytes = bytes;
+        node.allocated_bytes = allocated;
         node.files = 1;
         node.is_file = true;
         node.newest_mtime = mtime;
         node
+    }
+
+    /// Bytes occupying disk blocks, falling back to logical size if unavailable.
+    #[must_use]
+    pub fn disk_bytes(&self) -> u64 {
+        self.allocated_bytes.unwrap_or(self.logical_bytes)
     }
 
     /// Immediate children only. Nested trees stay on the walker until the scan finishes.
@@ -107,6 +122,7 @@ impl DirectoryNode {
         Self {
             path: self.path.clone(),
             logical_bytes: self.logical_bytes,
+            allocated_bytes: self.allocated_bytes,
             files: self.files,
             directories: self.directories,
             newest_mtime: self.newest_mtime,
@@ -123,6 +139,7 @@ impl DirectoryNode {
         Self {
             path: child.path.clone(),
             logical_bytes: child.logical_bytes,
+            allocated_bytes: child.allocated_bytes,
             files: child.files,
             directories: child.directories,
             newest_mtime: child.newest_mtime,
@@ -145,7 +162,7 @@ impl DirectoryNode {
 }
 
 /// Inventory result.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InventoryReport {
     /// Scan root.
     pub root: PathBuf,
@@ -155,6 +172,8 @@ pub struct InventoryReport {
     pub projects: Vec<PathBuf>,
     /// Logical bytes for each discovered project root, even if the inspector tree dropped it.
     pub project_bytes: Vec<(PathBuf, u64)>,
+    /// Allocated byte rollups for discovered projects.
+    pub project_disk_bytes: Vec<(PathBuf, u64)>,
     /// Entries visited.
     pub entries: u64,
     /// Walk errors (typed, no panic).
@@ -190,6 +209,18 @@ impl InventoryReport {
             .or_else(|| self.node(path).map(|node| node.logical_bytes))
     }
 
+    /// Allocated folder size for disk-oriented UI, falling back to logical bytes.
+    #[must_use]
+    pub fn folder_disk_bytes(&self, path: &Path) -> Option<u64> {
+        let canonical = std::fs::canonicalize(path).ok();
+        self.project_disk_bytes
+            .iter()
+            .find(|(item, _)| item == path || canonical.as_ref() == Some(item))
+            .map(|(_, bytes)| *bytes)
+            .or_else(|| self.node(path).map(DirectoryNode::disk_bytes))
+            .or_else(|| self.folder_bytes(path))
+    }
+
     /// Source / artifact heat for a discovered project directory.
     #[must_use]
     pub fn project_heat(&self, project: &Path, now: SystemTime) -> (ActivityState, ActivityState) {
@@ -206,9 +237,13 @@ impl InventoryReport {
     }
 }
 
+/// Descend only along `path`'s ancestors instead of searching the whole tree.
 fn find_node<'a>(node: &'a DirectoryNode, path: &Path) -> Option<&'a DirectoryNode> {
     if node.path == path {
         return Some(node);
+    }
+    if !path.starts_with(&node.path) {
+        return None;
     }
     node.children
         .iter()

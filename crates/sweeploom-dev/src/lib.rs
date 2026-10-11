@@ -17,5 +17,5 @@ pub use git::{GitSafety, inspect};
 pub use node::{NodeOffer, node_offers};
 pub use project::{DevKind, classify_project};
 pub use python::{PythonOffer, python_offers};
-pub use review::{ReviewRow, collect_review, collect_review_from};
+pub use review::{ReviewRow, collect_review, collect_review_from, collect_review_with};
 pub use size::{dir_logical_bytes, dir_size, path_mtime};

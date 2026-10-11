@@ -11,7 +11,8 @@ pub use classify::classify_process;
 pub use control::SysinfoProcessControl;
 pub use session_stop::{force_stop_session, still_running, stop_session_gracefully};
 pub use snapshot::{
-    HostCpu, HostMemory, ProcessSampler, ProcessSnapshotSet, host_cpu, host_memory, volume_space,
+    CoreSplit, HostCpu, HostMemory, ProcessSampler, ProcessSnapshotSet, host_cpu, host_memory,
+    volume_space,
 };
 
 use sweeploom_core::{ProcessKey, ProcessSnapshot};

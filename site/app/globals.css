@@ -1,0 +1,387 @@
+@import "tailwindcss";
+
+/* SweepLoom appearance system.
+   Dark is the default and the no-script fallback. `data-theme` records the
+   visitor's choice (auto | light | dark); `data-theme-resolved` records what it
+   means right now. A tiny bootstrap in <head> stamps both before first paint.
+   Gold is the brand accent from the desktop app (theme.rs: #C48C30). On light
+   surfaces it is darkened for text so body copy clears WCAG AA. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --bg-2: #0f1215;
+  --panel: #13171c;
+  --panel-2: #181d23;
+  --line: #242a32;
+  --line-strong: #343c47;
+  --text: #eceef1;
+  --muted: #a0a6b0;
+  --faint: #7b828d;
+  --accent: #dcae5c;
+  --gold: #c48c30;
+  --gold-soft: #d6a854;
+  --ink: #111216;
+  --ok: #5cc794;
+  --warn: #ec8466;
+  --glow: rgba(196, 140, 48, 0.16);
+  --header: rgba(11, 13, 16, 0.78);
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+
+  /* Terminals stay dark in both themes. */
+  --term-bg: #0d0f13;
+  --term-bar: #14171c;
+  --term-fg: #e4e7ec;
+  --term-dim: #8f97a3;
+  --term-gold: #e6bd6e;
+  --term-ok: #74d6a6;
+  --term-warn: #f39a80;
+  --term-border: #272c34;
+}
+
+:root[data-theme-resolved="light"] {
+  color-scheme: light;
+  --bg: #f8f7f4;
+  --bg-2: #f1efea;
+  --panel: #ffffff;
+  --panel-2: #fbfaf8;
+  --line: #e5e1d9;
+  --line-strong: #d2ccc1;
+  --text: #15171b;
+  --muted: #50565f;
+  --faint: #6c727c;
+  --accent: #85560f;
+  --ok: #1d6b47;
+  --warn: #a63d27;
+  --glow: rgba(196, 140, 48, 0.14);
+  --header: rgba(248, 247, 244, 0.82);
+  --shadow: 0 18px 48px rgba(28, 24, 16, 0.12);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-ink: var(--ink);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-grotesk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 5.5rem;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  ::selection { background: rgba(196, 140, 48, 0.35); }
+  :focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  a { text-underline-offset: 3px; }
+  code, kbd, pre, samp { font-family: var(--font-mono); }
+  /* Grid items default to min-width:auto, so one long code line or table
+     would widen the whole track on a phone. Scrolling belongs to the block. */
+  :where(.grid) > * { min-width: 0; }
+}
+
+/* ---------- shared components ---------- */
+
+@layer components {
+  .wrap {
+    width: 100%;
+    max-width: 1180px;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) { .wrap { padding-inline: 1.5rem; } }
+  @media (min-width: 1024px) { .wrap { padding-inline: 2rem; } }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.65rem 1.15rem;
+    border-radius: 0.7rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1.2;
+    transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--gold);
+    color: var(--ink);
+    box-shadow: 0 10px 30px rgba(196, 140, 48, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  .btn-primary:hover { background: var(--gold-soft); transform: translateY(-1px); }
+  .btn-ghost {
+    border: 1px solid var(--line-strong);
+    color: var(--text);
+    background: color-mix(in srgb, var(--panel) 70%, transparent);
+  }
+  .btn-ghost:hover { border-color: var(--gold); transform: translateY(-1px); }
+
+  .card {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: linear-gradient(160deg, var(--panel-2), var(--panel));
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card-hover:hover {
+    border-color: color-mix(in srgb, var(--gold) 55%, var(--line));
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.18rem 0.55rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .chip-gold { color: var(--accent); border-color: color-mix(in srgb, var(--gold) 50%, transparent); background: color-mix(in srgb, var(--gold) 9%, transparent); }
+  .chip-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+  .chip-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+
+  .inline-code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    padding: 0.1em 0.38em;
+    border-radius: 0.35rem;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    text-decoration-thickness: 1px;
+  }
+  .link:hover { text-decoration-color: var(--accent); }
+
+  /* terminal */
+  .term {
+    border: 1px solid var(--term-border);
+    border-radius: 0.9rem;
+    background: var(--term-bg);
+    color: var(--term-fg);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.75rem 0.55rem 0.9rem;
+    background: var(--term-bar);
+    border-bottom: 1px solid var(--term-border);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--term-dim);
+  }
+  .term-dots { display: inline-flex; gap: 0.38rem; }
+  .term-dots i { width: 0.62rem; height: 0.62rem; border-radius: 999px; background: #2c323b; }
+  .term pre {
+    margin: 0;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    tab-size: 2;
+  }
+  @media (min-width: 640px) { .term pre { font-size: 0.84rem; } }
+  .t-dim { color: var(--term-dim); }
+  .t-gold { color: var(--term-gold); }
+  .t-ok { color: var(--term-ok); }
+  .t-warn { color: var(--term-warn); }
+  .t-prompt { color: var(--term-gold); user-select: none; }
+
+  /* tables */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 0.9rem; background: var(--panel); }
+  .table-wrap table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .table-wrap th, .table-wrap td { padding: 0.7rem 0.9rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  .table-wrap th { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); font-weight: 500; background: var(--bg-2); white-space: nowrap; }
+  .table-wrap tr:last-child td { border-bottom: 0; }
+  .table-wrap td code { font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); }
+
+  /* backgrounds */
+  .weave-bg {
+    background-image:
+      linear-gradient(to right, color-mix(in srgb, var(--line) 55%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in srgb, var(--line) 55%, transparent) 1px, transparent 1px);
+    background-size: 44px 44px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+  }
+  .gold-glow {
+    background: radial-gradient(closest-side, var(--glow), transparent);
+  }
+}
+
+/* ---------- long-form prose (blog, legal, docs) ---------- */
+
+.prose {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1.75;
+  max-width: 42.5rem;
+}
+.prose > * + *,
+.prose > div > * + * { margin-top: 1.15em; }
+.prose h2 {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin-top: 2.2em;
+  scroll-margin-top: 6rem;
+}
+.prose h3 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-top: 1.8em;
+  scroll-margin-top: 6rem;
+}
+.prose h2 + *, .prose h3 + * { margin-top: 0.7em; }
+.prose p, .prose li { color: color-mix(in srgb, var(--text) 88%, var(--muted)); }
+.prose strong { color: var(--text); font-weight: 650; }
+.prose a { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
+.prose a:hover { text-decoration-color: var(--accent); }
+.prose ul, .prose ol { padding-left: 1.35em; }
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose li + li { margin-top: 0.4em; }
+.prose li::marker { color: var(--gold); }
+.prose blockquote {
+  border-left: 3px solid var(--gold);
+  padding: 0.2em 0 0.2em 1em;
+  color: var(--muted);
+}
+.prose hr { border: 0; border-top: 1px solid var(--line); margin: 2.5em 0; }
+.prose :not(pre) > code {
+  font-size: 0.86em;
+  padding: 0.12em 0.38em;
+  border-radius: 0.35rem;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  overflow-wrap: anywhere;
+}
+.prose pre {
+  border: 1px solid var(--term-border);
+  border-radius: 0.8rem;
+  background: var(--term-bg);
+  color: var(--term-fg);
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+.prose pre code { background: none; border: 0; padding: 0; font-size: inherit; color: inherit; }
+.prose table { width: 100%; border-collapse: collapse; font-size: 0.92rem; display: block; overflow-x: auto; }
+.prose th, .prose td { border-bottom: 1px solid var(--line); padding: 0.55rem 0.75rem; text-align: left; vertical-align: top; }
+.prose th { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 500; }
+.prose td code { overflow-wrap: anywhere; }
+.prose table { table-layout: auto; }
+
+/* ---------- motion ---------- */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-44px, -44px, 0); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+.rise { animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.drift { animation: drift 24s linear infinite; }
+.pulse-dot { animation: pulse-dot 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .drift, .pulse-dot { animation: none !important; }
+  .card-hover:hover, .btn:hover { transform: none; }
+}
+
+/* skip link */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100px;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: 0.6rem;
+  background: var(--gold);
+  color: var(--ink);
+  font-weight: 600;
+}
+.skip-link:focus { top: 0.75rem; }
+
+/* theme switch: the pressed look follows the attribute the <head> bootstrap
+   stamps, so it is right before hydration too */
+:root[data-theme="auto"] [data-theme-choice="auto"],
+:root[data-theme="light"] [data-theme-choice="light"],
+:root[data-theme="dark"] [data-theme-choice="dark"] {
+  background: var(--gold);
+  color: var(--ink);
+}
+
+/* tabs */
+[role="tab"][aria-selected="true"] {
+  color: var(--text);
+  background: var(--panel-2);
+  border-color: var(--line-strong);
+}

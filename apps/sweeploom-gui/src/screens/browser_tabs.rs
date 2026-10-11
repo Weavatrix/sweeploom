@@ -9,7 +9,7 @@ use crate::app::SweepLoomApp;
 use crate::sort::{Col, Sort, header_cell};
 use crate::widgets::{pointer, table_scroll_height};
 use eframe::egui::RichText;
-use egui_extras::{Column, TableBuilder};
+use egui_extras::Column;
 
 use super::browser::unix_ms;
 
@@ -153,8 +153,7 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui, rows: &[TabRow]
     let height = table_scroll_height(ui);
     let count = rows.len();
     let mut selected = std::mem::take(&mut app.browser.tab_ids);
-    TableBuilder::new(ui)
-        .id_salt("browser-tabs-grid")
+    crate::widgets::table(ui, "browser-tabs-grid")
         .striped(true)
         .resizable(true)
         .min_scrolled_height(height)
@@ -198,7 +197,7 @@ fn fill_row(
 ) {
     let mut on = selected.contains(&item.id);
     row.col(|ui| {
-        if ui.checkbox(&mut on, "").changed() {
+        if crate::widgets::check(ui, &mut on).changed() {
             if on {
                 selected.insert(item.id);
             } else {

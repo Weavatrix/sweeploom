@@ -14,9 +14,9 @@ description = "Filesystem inventory, folder inspector, and project heat via weav
 workspace = true
 
 [dependencies]
+serde = { workspace = true }
 sweeploom-core = { workspace = true }
 weavatrix-scan = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 
 [[bin]]

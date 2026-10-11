@@ -89,20 +89,47 @@ pub fn mark_orphan_mcp(sessions: &mut [LiveSession], processes: &[ProcessSnapsho
             continue;
         }
         let attached = session.processes.iter().any(|key| {
-            processes.iter().any(|process| {
-                process.key == *key
-                    && process
-                        .parent
-                        .is_some_and(|parent| agent_members.contains(&parent))
-            })
+            let mut parent = processes
+                .iter()
+                .find(|p| p.key == *key)
+                .and_then(|p| p.parent);
+            let mut visited = std::collections::HashSet::new();
+            while let Some(key) = parent {
+                if !visited.insert(key) {
+                    break;
+                }
+                if agent_members.contains(&key) {
+                    return true;
+                }
+                parent = processes
+                    .iter()
+                    .find(|p| p.key == key)
+                    .and_then(|p| p.parent);
+            }
+            false
         });
-        if !attached {
+        if !attached
+            && !matches!(
+                session.activity,
+                SessionActivity::Active
+                    | SessionActivity::NetworkActive
+                    | SessionActivity::RunawayCpu
+            )
+        {
             session.activity = SessionActivity::OrphanCandidate;
             session.recommendation.recommendation = Recommendation::Optional;
             session.recommendation.estimated_reclaimable_rss = estimate_reclaim(session.rss_bytes);
         } else {
             session.recommendation.recommendation = Recommendation::Keep;
             session.recommendation.estimated_reclaimable_rss = 0;
+            if attached
+                && matches!(
+                    session.activity,
+                    SessionActivity::LikelyForgotten | SessionActivity::SleepingMemoryHeavy
+                )
+            {
+                session.activity = SessionActivity::Idle;
+            }
         }
     }
 }
@@ -188,112 +215,5 @@ pub fn safety_from_class(class: ProcessSafetyClass) -> SessionSafety {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use sweeploom_core::{
-        SessionDiskUsage, SessionId, SessionKind, SessionNetworkUsage, SessionRecommendation,
-        SessionSafety,
-    };
-
-    fn session(rss: u64, kind: SessionKind) -> LiveSession {
-        LiveSession {
-            id: SessionId(1),
-            kind,
-            project: None,
-            processes: Vec::new(),
-            started_at: Some(SystemTime::UNIX_EPOCH),
-            observed_last_activity: Some(SystemTime::UNIX_EPOCH),
-            rss_bytes: rss,
-            cpu_percent: 0.0,
-            disk: SessionDiskUsage::default(),
-            network: SessionNetworkUsage::default(),
-            activity: SessionActivity::Unknown,
-            safety: SessionSafety::user(),
-            recommendation: SessionRecommendation {
-                recommendation: Recommendation::Keep,
-                estimated_reclaimable_rss: 0,
-            },
-        }
-    }
-
-    #[test]
-    fn idle_heavy_session_is_recommended() {
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let scored = score_session(&session(2_000_000_000, SessionKind::ClaudeCode), now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-        assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
-        assert_eq!(scored.activity, SessionActivity::SleepingMemoryHeavy);
-    }
-
-    #[test]
-    fn system_critical_stays_keep() {
-        let mut value = session(2_000_000_000, SessionKind::Unknown);
-        value.safety = SessionSafety::system_critical();
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let scored = score_session(&value, now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-        assert!(scored.safety.terminate_disabled);
-    }
-
-    #[test]
-    fn browser_tree_is_never_auto_reclaimed() {
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let scored = score_session(&session(8_000_000_000, SessionKind::Browser), now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-        assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
-    }
-
-    #[test]
-    fn unknown_idle_claude_is_keep() {
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let mut value = session(2_000_000_000, SessionKind::ClaudeCode);
-        value.observed_last_activity = None;
-        let scored = score_session(&value, now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-    }
-
-    #[test]
-    fn claude_with_cpu_is_keep() {
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let mut value = session(2_000_000_000, SessionKind::ClaudeCode);
-        value.cpu_percent = 3.0;
-        let scored = score_session(&value, now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-        assert_eq!(scored.activity, SessionActivity::Active);
-    }
-
-    #[test]
-    fn generic_app_is_never_auto_recommended() {
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let scored = score_session(&session(2_000_000_000, SessionKind::GenericApp), now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-        assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
-    }
-
-    #[test]
-    fn idle_cursor_keeps_context() {
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let scored = score_session(&session(2_000_000_000, SessionKind::Cursor), now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-        assert_eq!(scored.recommendation.estimated_reclaimable_rss, 0);
-        assert_eq!(scored.activity, SessionActivity::SleepingMemoryHeavy);
-    }
-
-    #[test]
-    fn idle_light_agent_is_likely_forgotten_but_kept() {
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let scored = score_session(&session(500_000_000, SessionKind::ClaudeCode), now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-        assert_eq!(scored.activity, SessionActivity::LikelyForgotten);
-    }
-
-    #[test]
-    fn claude_with_disk_is_keep() {
-        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10 * 3600);
-        let mut value = session(2_000_000_000, SessionKind::ClaudeCode);
-        value.disk.write_bytes = 4096;
-        let scored = score_session(&value, now, None);
-        assert_eq!(scored.recommendation.recommendation, Recommendation::Keep);
-        assert_eq!(scored.activity, SessionActivity::Active);
-    }
-}
+#[path = "forgotten_tests.rs"]
+mod tests;

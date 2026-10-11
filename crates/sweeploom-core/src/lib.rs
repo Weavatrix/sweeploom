@@ -8,6 +8,7 @@
 
 pub mod activity;
 pub mod artifact;
+pub mod browser;
 pub mod candidate;
 pub mod eligibility;
 pub mod evidence;
@@ -28,6 +29,7 @@ pub use artifact::{
     ApprovedArtifact, ArtifactProof, ArtifactRefusal, Coverage, FileIdentity, MetadataRevision,
     authorize_generated, normalize_path,
 };
+pub use browser::{BrowserIdentity, BrowserPart, browser_identity};
 pub use candidate::{Candidate, CandidateKind, CandidateOwner};
 pub use eligibility::auto_eligible;
 pub use evidence::{Confidence, Evidence};

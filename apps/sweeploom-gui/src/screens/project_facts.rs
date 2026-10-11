@@ -3,9 +3,6 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use sweeploom_dev::{read_manifest, workspace_root};
-use sweeploom_storage::{InventoryReport, PathCategory};
-
 use crate::format::format_bytes;
 
 pub(super) struct Bit {
@@ -28,16 +25,15 @@ impl Acc {
     }
 }
 
-/// Walk past nested project roots so `GitHub/app/e2e` groups under GitHub, not `app`.
+/// Group nested projects under their outer project's parent, including intermediary folders.
 pub(super) fn cluster_parent(path: &Path, projects: &HashSet<PathBuf>) -> PathBuf {
-    let mut dir = path.parent().map(Path::to_path_buf);
-    while let Some(parent) = dir {
-        if !projects.iter().any(|item| item == &parent) {
-            return parent;
-        }
-        dir = parent.parent().map(Path::to_path_buf);
-    }
-    path.to_path_buf()
+    let outer = projects
+        .iter()
+        .filter(|project| path.starts_with(project))
+        .min_by_key(|project| project.components().count())
+        .map(PathBuf::as_path)
+        .unwrap_or(path);
+    outer.parent().unwrap_or(outer).to_path_buf()
 }
 
 pub(super) fn cluster_title(parent: &Path) -> String {
@@ -48,15 +44,8 @@ pub(super) fn cluster_title(parent: &Path) -> String {
         .to_owned()
 }
 
-pub(super) fn artifact_label(path: &Path, bits: &[Bit]) -> String {
-    let cargo = read_manifest(path).map(|manifest| {
-        let units = manifest.units_label();
-        if workspace_root(path) != path {
-            format!("{units} · shared target")
-        } else {
-            units
-        }
-    });
+/// `cargo` is the cached Cargo unit label from [`crate::project_sizes::ProjectFacts`].
+pub(super) fn artifact_label(cargo: Option<String>, bits: &[Bit]) -> String {
     let offers = offer_summary(bits);
     match (cargo, offers.as_str()) {
         (Some(units), "none") => units,
@@ -90,22 +79,6 @@ pub(super) fn reclaimable_bytes(bits: &[Bit]) -> u64 {
     kept.iter().map(|(_, bytes)| *bytes).sum()
 }
 
-pub(super) fn inventory_artifact_bytes(report: &InventoryReport, project: &Path) -> u64 {
-    let Some(node) = report.node(project) else {
-        return 0;
-    };
-    node.children
-        .iter()
-        .filter(|child| {
-            matches!(
-                child.category,
-                PathCategory::Generated | PathCategory::Dependencies | PathCategory::Cache
-            )
-        })
-        .map(|child| child.logical_bytes)
-        .sum()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +109,16 @@ mod tests {
         assert_eq!(cluster_parent(&frontend, &projects), github);
         assert_eq!(cluster_parent(&e2e, &projects), github);
         assert_eq!(cluster_title(&github), "GitHub");
+    }
+
+    #[test]
+    fn nested_apps_and_workers_share_the_outer_project_group() {
+        let repo = PathBuf::from("dev/profi");
+        let app = repo.join("apps/web");
+        let worker = repo.join("workers/triage");
+        let projects = HashSet::from([repo.clone(), app.clone(), worker.clone()]);
+        assert_eq!(cluster_parent(&repo, &projects), PathBuf::from("dev"));
+        assert_eq!(cluster_parent(&app, &projects), PathBuf::from("dev"));
+        assert_eq!(cluster_parent(&worker, &projects), PathBuf::from("dev"));
     }
 }

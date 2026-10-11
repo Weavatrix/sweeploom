@@ -1,19 +1,24 @@
 //! Project table rows. Grouping does not walk the disk.
 
 use std::collections::{BTreeMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 use sweeploom_core::CandidateOwner;
-use sweeploom_dev::{DevKind, classify_project};
-use sweeploom_storage::InventoryReport;
+use sweeploom_dev::DevKind;
+use sweeploom_storage::DiskUsage;
 
 use crate::app::SweepLoomApp;
 use crate::format::row_caption;
 use crate::sort::{Col, Sort};
 
+#[path = "project_groups.rs"]
+mod groups;
+use groups::size_order;
+pub(crate) use groups::table_lines;
+
 use super::project_facts::{
-    Acc, Bit, artifact_label, cluster_parent, cluster_title, inventory_artifact_bytes,
-    reclaimable_bytes,
+    Acc, Bit, artifact_label, cluster_parent, cluster_title, reclaimable_bytes,
 };
 
 /// How Projects cluster rows.
@@ -42,12 +47,13 @@ impl ProjectGroup {
 #[derive(Clone)]
 pub(crate) struct ProjectCard {
     pub path: PathBuf,
-    pub bytes: u64,
+    pub bytes: Option<DiskUsage>,
+    pub size_error: Option<String>,
+    pub artifact_bytes: u64,
     pub kinds: String,
     pub group_kind: &'static str,
     pub folder: String,
     pub folder_key: String,
-    pub cluster_bytes: u64,
     pub artifacts: String,
 }
 
@@ -56,36 +62,51 @@ pub(crate) enum Line {
         key: String,
         title: String,
         count: usize,
-        bytes: u64,
+        bytes: Option<DiskUsage>,
         expanded: bool,
     },
     Project(usize),
 }
 
+/// Rebuild cards only when inputs change. Marker facts come from a cache, so a
+/// size arriving does not re-read every manifest on the UI thread.
 pub(crate) fn refresh_cards(app: &mut SweepLoomApp) {
     let stamp = card_stamp(app);
     if stamp == app.project_card_stamp {
         return;
     }
-    app.project_cards = collect_cards(app);
+    let paths = collect_paths(app);
+    let accs = collect_accs(app);
+    let mut cards = Vec::with_capacity(accs.len());
+    for acc in accs {
+        let facts = app.project_sizes.facts(&acc.path);
+        cards.push(ProjectCard::from_acc(
+            acc,
+            facts,
+            &app.project_sizes,
+            &paths,
+        ));
+    }
+    app.project_cards = cards;
     app.project_card_stamp = stamp;
 }
 
 fn card_stamp(app: &SweepLoomApp) -> u64 {
-    let entries = app.inventory.as_ref().map(|item| item.entries).unwrap_or(0);
-    let first = app
-        .review
-        .first()
-        .map(|row| row.candidate.logical_bytes)
-        .unwrap_or(0);
-    (app.review.len() as u64)
-        .wrapping_mul(1_000_003)
-        .wrapping_add((app.project_roots.len() as u64).wrapping_mul(97))
-        .wrapping_add(entries)
-        .wrapping_add(first)
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    app.project_roots.hash(&mut hash);
+    if let Some(report) = &app.inventory {
+        report.projects.hash(&mut hash);
+    }
+    for row in &app.review {
+        row.candidate.path.hash(&mut hash);
+        row.candidate.logical_bytes.hash(&mut hash);
+        row.title.hash(&mut hash);
+    }
+    app.project_sizes.revision().hash(&mut hash);
+    hash.finish()
 }
 
-pub(crate) fn collect_cards(app: &SweepLoomApp) -> Vec<ProjectCard> {
+fn collect_accs(app: &SweepLoomApp) -> Vec<Acc> {
     let mut map: BTreeMap<PathBuf, Acc> = BTreeMap::new();
     for path in &app.project_roots {
         map.entry(path.clone()).or_insert_with(|| Acc::new(path));
@@ -106,10 +127,7 @@ pub(crate) fn collect_cards(app: &SweepLoomApp) -> Vec<ProjectCard> {
             title: row_caption(&row.title),
         });
     }
-    let paths = collect_paths(app);
-    map.into_values()
-        .map(|acc| ProjectCard::from_acc(acc, app.inventory.as_ref(), &paths))
-        .collect()
+    map.into_values().collect()
 }
 
 fn collect_paths(app: &SweepLoomApp) -> HashSet<PathBuf> {
@@ -126,74 +144,24 @@ fn collect_paths(app: &SweepLoomApp) -> HashSet<PathBuf> {
 }
 
 pub(crate) fn sort_cards(cards: &mut [ProjectCard], sort: Sort) {
-    cards.sort_by(|left, right| match sort.col {
-        Col::Name => left.name().cmp(right.name()),
-        Col::Status => left
-            .kinds
-            .cmp(&right.kinds)
-            .then(left.path.cmp(&right.path)),
-        _ => left
-            .bytes
-            .cmp(&right.bytes)
-            .then(left.path.cmp(&right.path)),
-    });
-    if sort.desc {
-        cards.reverse();
-    }
-}
-
-pub(crate) fn table_lines(
-    cards: &[ProjectCard],
-    group: ProjectGroup,
-    collapsed: &HashSet<String>,
-    sort: Sort,
-) -> Vec<Line> {
-    if group == ProjectGroup::None {
-        return (0..cards.len()).map(Line::Project).collect();
-    }
-    let mut buckets: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-    for (index, card) in cards.iter().enumerate() {
-        buckets
-            .entry(card.group_key(group))
-            .or_default()
-            .push(index);
-    }
-    let mut keys: Vec<String> = buckets.keys().cloned().collect();
-    keys.sort_by(|left, right| {
-        let left_bytes: u64 = buckets
-            .get(left)
-            .map(|indexes| indexes.iter().map(|&i| cards[i].bytes).sum())
-            .unwrap_or(0);
-        let right_bytes: u64 = buckets
-            .get(right)
-            .map(|indexes| indexes.iter().map(|&i| cards[i].bytes).sum())
-            .unwrap_or(0);
-        match sort.col {
-            Col::Size => left_bytes.cmp(&right_bytes),
-            Col::Name => left.cmp(right),
-            _ if group == ProjectGroup::Kind => kind_rank(left).cmp(&kind_rank(right)),
-            _ => left.cmp(right),
+    cards.sort_by(|left, right| {
+        if sort.col == Col::Size {
+            return size_order(left.bytes, right.bytes, sort.desc).then(left.path.cmp(&right.path));
         }
+        let order = match sort.col {
+            Col::Name => left
+                .name()
+                .to_lowercase()
+                .cmp(&right.name().to_lowercase())
+                .then(left.path.cmp(&right.path)),
+            Col::Status => left
+                .kinds
+                .cmp(&right.kinds)
+                .then(left.path.cmp(&right.path)),
+            _ => left.path.cmp(&right.path),
+        };
+        if sort.desc { order.reverse() } else { order }
     });
-    if sort.desc && sort.col == Col::Size {
-        keys.reverse();
-    }
-    let mut lines = Vec::new();
-    for key in keys {
-        let indexes = buckets.remove(&key).unwrap_or_default();
-        let bytes = group_bytes(cards, &indexes);
-        lines.push(Line::Group {
-            key: key.clone(),
-            title: group_title(cards, group, &key, &indexes),
-            count: indexes.len(),
-            bytes,
-            expanded: !collapsed.contains(&key),
-        });
-        if !collapsed.contains(&key) {
-            lines.extend(indexes.into_iter().map(Line::Project));
-        }
-    }
-    lines
 }
 
 impl ProjectCard {
@@ -212,38 +180,36 @@ impl ProjectCard {
         }
     }
 
-    fn from_acc(
+    pub(super) fn from_acc(
         acc: Acc,
-        inventory: Option<&InventoryReport>,
+        facts: crate::project_sizes::ProjectFacts,
+        sizes: &crate::project_sizes::ProjectSizes,
         projects: &HashSet<PathBuf>,
     ) -> Self {
-        let kinds = classify_project(&acc.path);
-        let group_kind = kinds.first().copied().unwrap_or(DevKind::Other).label();
-        let labels = kinds
+        let group_kind = facts
+            .kinds
+            .first()
+            .copied()
+            .unwrap_or(DevKind::Other)
+            .label();
+        let labels = facts
+            .kinds
             .iter()
             .map(|kind| kind.label())
             .collect::<Vec<_>>()
             .join(", ");
         let parent = cluster_parent(&acc.path, projects);
-        let cluster_bytes = inventory
-            .and_then(|report| report.folder_bytes(&parent))
-            .unwrap_or(0);
-        let mut bytes = inventory
-            .and_then(|report| report.folder_bytes(&acc.path))
-            .unwrap_or(0);
-        if bytes == 0 {
-            bytes = reclaimable_bytes(&acc.bits);
-        }
-        if bytes == 0
-            && let Some(report) = inventory
-        {
-            bytes = inventory_artifact_bytes(report, &acc.path);
-        }
+        let (bytes, size_error) = match sizes.get(&acc.path) {
+            Some(Ok(usage)) => (Some(*usage), None),
+            Some(Err(error)) => (None, Some(error.clone())),
+            None => (None, None),
+        };
         Self {
             folder: cluster_title(&parent),
             folder_key: parent.to_string_lossy().into_owned(),
-            cluster_bytes,
-            artifacts: artifact_label(&acc.path, &acc.bits),
+            size_error,
+            artifact_bytes: reclaimable_bytes(&acc.bits),
+            artifacts: artifact_label(facts.cargo, &acc.bits),
             path: acc.path,
             bytes,
             kinds: labels,
@@ -252,43 +218,39 @@ impl ProjectCard {
     }
 }
 
-fn group_title(cards: &[ProjectCard], group: ProjectGroup, key: &str, indexes: &[usize]) -> String {
-    if group == ProjectGroup::Parent {
-        return indexes
-            .first()
-            .and_then(|&index| cards.get(index))
-            .map(|card| card.folder.clone())
-            .unwrap_or_else(|| key.to_owned());
+pub(crate) fn size_caption(usage: Option<DiskUsage>, error: Option<&str>) -> String {
+    match usage {
+        Some(u) if u.complete => crate::format::format_bytes(u.bytes),
+        Some(u) if u.bytes > 0 => format!(">= {}", crate::format::format_bytes(u.bytes)),
+        Some(u) if u.errors > 0 => "Unavailable".into(),
+        None if error.is_some() => "Unavailable".into(),
+        _ => "Measuring…".into(),
     }
-    key.to_owned()
 }
 
-fn group_bytes(cards: &[ProjectCard], indexes: &[usize]) -> u64 {
-    let cluster = indexes
-        .first()
-        .and_then(|&index| cards.get(index))
-        .map(|card| card.cluster_bytes)
-        .unwrap_or(0);
-    if cluster > 0 {
-        return cluster;
-    }
-    indexes
-        .iter()
-        .filter(|&&index| {
-            !indexes
-                .iter()
-                .any(|&other| other != index && cards[index].path.starts_with(&cards[other].path))
-        })
-        .map(|&index| cards[index].bytes)
-        .sum()
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn kind_rank(label: &str) -> u8 {
-    match label {
-        "Cargo" => 0,
-        "Node" => 1,
-        "Go" => 2,
-        "Python" => 3,
-        _ => 4,
+    #[test]
+    fn artifact_size_never_substitutes_for_unmeasured_project_size() {
+        let path = PathBuf::from("/project-not-scanned");
+        let mut acc = Acc::new(&path);
+        acc.bits.push(Bit {
+            path: path.join(".vite"),
+            bytes: 22_000,
+            title: "cache".into(),
+        });
+        let facts = crate::project_sizes::ProjectFacts {
+            kinds: vec![DevKind::Other],
+            cargo: None,
+        };
+        let card = ProjectCard::from_acc(acc, facts, &Default::default(), &HashSet::from([path]));
+        assert_eq!(card.bytes, None);
+        assert_eq!(card.artifact_bytes, 22_000);
+        assert_eq!(
+            size_caption(card.bytes, card.size_error.as_deref()),
+            "Measuring…"
+        );
     }
 }

@@ -1,4 +1,12 @@
 use super::*;
+
+#[test]
+fn unreadable_or_missing_root_is_incomplete_instead_of_an_exact_empty_store() {
+    let path = unique_root().join("missing");
+    let listed = list_store(&path, Limits::default());
+    assert!(listed.capped);
+    assert_eq!(listed.file_count, 0);
+}
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};

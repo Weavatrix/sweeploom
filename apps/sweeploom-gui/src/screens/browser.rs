@@ -3,7 +3,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::app::SweepLoomApp;
-use crate::widgets::{page_title, pointer};
+use crate::widgets::{self, page_title};
 
 use super::browser_later;
 use super::browser_state::BrowserPane;
@@ -14,24 +14,24 @@ pub fn ui_browser(app: &mut SweepLoomApp, ui: &mut eframe::egui::Ui) {
     page_title(
         ui,
         "Browser",
-        "Renderer helpers can be stopped without ending Edge. Tabs and Later need URLs from the companion. Close is never sent.",
+        "Live browser processes, memory and CPU. Open a tree to inspect its helpers. Tabs and Later need the companion.",
     );
-    ui.horizontal(|ui| {
-        pane_button(ui, app, BrowserPane::Trees, "Process trees");
-        pane_button(ui, app, BrowserPane::Tabs, "Tabs");
-        pane_button(ui, app, BrowserPane::Later, "Later");
-    });
-    ui.add_space(8.0);
+    let mut pane = app.browser.pane;
+    if widgets::tabs(
+        ui,
+        &mut pane,
+        &[
+            (BrowserPane::Trees, "Process trees".to_owned()),
+            (BrowserPane::Tabs, "Tabs".to_owned()),
+            (BrowserPane::Later, "Later".to_owned()),
+        ],
+    ) {
+        app.browser.pane = pane;
+    }
     match app.browser.pane {
         BrowserPane::Trees => browser_trees::draw(app, ui),
         BrowserPane::Tabs => browser_tabs::draw(app, ui),
         BrowserPane::Later => browser_later::draw(app, ui),
-    }
-}
-
-fn pane_button(ui: &mut eframe::egui::Ui, app: &mut SweepLoomApp, pane: BrowserPane, label: &str) {
-    if pointer(ui.selectable_label(app.browser.pane == pane, label)).clicked() {
-        app.browser.pane = pane;
     }
 }
 

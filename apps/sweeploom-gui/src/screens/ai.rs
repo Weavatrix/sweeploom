@@ -3,36 +3,43 @@
 use std::time::SystemTime;
 
 use eframe::egui::{self, RichText};
-use egui_extras::{Column, TableBuilder};
+use egui_extras::Column;
 use sweeploom_ai::ContextAdvice;
 use sweeploom_core::DeletionStrategy;
 
 use crate::app::SweepLoomApp;
 use crate::format::{format_bytes, short_path};
-use crate::nav::Nav;
 use crate::sort::{Col, header_cell};
 use crate::theme;
-use crate::widgets::{self, page_title, pointer, table_scroll_height};
+use crate::widgets::{self, page_title, table_scroll_height};
 
-use super::ai_rows::{self, AiGroup, Line};
+use super::ai_rows::{self, Line};
+
+#[path = "ai_bar.rs"]
+mod bar;
 
 pub fn ui_ai(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
         ui,
         "AI",
-        "Inspect-first. Credentials and SQLite stay blocked. Cache/log rows can be cleaned one at a time — never auto-selected. File contents are not opened.",
+        "Select rows to inspect in Finder. Clean regenerable caches/logs or explicitly move history and generated media to Trash. Credentials, databases and managed worktrees remain protected.",
     );
-    toolbar(app, ui);
+    bar::toolbar(app, ui);
     if app.ai_offers.is_none() && !app.ai_listing {
         app.run_ai_listing();
     }
     if app.ai_listing {
-        ui.horizontal(|ui| {
-            ui.allocate_ui(egui::vec2(18.0, 18.0), |ui| {
+        widgets::card(ui, |ui| {
+            ui.horizontal(|ui| {
                 ui.spinner();
+                ui.label(RichText::new("Sizing AI stores…").strong());
             });
-            ui.label("Sizing AI stores…");
+            widgets::caption(
+                ui,
+                "Large session stores (Codex, Claude, Cursor) can take a minute to measure. Rows appear when sizing finishes.",
+            );
         });
+        ui.add_space(theme::MD);
     }
     if app.ai_offers.as_ref().is_some_and(Vec::is_empty) {
         ui.label("No local AI session stores were found under the home directory.");
@@ -41,32 +48,12 @@ pub fn ui_ai(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     draw_table(app, ui);
 }
 
-fn toolbar(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    ui.horizontal_wrapped(|ui| {
-        if pointer(ui.button("Refresh listing")).clicked() {
-            app.run_ai_listing();
-        }
-        if pointer(ui.button("Clean selected caches")).clicked() {
-            app.apply_ai_clean();
-        }
-        if pointer(ui.button("Open Review")).clicked() {
-            app.nav = Nav::Storage;
-        }
-        ui.label("Group by");
-        for mode in [AiGroup::Tool, AiGroup::Category, AiGroup::None] {
-            if pointer(ui.selectable_label(app.ai_group == mode, mode.label())).clicked() {
-                app.ai_group = mode;
-            }
-        }
-    });
-    widgets::action_note(ui, app.action_message.as_deref());
-}
-
 fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let mut sort = app.ai_sort;
     let group = app.ai_group;
     let collapsed = app.collapsed_ai_groups.clone();
     let mut toggle = None;
+    let mut action = None;
     {
         let Some(offers) = app.ai_offers.as_mut() else {
             return;
@@ -75,45 +62,57 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         let visible = ai_rows::visible_lines(&lines, &collapsed);
         let row_count = visible.len();
         let height = table_scroll_height(ui);
-        TableBuilder::new(ui)
-            .id_salt("ai-grid")
+        crate::widgets::table(ui, "ai-grid")
             .striped(true)
             .resizable(true)
             .sense(egui::Sense::click())
             .min_scrolled_height(height)
             .max_scroll_height(height)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::exact(36.0).clip(true).resizable(false))
+            .column(Column::exact(34.0).clip(true).resizable(false))
             .column(Column::remainder().at_least(140.0).clip(true))
             .column(Column::exact(80.0).clip(true))
             .column(Column::exact(72.0).clip(true))
+            .column(Column::exact(100.0).clip(true))
             .column(Column::exact(56.0).clip(true))
             .column(Column::exact(96.0).clip(true))
-            .header(32.0, |mut header| {
+            .header(30.0, |mut header| {
                 header.col(|ui| {
-                    ui.strong("");
+                    let mut all = offers
+                        .iter()
+                        .flat_map(|offer| &offer.entries)
+                        .all(|entry| entry.selected);
+                    if widgets::check(ui, &mut all).changed() {
+                        for entry in offers.iter_mut().flat_map(|offer| &mut offer.entries) {
+                            entry.selected = all;
+                        }
+                    }
                 });
                 header.col(|ui| header_cell(ui, &mut sort, Col::Name, "Name"));
                 header.col(|ui| header_cell(ui, &mut sort, Col::Status, "Kind"));
                 header.col(|ui| header_cell(ui, &mut sort, Col::Size, "Size"));
                 header.col(|ui| {
-                    ui.strong("Files");
+                    ui.strong("Change");
                 });
-                header.col(|ui| {
-                    ui.strong("Policy");
-                });
+                header.col(|ui| header_cell(ui, &mut sort, Col::Procs, "Files"));
+                header.col(|ui| header_cell(ui, &mut sort, Col::Safety, "Policy"));
             })
             .body(|body| {
                 body.rows(widgets::TABLE_ROW, row_count, |mut row| {
                     match visible.get(row.index()) {
                         Some(line @ Line::Group { key, .. }) => {
-                            fill_group(&mut row, line, !collapsed.contains(key), &mut toggle);
-                            if row.response().clicked() {
-                                toggle = Some(key.clone());
-                            }
+                            let open = !collapsed.contains(key);
+                            bar::group_row(&mut row, &lines, line, key, offers, open, &mut toggle);
                         }
                         Some(Line::Item(offer, entry)) => {
-                            fill_item(offers, &mut row, *offer, *entry);
+                            fill_item(
+                                offers,
+                                &mut row,
+                                *offer,
+                                *entry,
+                                &mut action,
+                                &app.scan_history,
+                            );
                         }
                         None => {}
                     }
@@ -121,6 +120,9 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             });
     }
     app.ai_sort = sort;
+    if let Some(action) = action {
+        app.path_action(action);
+    }
     if let Some(key) = toggle
         && !app.collapsed_ai_groups.remove(&key)
     {
@@ -133,6 +135,7 @@ fn fill_group(
     line: &Line,
     expanded: bool,
     toggle: &mut Option<String>,
+    selected: &mut bool,
 ) {
     let Line::Group {
         key,
@@ -144,18 +147,33 @@ fn fill_group(
     else {
         return;
     };
-    row.col(|_ui| {});
+    row.set_selected(*selected);
     row.col(|ui| {
-        crate::brand::show_tool(ui, title, 16.0);
-        if crate::widgets::disclose(ui, expanded, crate::theme::accent()) {
+        widgets::check(ui, selected);
+    });
+    row.col(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        if crate::widgets::disclose(ui, expanded, theme::muted(ui)) {
             *toggle = Some(key.to_owned());
         }
-        ui.label(RichText::new(format!("{title}  ·  {count}")).strong());
+        crate::brand::show_tool(ui, title, 16.0);
+        let label = ui.add(
+            egui::Label::new(RichText::new(title.as_str()).strong()).sense(egui::Sense::click()),
+        );
+        ui.label(
+            RichText::new(format!("{count} items"))
+                .size(12.0)
+                .color(theme::muted(ui)),
+        );
+        if label.clicked() {
+            *toggle = Some(key.to_owned());
+        }
     });
     row.col(|_ui| {});
     row.col(|ui| {
-        ui.label(format_bytes(*bytes));
+        ui.label(RichText::new(format_bytes(*bytes)).strong());
     });
+    row.col(|_ui| {});
     row.col(|ui| {
         ui.label(files.to_string());
     });
@@ -167,21 +185,27 @@ fn fill_item(
     row: &mut egui_extras::TableRow<'_, '_>,
     offer: usize,
     entry: usize,
+    action: &mut Option<crate::disk_actions::PathAction>,
+    history: &crate::scan_history::ScanHistory,
 ) {
-    let clean = ai_rows::can_clean(&offers[offer], entry);
     let Some(item) = offers.get(offer).and_then(|item| item.entries.get(entry)) else {
         return;
     };
     let name = item.relative.clone();
     let class = item.class.label();
-    let size = format_bytes(item.candidate.logical_bytes);
+    let size = format_bytes(
+        item.candidate
+            .allocated_bytes
+            .unwrap_or(item.candidate.logical_bytes),
+    );
+    let candidate_path = item.candidate.path.clone();
     let files = item.candidate.file_count;
     let path = short_path(&item.candidate.path);
     let policy = if item.candidate.deletion == DeletionStrategy::InspectOnly {
         if item.candidate.safety.is_blocked() {
             "blocked"
         } else {
-            "inspect only"
+            "manual Trash"
         }
     } else {
         "cleanable"
@@ -208,27 +232,20 @@ fn fill_item(
         }
     });
     let mut selected = item.selected;
+    row.set_selected(selected);
     row.col(|ui| {
-        if clean {
-            if ui.checkbox(&mut selected, "").changed()
-                && let Some(item) = offers
-                    .get_mut(offer)
-                    .and_then(|item| item.entries.get_mut(entry))
-            {
-                item.selected = selected;
-            }
-        } else {
-            let mut off = false;
-            ui.add_enabled(false, egui::Checkbox::new(&mut off, ""));
-        }
+        widgets::check(ui, &mut selected);
     });
     row.col(|ui| {
         ui.add(
             egui::Label::new(RichText::new(name))
                 .truncate()
-                .selectable(false),
+                .selectable(false)
+                .sense(egui::Sense::click()),
         )
-        .on_hover_text(path);
+        .on_hover_text(path)
+        .clicked()
+        .then(|| selected = !selected);
     });
     row.col(|ui| {
         let kind = ui.label(class);
@@ -240,45 +257,33 @@ fn fill_item(
         ui.label(size);
     });
     row.col(|ui| {
+        crate::scan_history::trend(
+            ui,
+            history,
+            crate::scan_history::Source::Ai,
+            &candidate_path,
+        );
+    });
+    row.col(|ui| {
         ui.label(files.to_string());
     });
     row.col(|ui| {
-        ui.label(RichText::new(policy).color(theme::muted(ui)));
+        policy_pill(ui, policy);
     });
+    crate::disk_actions::menu(&row.response(), &candidate_path, action);
+    if let Some(item) = offers
+        .get_mut(offer)
+        .and_then(|offer| offer.entries.get_mut(entry))
+    {
+        item.selected = selected;
+    }
 }
 
-impl SweepLoomApp {
-    /// Apply checked cache/log rows through CleanPlan. Secrets never enter the plan.
-    pub fn apply_ai_clean(&mut self) {
-        let Some(offers) = &self.ai_offers else {
-            return;
-        };
-        let selected: Vec<_> = offers
-            .iter()
-            .flat_map(|offer| offer.entries.iter())
-            .filter(|entry| entry.selected && entry.class.can_clean())
-            .filter(|entry| {
-                entry.candidate.deletion != DeletionStrategy::InspectOnly
-                    && !entry.candidate.safety.is_blocked()
-            })
-            .map(|entry| entry.candidate.clone())
-            .collect();
-        if selected.is_empty() {
-            self.action_message =
-                Some("Nothing selected. Credentials and SQLite cannot be checked.".to_owned());
-            return;
-        }
-        if self.apply_rx.is_some() {
-            self.action_message = Some("A cleanup is already running.".to_owned());
-            return;
-        }
-        let processes = self
-            .snapshot
-            .as_ref()
-            .map(|item| item.processes.clone())
-            .unwrap_or_default();
-        self.ai_offers = None;
-        self.action_message = Some("Applying AI cleanup in the background…".to_owned());
-        self.apply_rx = Some(crate::scan_job::spawn_apply(selected, processes));
-    }
+fn policy_pill(ui: &mut egui::Ui, policy: &str) {
+    let tone = match policy {
+        "cleanable" => theme::Tone::Ok,
+        "manual Trash" => theme::Tone::Caution,
+        _ => theme::Tone::Muted,
+    };
+    widgets::pill(ui, policy, tone);
 }

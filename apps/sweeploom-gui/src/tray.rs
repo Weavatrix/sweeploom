@@ -1,9 +1,10 @@
 //! Optional desktop tray. Unsupported platforms return `None`.
 
-use crate::nav::Nav;
+use crate::nav::{Dest, Nav};
 
-/// Commands from the tray menu or icon.
+/// Commands from the tray menu or icon. Only Windows and macOS build a tray.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 pub enum TrayCommand {
     /// Show the main window.
     Show,
@@ -12,8 +13,8 @@ pub enum TrayCommand {
     /// Flip visibility.
     Toggle,
     /// Show and jump to a screen.
-    Open(Nav),
-    /// Show Review and rebuild disk offers.
+    Open(Dest),
+    /// Show Cleanup → Project output and rebuild disk offers.
     Rebuild,
     /// Quit the process.
     Quit,
@@ -26,18 +27,19 @@ pub const fn is_supported() -> bool {
 }
 
 #[must_use]
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 fn command_from_id(id: &str) -> Option<TrayCommand> {
     Some(match id {
         "show" => TrayCommand::Show,
         "hide" => TrayCommand::Hide,
-        "overview" => TrayCommand::Open(Nav::Overview),
-        "sessions" => TrayCommand::Open(Nav::Sessions),
-        "review" => TrayCommand::Open(Nav::Storage),
-        "projects" => TrayCommand::Open(Nav::Projects),
-        "browser" => TrayCommand::Open(Nav::Browser),
-        "ai" => TrayCommand::Open(Nav::Ai),
-        "explorer" => TrayCommand::Open(Nav::Explorer),
-        "history" => TrayCommand::Open(Nav::History),
+        "overview" => TrayCommand::Open(Dest::Screen(Nav::Overview)),
+        "sessions" => TrayCommand::Open(Dest::Screen(Nav::Sessions)),
+        "review" => TrayCommand::Open(Dest::ProjectOutput),
+        "projects" => TrayCommand::Open(Dest::Screen(Nav::Projects)),
+        "browser" => TrayCommand::Open(Dest::Screen(Nav::Browser)),
+        "ai" => TrayCommand::Open(Dest::Screen(Nav::Ai)),
+        "explorer" => TrayCommand::Open(Dest::Screen(Nav::Explorer)),
+        "history" => TrayCommand::Open(Dest::Screen(Nav::History)),
         "rebuild" => TrayCommand::Rebuild,
         "quit" => TrayCommand::Quit,
         _ => return None,
@@ -121,14 +123,14 @@ mod native {
         append_sep(menu, seps)?;
         append_item(menu, items, "overview", "Overview")?;
         append_item(menu, items, "sessions", "Sessions")?;
-        append_item(menu, items, "review", "Review")?;
+        append_item(menu, items, "review", "Cleanup")?;
         append_item(menu, items, "projects", "Projects")?;
         append_item(menu, items, "browser", "Browser")?;
         append_item(menu, items, "ai", "AI")?;
         append_item(menu, items, "explorer", "Explorer")?;
         append_item(menu, items, "history", "History")?;
         append_sep(menu, seps)?;
-        append_item(menu, items, "rebuild", "Rebuild review")?;
+        append_item(menu, items, "rebuild", "Rebuild project output")?;
         append_sep(menu, seps)?;
         append_item(menu, items, "quit", "Quit")?;
         Some(())
@@ -210,7 +212,7 @@ pub fn install_wake(_ctx: eframe::egui::Context) {}
 #[cfg(test)]
 mod tests {
     use super::{TrayCommand, command_from_id};
-    use crate::nav::Nav;
+    use crate::nav::Dest;
 
     #[test]
     fn tray_ids_map_to_commands() {
@@ -218,7 +220,7 @@ mod tests {
         assert_eq!(command_from_id("hide"), Some(TrayCommand::Hide));
         assert_eq!(
             command_from_id("review"),
-            Some(TrayCommand::Open(Nav::Storage))
+            Some(TrayCommand::Open(Dest::ProjectOutput))
         );
         assert_eq!(command_from_id("rebuild"), Some(TrayCommand::Rebuild));
         assert_eq!(command_from_id("quit"), Some(TrayCommand::Quit));

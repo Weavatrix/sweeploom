@@ -1,31 +1,54 @@
-//! Overview pressure cards and top opportunities.
+//! Overview: KPI tiles, CPU cores, memory/disk breakdowns and top opportunities.
 
 use eframe::egui::{self, RichText};
 use sweeploom_browser::BrowserPressure;
-use sweeploom_core::{Recommendation, reclaim_set};
+use sweeploom_core::Recommendation;
 
 use super::session_label;
 use super::session_pressure;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::icons::Glyph;
 use crate::nav::Nav;
-use crate::widgets::{self, Metric, PressureItem, Tone, list_row_at, page_title};
+use crate::theme;
+use crate::widgets::{self, PressureItem, cpu_cores, list_row_at};
+
+#[path = "overview_board.rs"]
+mod board;
+#[path = "overview_tiles.rs"]
+mod tiles;
 
 pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    page_title(
+    widgets::page_title(
         ui,
         "Overview",
-        "Live pressure. Click a card or a session to open the matching screen.",
+        "Live pressure across memory, CPU and disk. Click a tile or a session to open it.",
     );
-    if let Some(nav) = widgets::metric_grid(ui, &overview_cards(app)) {
-        app.nav = nav;
+    let cores = cpu_cores::history(ui.ctx());
+    if let Some(dest) = widgets::metric_grid(ui, &tiles::overview_cards(app, &cores)) {
+        app.go(dest);
     }
-    ui.add_space(4.0);
+    widgets::card(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("CPU cores").size(15.5).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                widgets::caption(
+                    ui,
+                    format!("{} · last {} s", cores.summary(), cores_window(&cores)),
+                );
+            });
+        });
+        ui.add_space(theme::MD);
+        cpu_cores::grid(ui, &cores);
+    });
+    ui.add_space(theme::MD);
+    board::breakdowns(app, ui);
     draw_heaviest(app, ui);
-    ui.add_space(8.0);
     widgets::section_heading(ui, "Top opportunities");
     draw_opportunities(app, ui);
+}
+
+fn cores_window(cores: &cpu_cores::CoreHistory) -> usize {
+    cores.total.len()
 }
 
 fn draw_heaviest(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -33,14 +56,14 @@ fn draw_heaviest(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     if hogs.is_empty() {
         return;
     }
-    let caption = session_pressure::heaviest_caption(app, &hogs);
-    widgets::section_heading(ui, "Heaviest sessions");
-    ui.label(
-        RichText::new(&caption)
-            .size(13.0)
-            .color(crate::theme::muted(ui)),
-    );
-    ui.add_space(8.0);
+    ui.add_space(theme::SM);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Heaviest sessions").size(15.5).strong());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            widgets::caption(ui, session_pressure::heaviest_caption(app, &hogs));
+        });
+    });
+    ui.add_space(theme::SM);
     let items: Vec<PressureItem> = hogs
         .iter()
         .map(|hog| PressureItem {
@@ -56,135 +79,6 @@ fn draw_heaviest(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         app.selected_session = Some(hog.id);
         app.nav = Nav::Sessions;
     }
-}
-
-fn overview_cards(app: &SweepLoomApp) -> Vec<Metric> {
-    let memory = app
-        .snapshot
-        .as_ref()
-        .map(|item| item.memory)
-        .unwrap_or_default();
-    let cpu = app
-        .snapshot
-        .as_ref()
-        .map(|item| item.cpu.usage_percent)
-        .unwrap_or(0.0);
-    let stale = app
-        .sessions
-        .iter()
-        .filter(|session| {
-            matches!(
-                session.recommendation.recommendation,
-                Recommendation::Recommended | Recommendation::StronglyRecommended
-            )
-        })
-        .count();
-    let reclaimable = app
-        .sessions
-        .iter()
-        .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
-        .map(|session| session.recommendation.estimated_reclaimable_rss)
-        .sum::<u64>();
-    let stale_cpu: f32 = app
-        .sessions
-        .iter()
-        .filter(|session| session.recommendation.recommendation != Recommendation::Keep)
-        .map(|session| session.cpu_percent)
-        .sum();
-    let (disk, disk_ready) = if app.review.is_empty() {
-        ("—".to_owned(), false)
-    } else {
-        let unique = reclaim_set(
-            &app.review
-                .iter()
-                .map(|row| row.candidate.clone())
-                .collect::<Vec<_>>(),
-        );
-        (
-            crate::format::format_bytes_bound(
-                unique.unique_estimate.bytes,
-                unique.unique_estimate.complete,
-            ),
-            true,
-        )
-    };
-    let mem_total = memory.total_bytes.max(1);
-    let mem_avail = memory
-        .available_bytes
-        .max(memory.total_bytes.saturating_sub(memory.used_bytes));
-    let mem_used = 1.0 - (mem_avail as f32 / mem_total as f32);
-    let mut cards = vec![
-        Metric {
-            icon: Glyph::Memory,
-            title: "MEMORY".into(),
-            value: format_bytes(mem_avail),
-            sub: format!("available of {}", format_bytes(memory.total_bytes)),
-            open: Nav::Sessions,
-            fill: Some(mem_used.clamp(0.0, 1.0)),
-            tone: if mem_used >= 0.9 {
-                Tone::Warn
-            } else {
-                Tone::Neutral
-            },
-        },
-        Metric {
-            icon: Glyph::Sessions,
-            title: "IDLE SESSIONS".into(),
-            value: if stale == 0 {
-                "None".into()
-            } else {
-                format_bytes(reclaimable)
-            },
-            sub: if stale == 0 {
-                "nothing idle yet".into()
-            } else {
-                format!("{stale} idle to review")
-            },
-            open: Nav::Sessions,
-            fill: None,
-            tone: if stale == 0 { Tone::Ok } else { Tone::Neutral },
-        },
-        Metric {
-            icon: Glyph::Cpu,
-            title: "CPU".into(),
-            value: format!("{cpu:.0}%"),
-            sub: format!("{stale_cpu:.0}% in idle sessions"),
-            open: Nav::Sessions,
-            fill: Some((cpu / 100.0).clamp(0.0, 1.0)),
-            tone: if cpu >= 85.0 {
-                Tone::Warn
-            } else {
-                Tone::Neutral
-            },
-        },
-        Metric {
-            icon: Glyph::Disk,
-            title: "REVIEW DISK".into(),
-            value: disk,
-            sub: if disk_ready {
-                "unique generated + temp".into()
-            } else {
-                "open Review to measure".into()
-            },
-            open: Nav::Storage,
-            fill: None,
-            tone: Tone::Neutral,
-        },
-    ];
-    if let Some((mount, total, avail)) = app.volumes.first() {
-        let used = 1.0 - (*avail as f32 / (*total).max(1) as f32);
-        let tight = *avail < 8 * 1024 * 1024 * 1024;
-        cards.push(Metric {
-            icon: Glyph::Volume,
-            title: "VOLUME".into(),
-            value: format_bytes(*avail),
-            sub: format!("free of {} on {}", format_bytes(*total), mount.display()),
-            open: Nav::Explorer,
-            fill: Some(used.clamp(0.0, 1.0)),
-            tone: if tight { Tone::Warn } else { Tone::Neutral },
-        });
-    }
-    cards
 }
 
 fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -242,16 +136,19 @@ fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .collect();
     for (name, size) in review {
         shown += 1;
-        if list_row_at(ui, &name, &size, "open Review").clicked() {
-            app.nav = Nav::Storage;
+        if list_row_at(ui, &name, &size, "open Cleanup").clicked() {
+            app.go(crate::nav::Dest::ProjectOutput);
         }
     }
     if shown == 0 {
-        ui.label("No idle sessions. Open Review for Cargo target / node_modules, or Browser for process trees.");
+        widgets::caption(
+            ui,
+            "No idle sessions. Open Cleanup for Cargo target / node_modules, or Browser for process trees.",
+        );
     }
 }
 
-fn processes_of(app: &SweepLoomApp) -> &[sweeploom_core::ProcessSnapshot] {
+pub(super) fn processes_of(app: &SweepLoomApp) -> &[sweeploom_core::ProcessSnapshot] {
     app.snapshot
         .as_ref()
         .map(|item| item.processes.as_slice())

@@ -31,6 +31,8 @@ pub struct StoreEntry {
     pub relative: String,
     /// Rolled-up logical bytes.
     pub logical_bytes: u64,
+    /// Allocated disk blocks, if supported.
+    pub allocated_bytes: Option<u64>,
     /// Regular files under this child.
     pub file_count: u64,
     /// True when this child is a directory.
@@ -44,6 +46,8 @@ pub struct StoreEntry {
 pub struct StoreInventory {
     /// Sum of `metadata.len()` for visited files.
     pub logical_bytes: u64,
+    /// Allocated disk blocks, if supported.
+    pub allocated_bytes: Option<u64>,
     /// Number of regular files visited.
     pub file_count: u64,
     /// True when a cap stopped the walk.
@@ -55,6 +59,7 @@ pub struct StoreInventory {
 struct SizeWalk {
     limits: Limits,
     logical_bytes: u64,
+    allocated_bytes: Option<u64>,
     file_count: u64,
     capped: bool,
     stack: Vec<(PathBuf, u8)>,
@@ -65,6 +70,7 @@ fn size_tree(root: &Path, limits: Limits) -> StoreInventory {
     let mut walk = SizeWalk {
         limits,
         logical_bytes: 0,
+        allocated_bytes: if cfg!(unix) { Some(0) } else { None },
         file_count: 0,
         capped: false,
         stack: vec![(root.to_path_buf(), 0)],
@@ -76,6 +82,7 @@ fn size_tree(root: &Path, limits: Limits) -> StoreInventory {
     walk.run();
     StoreInventory {
         logical_bytes: walk.logical_bytes,
+        allocated_bytes: walk.allocated_bytes,
         file_count: walk.file_count,
         capped: walk.capped,
         entries: Vec::new(),
@@ -99,11 +106,13 @@ fn list_if_file(root: &Path) -> Option<StoreInventory> {
     let relative = relative_sample(root.parent().unwrap_or(root), root).unwrap_or_default();
     Some(StoreInventory {
         logical_bytes: meta.len(),
+        allocated_bytes: allocated(&meta),
         file_count: 1,
         capped: false,
         entries: vec![StoreEntry {
             relative,
             logical_bytes: meta.len(),
+            allocated_bytes: allocated(&meta),
             file_count: 1,
             is_dir: false,
             capped: false,
@@ -115,22 +124,40 @@ fn list_directory(root: &Path, limits: Limits) -> StoreInventory {
     let Ok(read) = fs::read_dir(root) else {
         return StoreInventory {
             logical_bytes: 0,
+            allocated_bytes: if cfg!(unix) { Some(0) } else { None },
             file_count: 0,
-            capped: false,
+            capped: true,
             entries: Vec::new(),
         };
     };
-    let mut children: Vec<PathBuf> = read.flatten().map(|entry| entry.path()).collect();
+    let mut read_errors = false;
+    let mut children: Vec<PathBuf> = read
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry.path()),
+            Err(_) => {
+                read_errors = true;
+                None
+            }
+        })
+        .collect();
     children.sort();
     let mut entries = Vec::new();
     let mut logical_bytes = 0_u64;
+    let mut allocated_bytes = if cfg!(unix) { Some(0_u64) } else { None };
     let mut file_count = 0_u64;
-    let mut capped = false;
+    let mut capped = read_errors;
     for path in children {
+        if fs::symlink_metadata(&path).is_err() {
+            capped = true;
+            continue;
+        }
         let Some(entry) = child_entry(root, &path, limits) else {
             continue;
         };
         logical_bytes = logical_bytes.saturating_add(entry.logical_bytes);
+        allocated_bytes = allocated_bytes
+            .zip(entry.allocated_bytes)
+            .map(|(left, right)| left.saturating_add(right));
         file_count = file_count.saturating_add(entry.file_count);
         if entry.capped {
             capped = true;
@@ -144,6 +171,7 @@ fn list_directory(root: &Path, limits: Limits) -> StoreInventory {
     }
     StoreInventory {
         logical_bytes,
+        allocated_bytes,
         file_count,
         capped,
         entries,
@@ -168,6 +196,7 @@ fn child_entry(root: &Path, path: &Path, limits: Limits) -> Option<StoreEntry> {
         return Some(StoreEntry {
             relative,
             logical_bytes: sized.logical_bytes,
+            allocated_bytes: sized.allocated_bytes,
             file_count: sized.file_count,
             is_dir: true,
             capped: sized.capped,
@@ -176,6 +205,7 @@ fn child_entry(root: &Path, path: &Path, limits: Limits) -> Option<StoreEntry> {
     Some(StoreEntry {
         relative,
         logical_bytes: meta.len(),
+        allocated_bytes: allocated(&meta),
         file_count: 1,
         is_dir: false,
         capped: false,
@@ -195,9 +225,14 @@ impl SizeWalk {
 
     fn visit_dir(&mut self, dir: &Path, depth: u8) {
         let Ok(entries) = fs::read_dir(dir) else {
+            self.capped = true;
             return;
         };
-        for entry in entries.flatten() {
+        for entry in entries {
+            let Ok(entry) = entry else {
+                self.capped = true;
+                continue;
+            };
             if self.file_count >= u64::from(self.limits.max_files) {
                 self.capped = true;
                 return;
@@ -208,6 +243,7 @@ impl SizeWalk {
 
     fn visit_entry(&mut self, path: &Path, depth: u8) {
         let Ok(meta) = fs::symlink_metadata(path) else {
+            self.capped = true;
             return;
         };
         if meta.file_type().is_symlink() && !meta.is_dir() {
@@ -228,6 +264,10 @@ impl SizeWalk {
             return;
         }
         self.logical_bytes = self.logical_bytes.saturating_add(meta.len());
+        self.allocated_bytes = self
+            .allocated_bytes
+            .zip(allocated(&meta))
+            .map(|(left, right)| left.saturating_add(right));
         self.file_count = self.file_count.saturating_add(1);
     }
 }
@@ -236,4 +276,14 @@ fn relative_sample(root: &Path, path: &Path) -> Option<String> {
     let rel = path.strip_prefix(root).ok()?;
     let text = rel.to_string_lossy();
     (!text.is_empty()).then(|| text.replace('\\', "/"))
+}
+
+#[cfg(unix)]
+fn allocated(meta: &fs::Metadata) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    Some(meta.blocks().saturating_mul(512))
+}
+#[cfg(not(unix))]
+fn allocated(_meta: &fs::Metadata) -> Option<u64> {
+    None
 }

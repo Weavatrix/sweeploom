@@ -1,0 +1,16 @@
+// Cloudflare deploy config for sweeploom.com (static assets Worker).
+// Build first (`npm run build` writes ./out), then: npm run deploy
+// Requires `npx wrangler login` once. The custom_domain routes create the
+// DNS records and certificate for sweeploom.com on this account's zone.
+{
+  "name": "sweeploom",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./out",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "sweeploom.com", "custom_domain": true },
+    { "pattern": "www.sweeploom.com", "custom_domain": true }
+  ]
+}

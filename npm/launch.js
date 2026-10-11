@@ -42,7 +42,7 @@ function run(extraArgs) {
   const executable = resolveBinary();
   if (!executable) {
     process.stderr.write(
-      'sweeploom: no native binary. cargo install sweeploom, or reinstall the npm package after a release build.\n'
+      'sweeploom: no native binary. cargo install --locked --git https://github.com/Weavatrix/sweeploom sweeploom, or reinstall the npm package after a release build.\n'
     );
     return 1;
   }

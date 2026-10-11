@@ -4,22 +4,56 @@ use sweeploom_core::SessionId;
 use sweeploom_history::{Sample, summarize_cpu};
 
 use crate::app::SweepLoomApp;
-use crate::format::format_bytes;
 use crate::nav::Nav;
 use crate::sort::{Col, Sort, header_cell};
-use crate::theme;
-use crate::widgets::{disclose, page_title, sparkline, table_scroll_height};
-use eframe::egui::{self, RichText};
-use egui_extras::{Column, TableBuilder};
+use crate::widgets::{page_title, table_scroll_height};
+use eframe::egui;
+use egui_extras::Column;
 
 use super::history_rows::{self, HistRow, Line};
 
+#[path = "history_cells.rs"]
+mod cells;
+
+/// History sub-view.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HistoryView {
+    /// Observed process CPU/RAM.
+    #[default]
+    Activity,
+    /// Saved Explorer scans and folder measurements.
+    DiskScans,
+}
+
 pub fn ui_history(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    page_title(
+    let hint = match app.history_view {
+        HistoryView::Activity => {
+            "Process CPU and memory observed since SweepLoom started. Groups start collapsed; click a member to open its session."
+        }
+        HistoryView::DiskScans => {
+            "Saved Explorer scans and folder measurements survive restarts. Nothing is invented for time before history was enabled."
+        }
+    };
+    page_title(ui, "History", hint);
+    let scans = app.scan_history.scans().len();
+    let mut view = app.history_view;
+    if crate::widgets::tabs(
         ui,
-        "History",
-        "Groups start collapsed. Click a group to expand it. Click a member to open its session.",
-    );
+        &mut view,
+        &[
+            (HistoryView::Activity, "Process activity".to_owned()),
+            (HistoryView::DiskScans, format!("Disk scans · {scans}")),
+        ],
+    ) {
+        app.history_view = view;
+    }
+    match view {
+        HistoryView::Activity => activity(app, ui),
+        HistoryView::DiskScans => crate::disk_history::ui(app, ui),
+    }
+}
+
+fn activity(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     let Some(snapshot) = &app.snapshot else {
         ui.label("No live snapshot yet.");
         return;
@@ -93,31 +127,30 @@ fn draw_table(
 ) {
     let height = table_scroll_height(ui);
     let count = lines.len();
-    TableBuilder::new(ui)
-        .id_salt("history-grid")
+    crate::widgets::table(ui, "history-grid")
         .striped(true)
         .resizable(true)
         .sense(egui::Sense::click())
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::remainder().at_least(140.0).clip(true))
-        .column(Column::exact(72.0).clip(true))
-        .column(Column::exact(72.0).clip(true))
-        .column(Column::exact(64.0).clip(true))
-        .column(Column::exact(64.0).clip(true))
+        .column(Column::remainder().at_least(200.0).clip(true))
         .column(Column::exact(88.0).clip(true))
-        .column(Column::exact(64.0).clip(true))
-        .header(32.0, |mut header| {
+        .column(Column::exact(88.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .column(Column::exact(76.0).clip(true))
+        .column(Column::exact(140.0).clip(true))
+        .column(Column::exact(76.0).clip(true))
+        .header(30.0, |mut header| {
             header.col(|ui| header_cell(ui, sort, Col::Name, "Process"));
             header.col(|ui| header_cell(ui, sort, Col::Size, "RSS"));
             header.col(|ui| header_cell(ui, sort, Col::Procs, "Peak"));
             header.col(|ui| header_cell(ui, sort, Col::Cpu, "CPU"));
             header.col(|ui| {
-                ui.strong("5m");
+                ui.strong("5m avg");
             });
             header.col(|ui| {
-                ui.strong("Spark");
+                ui.strong("CPU trend");
             });
             header.col(|ui| header_cell(ui, sort, Col::Status, "Samples"));
         })
@@ -125,107 +158,21 @@ fn draw_table(
             body.rows(crate::widgets::TABLE_ROW, count, |mut row| {
                 match lines.get(row.index()) {
                     Some(line @ Line::Group { key, .. }) => {
-                        fill_group(&mut row, line, toggle);
+                        cells::fill_group(&mut row, line, toggle);
                         if row.response().clicked() {
                             *toggle = Some(key.clone());
                         }
                     }
-                    Some(Line::Item(item)) => fill_item(&mut row, item, go, raw),
+                    Some(Line::Item(item)) => cells::fill_item(&mut row, item, go, raw),
                     None => {}
                 }
             });
         });
 }
 
-fn fill_group(row: &mut egui_extras::TableRow<'_, '_>, line: &Line, toggle: &mut Option<String>) {
-    let Line::Group {
-        key,
-        title,
-        kind,
-        rss,
-        peak,
-        cpu,
-        avg_5m,
-        spark,
-        samples,
-        count,
-        expanded,
-    } = line
-    else {
-        return;
-    };
-    row.col(|ui| {
-        if disclose(ui, *expanded, theme::accent()) {
-            *toggle = Some(key.clone());
-        }
-        crate::brand::show_group(ui, title, *kind, 16.0);
-        ui.add(
-            egui::Label::new(RichText::new(format!("{title}  ·  {count}")).strong())
-                .truncate()
-                .selectable(false),
-        );
-    });
-    row.col(|ui| {
-        ui.label(format_bytes(*rss));
-    });
-    row.col(|ui| {
-        ui.label(format_bytes(*peak));
-    });
-    row.col(|ui| {
-        ui.label(format!("{cpu:.1}%"));
-    });
-    row.col(|ui| {
-        ui.label(avg_5m);
-    });
-    row.col(|ui| {
-        sparkline(ui, spark, egui::vec2(80.0, 18.0), theme::accent());
-    });
-    row.col(|ui| {
-        ui.label(samples.to_string());
-    });
-}
-
-fn fill_item(
-    row: &mut egui_extras::TableRow<'_, '_>,
-    item: &HistRow,
-    go: &mut Option<SessionId>,
-    raw: &mut bool,
-) {
-    row.col(|ui| {
-        ui.add_space(16.0);
-        ui.add(
-            egui::Label::new(format!("{}  pid {}", item.name, item.pid))
-                .truncate()
-                .selectable(false),
-        );
-    });
-    row.col(|ui| {
-        ui.label(format_bytes(item.rss));
-    });
-    row.col(|ui| {
-        ui.label(format_bytes(item.peak));
-    });
-    row.col(|ui| {
-        ui.label(format!("{:.1}%", item.cpu));
-    });
-    row.col(|ui| {
-        ui.label(&item.avg_5m);
-    });
-    row.col(|ui| {
-        sparkline(ui, &item.spark, egui::vec2(80.0, 18.0), theme::accent());
-    });
-    row.col(|ui| {
-        ui.label(item.samples.to_string());
-    });
-    if row.response().clicked() {
-        *go = item.session;
-        *raw = item.session.is_none();
-    }
-}
-
 fn avg_short(value: Option<f32>) -> String {
     match value {
         Some(cpu) => format!("{cpu:.1}%"),
-        None => "unavailable".to_owned(),
+        None => "—".to_owned(),
     }
 }

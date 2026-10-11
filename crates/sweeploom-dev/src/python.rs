@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use sweeploom_core::{Blocker, ProcessSnapshot, RebuildCost};
 
-use crate::git::{GitSafety, inspect};
-use crate::size::dir_logical_bytes;
+use crate::git::{GitSafety, blocker_for, inspect};
+use crate::size::dir_size;
 
 /// One Python cleanup offer.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -18,6 +18,8 @@ pub struct PythonOffer {
     pub label: &'static str,
     /// Logical bytes.
     pub logical_bytes: u64,
+    /// False when a cap or read error made this a lower bound.
+    pub size_complete: bool,
     /// Rebuild cost.
     pub rebuild: RebuildCost,
     /// True when auto-select is forbidden.
@@ -31,42 +33,33 @@ pub struct PythonOffer {
 /// Discover Python generated-output offers for one project.
 #[must_use]
 pub fn python_offers(project: &Path, processes: &[ProcessSnapshot]) -> Vec<PythonOffer> {
+    python_offers_with(project, processes, &inspect)
+}
+
+/// [`python_offers`] with a shared Git reader. Git is read only when an offer exists.
+pub(crate) fn python_offers_with(
+    project: &Path,
+    processes: &[ProcessSnapshot],
+    git: &dyn Fn(&Path) -> GitSafety,
+) -> Vec<PythonOffer> {
     if !is_python_project(project) {
         return Vec::new();
     }
-    let blocker = python_blocker(project, processes);
-    let blocked = blocker.is_some();
     let mut offers = Vec::new();
-    push_offer(
-        &mut offers,
-        project,
-        "__pycache__",
-        RebuildCost::Low,
-        true,
-        blocked,
-        blocker,
-    );
-    for cache in [".pytest_cache", ".mypy_cache", ".ruff_cache"] {
-        push_offer(
-            &mut offers,
-            project,
-            cache,
-            RebuildCost::Low,
-            true,
-            blocked,
-            blocker,
-        );
+    for cache in ["__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"] {
+        push_offer(&mut offers, project, cache, RebuildCost::Low, true);
     }
     for env in [".venv", "venv"] {
-        push_offer(
-            &mut offers,
-            project,
-            env,
-            RebuildCost::High,
-            false,
-            blocked,
-            blocker,
-        );
+        push_offer(&mut offers, project, env, RebuildCost::High, false);
+    }
+    if !offers.is_empty() {
+        let tools = ["python", "python3", "pip", "poetry", "uv", "pytest"];
+        let blocker = blocker_for(project, processes, &tools, git);
+        for offer in &mut offers {
+            offer.blocked = blocker.is_some();
+            offer.blocker = blocker;
+            offer.preselect &= blocker.is_none();
+        }
     }
     offers
 }
@@ -77,47 +70,19 @@ fn is_python_project(project: &Path) -> bool {
         .any(|marker| project.join(marker).is_file())
 }
 
-fn python_blocker(project: &Path, processes: &[ProcessSnapshot]) -> Option<Blocker> {
-    if processes
-        .iter()
-        .any(|process| process_blocks(process, project))
-    {
-        return Some(Blocker::ActiveProcess);
-    }
-    let git = inspect(project);
-    if matches!(git, GitSafety::Unknown) {
-        return Some(Blocker::UnknownGitState);
-    }
-    git.assessment().blockers.first().copied()
-}
-
-fn process_blocks(process: &ProcessSnapshot, project: &Path) -> bool {
-    let Some(cwd) = &process.cwd else {
-        return false;
-    };
-    if !cwd.starts_with(project) {
-        return false;
-    }
-    let name = process.name.to_ascii_lowercase();
-    ["python", "python3", "pip", "poetry", "uv", "pytest"]
-        .iter()
-        .any(|needle| name.contains(needle))
-}
-
 fn push_offer(
     offers: &mut Vec<PythonOffer>,
     project: &Path,
     name: &'static str,
     rebuild: RebuildCost,
     preselect: bool,
-    blocked: bool,
-    blocker: Option<Blocker>,
 ) {
     let path = project.join(name);
     if !path.is_dir() {
         return;
     }
-    let logical_bytes = dir_logical_bytes(&path);
+    let size = dir_size(&path);
+    let logical_bytes = size.bytes;
     if logical_bytes == 0 {
         return;
     }
@@ -126,10 +91,11 @@ fn push_offer(
         path,
         label: name,
         logical_bytes,
+        size_complete: size.complete,
         rebuild,
-        blocked,
-        blocker,
-        preselect: preselect && !blocked,
+        blocked: false,
+        blocker: None,
+        preselect,
     });
 }
 

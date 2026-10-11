@@ -70,7 +70,7 @@ pub fn scan_staging_builds(
             pending.push((path, depth + 1));
         }
     }
-    found.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    found.sort_by_key(|build| std::cmp::Reverse(build.bytes));
     Ok(found)
 }
 

@@ -13,6 +13,16 @@ pub struct SessionRow {
     pub index: usize,
     /// App title (Cursor, Claude Code, …).
     pub title: String,
+    /// Workload/installation grouping key; unknown Node launches stay separate.
+    pub group_key: String,
+    /// Runtime, PID and uptime.
+    pub subtitle: String,
+    /// Number of Node executables among all member processes.
+    pub node_procs: usize,
+    /// Observed idle duration or missing coverage.
+    pub status_detail: String,
+    /// Full working directory and launch origin.
+    pub source_tip: String,
     /// Session kind.
     pub kind: SessionKind,
     /// RSS.
@@ -36,6 +46,8 @@ pub enum Line {
         key: String,
         /// Title.
         title: String,
+        /// Number of Node executable processes.
+        node_procs: usize,
         /// Kind of the first member.
         kind: SessionKind,
         /// Sum RSS.
@@ -71,11 +83,14 @@ pub enum Line {
 pub fn table_lines(rows: &[SessionRow], sort: Sort, expanded: &HashSet<String>) -> Vec<Line> {
     let mut buckets: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (index, row) in rows.iter().enumerate() {
-        buckets.entry(row.title.clone()).or_default().push(index);
+        buckets
+            .entry(row.group_key.clone())
+            .or_default()
+            .push(index);
     }
     let mut keys: Vec<String> = buckets.keys().cloned().collect();
     keys.sort_by(|left, right| cmp_bucket(left, right, &buckets, rows, sort));
-    if sort.desc && sort.col != Col::Name {
+    if sort.desc {
         keys.reverse();
     }
     let mut lines = Vec::new();
@@ -125,7 +140,8 @@ fn roll_group(
 ) -> Line {
     Line::Group {
         key: key.to_owned(),
-        title: key.to_owned(),
+        title: rows[indexes[0]].title.clone(),
+        node_procs: indexes.iter().map(|&i| rows[i].node_procs).sum(),
         kind: rows[indexes[0]].kind,
         rss: indexes.iter().map(|&i| rows[i].rss).sum(),
         cpu: indexes.iter().map(|&i| rows[i].cpu).sum(),
@@ -140,7 +156,7 @@ fn roll_group(
 
 fn sort_indexes(indexes: &mut [usize], rows: &[SessionRow], sort: Sort) {
     indexes.sort_by(|&left, &right| cmp_row(&rows[left], &rows[right], sort));
-    if sort.desc && sort.col != Col::Name {
+    if sort.desc {
         indexes.reverse();
     }
 }
@@ -158,9 +174,11 @@ fn cmp_bucket(
         Col::Name => left.cmp(right),
         Col::Procs => sum_procs(left_idx, rows).cmp(&sum_procs(right_idx, rows)),
         Col::Cpu => sum_cpu(left_idx, rows).total_cmp(&sum_cpu(right_idx, rows)),
-        Col::Status => worst_status(left_idx.iter().map(|&i| rows[i].status.as_str())).cmp(
-            &worst_status(right_idx.iter().map(|&i| rows[i].status.as_str())),
-        ),
+        Col::Status | Col::Safety => {
+            worst_status(left_idx.iter().map(|&i| rows[i].status.as_str())).cmp(&worst_status(
+                right_idx.iter().map(|&i| rows[i].status.as_str()),
+            ))
+        }
         Col::Size => sum_rss(left_idx, rows).cmp(&sum_rss(right_idx, rows)),
     }
 }
@@ -170,7 +188,7 @@ fn cmp_row(left: &SessionRow, right: &SessionRow, sort: Sort) -> std::cmp::Order
         Col::Name => left.title.cmp(&right.title),
         Col::Procs => left.procs.cmp(&right.procs),
         Col::Cpu => left.cpu.total_cmp(&right.cpu),
-        Col::Status => left.status.cmp(&right.status),
+        Col::Status | Col::Safety => left.status.cmp(&right.status),
         Col::Size => left.rss.cmp(&right.rss),
     }
 }
@@ -192,7 +210,7 @@ fn shared_project(indexes: &[usize], rows: &[SessionRow]) -> String {
     if indexes.iter().all(|&i| rows[i].project == first) {
         first.to_owned()
     } else {
-        "—".to_owned()
+        "Multiple workspaces".to_owned()
     }
 }
 
@@ -206,11 +224,15 @@ pub(super) fn project_name(path: &std::path::Path) -> String {
 fn worst_status<'a>(labels: impl Iterator<Item = &'a str>) -> String {
     const ORDER: &[&str] = &[
         "High CPU",
+        "Possibly stale",
         "Forgotten",
         "Orphan helper",
         "Idle, heavy RAM",
         "Network active",
         "Active now",
+        "Low activity",
+        "Quiet agent",
+        "Observing",
         "Working",
         "Idle",
         "Unknown",
