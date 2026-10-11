@@ -69,8 +69,7 @@ fn descendant_newer_than_directory_is_not_a_post_plan_write() {
     fs::create_dir_all(&target).unwrap();
     fs::write(target.join("a.bin"), b"stale").unwrap();
     let old = SystemTime::now() - std::time::Duration::from_secs(86400);
-    fs::File::open(&target)
-        .unwrap()
+    open_dir(&target)
         .set_times(fs::FileTimes::new().set_modified(old))
         .unwrap();
     let mut candidate = generated(55, target.clone(), 5);
@@ -108,4 +107,20 @@ fn src_is_never_planned() {
     let plan = build_plan_with(&[candidate], None, &ctx);
     assert!(plan.entries.is_empty());
     let _ = fs::remove_dir_all(&root);
+}
+
+/// A directory handle that can change its times. Windows only opens
+/// directories with `FILE_FLAG_BACKUP_SEMANTICS` and attribute write access.
+fn open_dir(path: &std::path::Path) -> fs::File {
+    #[cfg(windows)]
+    let file = {
+        use std::os::windows::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .write(true)
+            .custom_flags(0x0200_0000)
+            .open(path)
+    };
+    #[cfg(not(windows))]
+    let file = fs::File::open(path);
+    file.unwrap()
 }
