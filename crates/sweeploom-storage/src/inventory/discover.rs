@@ -89,8 +89,7 @@ fn distinct_roots(roots: &[PathBuf]) -> Vec<PathBuf> {
     let mut unique: Vec<PathBuf> = Vec::new();
     for root in roots {
         // Same shape as inventory paths: no `\\?\` verbatim prefix on Windows.
-        let canonical = fs::canonicalize(root).unwrap_or_else(|_| root.clone());
-        let root = super::scan_meta::map_entry(&canonical).into_owned();
+        let root = crate::canonical_path(root);
         if root.is_dir() && !unique.contains(&root) {
             unique.push(root);
         }

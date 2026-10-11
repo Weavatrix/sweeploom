@@ -187,7 +187,7 @@ impl InventoryReport {
     #[must_use]
     pub fn node(&self, path: &Path) -> Option<&DirectoryNode> {
         find_node(&self.tree, path).or_else(|| {
-            let canonical = std::fs::canonicalize(path).ok()?;
+            let canonical = crate::canonical_path(path);
             find_node(&self.tree, &canonical)
         })
     }
@@ -200,7 +200,7 @@ impl InventoryReport {
             .find(|(item, _)| item == path)
             .map(|(_, bytes)| *bytes)
             .or_else(|| {
-                let canonical = std::fs::canonicalize(path).ok()?;
+                let canonical = crate::canonical_path(path);
                 self.project_bytes
                     .iter()
                     .find(|(item, _)| item == &canonical)
@@ -212,10 +212,10 @@ impl InventoryReport {
     /// Allocated folder size for disk-oriented UI, falling back to logical bytes.
     #[must_use]
     pub fn folder_disk_bytes(&self, path: &Path) -> Option<u64> {
-        let canonical = std::fs::canonicalize(path).ok();
+        let canonical = crate::canonical_path(path);
         self.project_disk_bytes
             .iter()
-            .find(|(item, _)| item == path || canonical.as_ref() == Some(item))
+            .find(|(item, _)| item == path || item == &canonical)
             .map(|(_, bytes)| *bytes)
             .or_else(|| self.node(path).map(DirectoryNode::disk_bytes))
             .or_else(|| self.folder_bytes(path))

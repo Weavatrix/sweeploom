@@ -119,9 +119,9 @@ export default function PrivacyPage() {
           <code>sweeploom-theme</code>. It never leaves your browser, and you can clear it with your site data.
         </li>
         <li>
-          <strong>Hosting.</strong> The site is served as static files by Cloudflare. Like any host, Cloudflare processes basic
-          request data such as IP address and user agent to deliver and protect the pages, under its own privacy policy. We do
-          not receive or keep visitor logs for analytics.
+          <strong>Hosting.</strong> The site is served as static files by nginx on our own server at Hetzner in Germany. Access
+          logging is turned off for this site, so visits are not recorded; the server keeps only error logs needed to keep it
+          running. DNS for the domain is provided by Cloudflare.
         </li>
         <li>
           <strong>Links.</strong> Links to GitHub and other sites take you to services with their own policies.

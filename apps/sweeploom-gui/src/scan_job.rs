@@ -180,8 +180,7 @@ impl SweepLoomApp {
         }
         let root = PathBuf::from(self.scan_root.trim());
         let same_root = self.inventory.as_ref().is_some_and(|report| {
-            report.root == root
-                || std::fs::canonicalize(&root).is_ok_and(|path| path == report.root)
+            report.root == root || sweeploom_storage::canonical_path(&root) == report.root
         });
         if !same_root {
             self.inventory = None;

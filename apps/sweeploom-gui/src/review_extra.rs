@@ -82,7 +82,7 @@ fn prepend_project(projects: &mut Vec<PathBuf>, path: Option<&Path>) {
     if !looks_like_project(path) {
         return;
     }
-    let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let canonical = sweeploom_storage::canonical_path(path);
     projects.retain(|item| item != path && item != &canonical);
     projects.insert(0, canonical);
 }

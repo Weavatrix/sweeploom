@@ -67,7 +67,7 @@ fn review_thread_streams_projects_then_rows_then_finishes() {
     let RebuildMsg::Projects(projects) = first else {
         panic!("projects are discovered first");
     };
-    let project = fs::canonicalize(&project).unwrap();
+    let project = sweeploom_storage::canonical_path(&project);
     assert!(projects.contains(&project), "{projects:?}");
     let mut streamed = Vec::new();
     let outcome = loop {

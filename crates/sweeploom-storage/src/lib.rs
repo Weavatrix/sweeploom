@@ -12,10 +12,12 @@ mod classify;
 mod disk_usage;
 mod inventory;
 mod parallel;
+mod paths;
 mod staging;
 
 pub use disk_usage::{DiskUsage, directory_disk_usage};
 pub use parallel::{parallel_map, walk_workers};
+pub use paths::{canonical_path, strip_verbatim};
 
 pub use classify::{
     PathCategory, classify_path_component, is_project_marker, is_project_marker_name,

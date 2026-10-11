@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "changelog": "node scripts/changelog.mjs",
     "preview": "npx --yes serve@14 out -l 4321",
-    "deploy": "npx --yes wrangler@4 deploy"
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "gray-matter": "4.0.3",

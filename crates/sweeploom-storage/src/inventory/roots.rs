@@ -186,8 +186,5 @@ fn same_dir(left: &Path, right: &Path) -> bool {
     if left == right {
         return true;
     }
-    match (fs::canonicalize(left), fs::canonicalize(right)) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => false,
-    }
+    crate::canonical_path(left) == crate::canonical_path(right)
 }

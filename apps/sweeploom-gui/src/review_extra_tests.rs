@@ -9,7 +9,7 @@ fn temp_home(name: &str) -> PathBuf {
     ));
     let _ = fs::remove_dir_all(&home);
     fs::create_dir_all(&home).unwrap();
-    fs::canonicalize(&home).unwrap()
+    sweeploom_storage::canonical_path(&home)
 }
 
 fn project(path: &Path, marker: &str) {

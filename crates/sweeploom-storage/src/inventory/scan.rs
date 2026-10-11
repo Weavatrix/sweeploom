@@ -43,8 +43,7 @@ pub fn scan_inventory_with(
     limits: InventoryLimits,
     mut on_tick: impl FnMut(ScanTick),
 ) -> Result<InventoryReport, WalkError> {
-    let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let scan_root = super::scan_meta::map_entry(&canonical).into_owned();
+    let scan_root = crate::canonical_path(root);
     let shared = Shared::new(limits);
     let queue = Queue::new(&scan_root, &shared);
     std::thread::scope(|scope| {

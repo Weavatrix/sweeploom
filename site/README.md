@@ -26,7 +26,7 @@ npm run build      # static export into ./out (runs prebuild first)
 npm run preview    # serve ./out on http://localhost:4321
 npm run typecheck
 npm run changelog  # regenerate content/changelog.json from git log
-npm run deploy     # Cloudflare (see below); build first
+npm run deploy     # build and publish to the Hetzner host (see below)
 ```
 
 `npm run build` needs network access once per clean build: `next/font`
@@ -118,25 +118,33 @@ The output in `out/` is plain static files with `trailingSlash: true`, so
 `/about/` is `out/about/index.html` and `out/404.html` is the not-found
 page. It works on any static host.
 
-### Cloudflare (primary, sweeploom.com)
+### Hetzner + nginx (sweeploom.com)
 
-Mirrors weavatrix.com: a Worker that serves static assets, configured in
-`wrangler.jsonc` (`assets.directory: ./out`,
-`not_found_handling: 404-page`, custom domains `sweeploom.com` and
-`www.sweeploom.com`).
+The site is served by nginx from `/var/www/sweeploom.com` on the Hetzner
+host `46.225.60.104`. Cloudflare only holds DNS for the zone (no proxy, no
+Worker). [`deploy/nginx.conf`](deploy/nginx.conf) is the site config and
+[`scripts/deploy.sh`](scripts/deploy.sh) does everything over SSH with
+`~/.ssh/hetzner-prod`:
 
 ```sh
-npx wrangler login       # once per machine
-npm run build
-npm run deploy           # npx --yes wrangler@4 deploy
+bash scripts/deploy.sh --setup   # once: nginx, certbot, site config, first upload
+npm run deploy                   # every release: build, rsync --delete, reload
+bash scripts/deploy.sh --tls     # once DNS resolves: Let's Encrypt + HTTPS redirect
 ```
 
-The `custom_domain` routes create the DNS records and certificates on the
-Cloudflare zone for sweeploom.com. `www` is served as a second custom
-domain rather than redirected; add a redirect rule in the dashboard if you
-prefer one canonical host (canonical URLs already point to the apex).
+DNS records in the Cloudflare zone (DNS only, grey cloud):
 
-### Cloudflare Pages or GitHub Pages (alternatives)
+| Type | Name | Value |
+| --- | --- | --- |
+| A | `sweeploom.com` | `46.225.60.104` |
+| AAAA | `sweeploom.com` | `2a01:4f8:1c1f:75e4::1` |
+| A | `www` | `46.225.60.104` |
+| AAAA | `www` | `2a01:4f8:1c1f:75e4::1` |
+
+`SWEEPLOOM_HOST` and `SWEEPLOOM_SSH_KEY` override the target. `www` is
+served as a second name; canonical URLs already point to the apex.
+
+### Other static hosts (alternatives)
 
 - **Pages:** build command `npm run build`, output directory `out`, root
   directory `site`.
