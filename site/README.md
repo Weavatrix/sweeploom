@@ -132,7 +132,8 @@ npm run deploy                   # every release: build, rsync --delete, reload
 bash scripts/deploy.sh --tls     # once DNS resolves: Let's Encrypt + HTTPS redirect
 ```
 
-DNS records in the Cloudflare zone (DNS only, grey cloud):
+DNS records in the Cloudflare zone (DNS only, grey cloud). The A records are
+live; the AAAA ones are optional (the host answers on IPv6 too):
 
 | Type | Name | Value |
 | --- | --- | --- |

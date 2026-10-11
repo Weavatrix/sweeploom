@@ -21,7 +21,12 @@ cd "$(dirname "$0")/.."
 remote() { "${SSH[@]}" "$HOST" "$@"; }
 
 setup() {
-  "${SCP[@]}" deploy/nginx.conf "$HOST:/etc/nginx/sites-available/sweeploom.com"
+  # Once certbot has added the TLS block, the live config is the source of truth.
+  if remote "grep -q 'managed by Certbot' /etc/nginx/sites-available/sweeploom.com 2>/dev/null"; then
+    echo "nginx config already has TLS from certbot; leaving it in place"
+  else
+    "${SCP[@]}" deploy/nginx.conf "$HOST:/etc/nginx/sites-available/sweeploom.com"
+  fi
   remote bash -s <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
