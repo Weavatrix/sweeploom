@@ -131,11 +131,14 @@ fn walk_tree(start: PathBuf, total: &AtomicUsize) -> Vec<PathBuf> {
 }
 
 fn take(total: &AtomicUsize) -> bool {
-    total
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
-            left.checked_sub(1)
-        })
-        .is_ok()
+    let mut left = total.load(Ordering::Relaxed);
+    while left > 0 {
+        match total.compare_exchange_weak(left, left - 1, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return true,
+            Err(actual) => left = actual,
+        }
+    }
+    false
 }
 
 /// Marker presence plus child folders worth entering, sorted by name.

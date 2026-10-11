@@ -120,7 +120,10 @@ mod tests {
     use super::*;
     #[test]
     fn executable_and_script_paths_block_cleanup_outside_the_process_cwd() {
-        let root = Path::new("/cache/npx/one");
+        // `temp_dir` is absolute on every platform; "/cache" is not on Windows.
+        let base = std::env::temp_dir().join("cache").join("npx");
+        let root = base.join("one");
+        let root = root.as_path();
         let mut process = ProcessSnapshot {
             key: ProcessKey::new(1, None),
             pid: 1,
@@ -151,7 +154,7 @@ mod tests {
         assert!(process.uses_path(root));
         process.command = vec![format!("--cache-dir={}", root.display())];
         assert!(process.uses_path(root));
-        process.command = vec!["/cache/npx/one-other/main.js".into()];
+        process.command = vec![base.join("one-other").join("main.js").display().to_string()];
         assert!(!process.uses_path(root));
     }
 }
