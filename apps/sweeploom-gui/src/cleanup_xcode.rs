@@ -249,7 +249,8 @@ pub(super) fn bundle_ids(project: &Path) -> Vec<String> {
     ids
 }
 
-#[cfg(test)]
+// Xcode and the iOS Simulator exist only on macOS.
+#[cfg(all(test, target_os = "macos"))]
 #[path = "cleanup_xcode_tests.rs"]
 mod tests;
 #[cfg(test)]

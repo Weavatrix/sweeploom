@@ -191,6 +191,7 @@ pub(super) fn stream(home: &Path, tx: &Sender<ListingMsg>) {
     let _ = tx.send(ListingMsg::Done);
 }
 
-#[cfg(test)]
+// Xcode and the iOS Simulator exist only on macOS.
+#[cfg(all(test, target_os = "macos"))]
 #[path = "cleanup_ios_tests.rs"]
 mod tests;
