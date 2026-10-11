@@ -15,7 +15,7 @@ fn temp_root(name: &str) -> PathBuf {
             .unwrap_or(0)
     ));
     fs::create_dir_all(&root).unwrap();
-    fs::canonicalize(&root).unwrap()
+    super::scan_meta::map_entry(&fs::canonicalize(&root).unwrap()).into_owned()
 }
 
 fn marker(dir: &Path, name: &str) {
