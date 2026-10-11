@@ -30,7 +30,12 @@ pub(crate) struct GitMemo {
 impl GitMemo {
     pub(crate) fn inspect(&self, path: &Path) -> GitSafety {
         let key = repository_root(path).unwrap_or_else(|| path.to_path_buf());
-        if let Some(known) = self.known.lock().ok().and_then(|map| map.get(&key).cloned()) {
+        if let Some(known) = self
+            .known
+            .lock()
+            .ok()
+            .and_then(|map| map.get(&key).cloned())
+        {
             return known;
         }
         let safety = inspect(path);
@@ -56,10 +61,14 @@ pub(crate) fn blocker_for(
     git: &dyn Fn(&Path) -> GitSafety,
 ) -> Option<Blocker> {
     let busy = processes.iter().any(|process| {
-        process.cwd.as_ref().is_some_and(|cwd| cwd.starts_with(project)) && {
-            let name = process.name.to_ascii_lowercase();
-            tools.iter().any(|tool| name.contains(tool))
-        }
+        process
+            .cwd
+            .as_ref()
+            .is_some_and(|cwd| cwd.starts_with(project))
+            && {
+                let name = process.name.to_ascii_lowercase();
+                tools.iter().any(|tool| name.contains(tool))
+            }
     });
     if busy {
         return Some(Blocker::ActiveProcess);

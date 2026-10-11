@@ -100,9 +100,11 @@ pub fn is_discoverable_below(root: &Path, path: &Path) -> bool {
     let Ok(relative) = path.strip_prefix(root) else {
         return false;
     };
-    relative
-        .components()
-        .all(|part| part.as_os_str().to_str().is_none_or(|name| !is_skip_name(name)))
+    relative.components().all(|part| {
+        part.as_os_str()
+            .to_str()
+            .is_none_or(|name| !is_skip_name(name))
+    })
 }
 
 /// Folder names discovery never descends into.
@@ -171,9 +173,12 @@ fn home_children(home: &Path) -> Vec<(String, PathBuf)> {
 
 fn has_marker(dir: &Path) -> bool {
     fs::read_dir(dir).is_ok_and(|entries| {
-        entries
-            .flatten()
-            .any(|entry| entry.file_name().to_str().is_some_and(is_project_marker_name))
+        entries.flatten().any(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(is_project_marker_name)
+        })
     })
 }
 

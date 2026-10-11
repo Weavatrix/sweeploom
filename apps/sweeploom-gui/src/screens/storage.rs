@@ -16,21 +16,29 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Explorer",
         "Folder inspector. Symlinks are not followed. Scan runs in the background. Use the arrow to expand, checkbox to select, or right-click for actions. Double-click to scan a folder. Size shows allocated disk blocks.",
     );
-    ui.horizontal(|ui| {
-        ui.label("Root");
+    let mut saved_index = None;
+    crate::widgets::toolbar(ui, |ui| {
+        ui.label(
+            RichText::new("Root")
+                .size(13.0)
+                .color(crate::theme::muted(ui)),
+        );
         ui.add(
             egui::TextEdit::singleline(&mut app.scan_root)
-                .desired_width(280.0)
+                .desired_width(360.0)
+                .margin(egui::Margin::symmetric(8, 5))
                 .clip_text(true),
         );
         let walking = app.scan_rx.is_some();
         let scan = if walking { "Scanning…" } else { "Scan" };
-        if crate::widgets::pointer(ui.add_enabled(!walking, egui::Button::new(scan))).clicked() {
+        if crate::widgets::button(ui, scan, !walking).clicked() {
             app.run_scan();
         }
-    });
-    let mut saved_index = None;
-    ui.horizontal_wrapped(|ui| {
+        ui.add(
+            egui::Separator::default()
+                .vertical()
+                .spacing(crate::theme::MD),
+        );
         egui::ComboBox::from_id_salt("explorer-saved-scans")
             .selected_text("Previous scans…")
             .show_ui(ui, |ui| {
@@ -71,7 +79,8 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         crate::disk_history::open_scan(app, index);
     }
     crate::disk_history::history_link(app, ui);
-    ui.horizontal_wrapped(|ui| {
+    ui.add_space(crate::theme::SM);
+    crate::widgets::toolbar(ui, |ui| {
         let paths = app.selected_explorer.iter().cloned().collect::<Vec<_>>();
         crate::disk_actions::toolbar(app, ui, &paths);
     });
@@ -162,13 +171,13 @@ fn folder_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         .min_scrolled_height(height)
         .max_scroll_height(height)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::exact(36.0).resizable(false))
+        .column(Column::exact(34.0).resizable(false))
         .column(Column::remainder().at_least(160.0).clip(true))
         .column(Column::exact(110.0).clip(true))
         .column(Column::exact(100.0).clip(true))
-        .column(Column::exact(100.0).clip(true))
-        .column(Column::exact(64.0).clip(true))
-        .header(32.0, |mut header| {
+        .column(Column::exact(120.0).clip(true))
+        .column(Column::exact(72.0).clip(true))
+        .header(30.0, |mut header| {
             header.col(|ui| {
                 let mut all =
                     !lines.is_empty() && lines.iter().all(|line| selection.contains(&line.path));

@@ -1,19 +1,18 @@
 //! Parallel walk and bottom-up aggregation.
 //!
-//! The root (and, for narrow trees, a few levels below it) is listed first;
-//! every remaining subtree is walked contents-first on a worker and folded
-//! into the root as it finishes. Each file costs exactly one `lstat`.
+//! Folders are read on a bounded worker pool from a shared stack; each folder
+//! folds into its parent once its last child is done. Each file costs exactly
+//! one `lstat`; folder names and types come from `readdir`.
 
-use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use weavatrix_scan::WalkError;
 
 use super::node::{DirectoryNode, InventoryLimits, InventoryReport};
 use super::scan_fold::Fold;
-use super::scan_plan::{Preview, Shared, plan, walk};
-use crate::parallel::{parallel_map, walk_workers};
+use super::scan_queue::{Queue, Shared};
+use crate::parallel::walk_workers;
 
 const TICK: Duration = Duration::from_millis(150);
 
@@ -45,35 +44,19 @@ pub fn scan_inventory_with(
     mut on_tick: impl FnMut(ScanTick),
 ) -> Result<InventoryReport, WalkError> {
     let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let scan_root = super::scan_fold::map_entry(&canonical).into_owned();
-    let workers = walk_workers();
+    let scan_root = super::scan_meta::map_entry(&canonical).into_owned();
     let shared = Shared::new(limits);
-    let mut fold = Fold::default();
-    let plan = plan(&scan_root, &shared, &mut fold, workers);
-    let mut preview = Preview::new(&scan_root, &plan, &fold);
-    let mut finished: Vec<Option<(DirectoryNode, Fold)>> = plan.tasks.iter().map(|_| None).collect();
-    let tasks: Vec<(usize, PathBuf)> = plan.tasks.iter().cloned().enumerate().collect();
-    let (tx, rx) = mpsc::channel();
+    let queue = Queue::new(&scan_root, &shared);
     std::thread::scope(|scope| {
-        let (shared, scan_root) = (&shared, scan_root.as_path());
-        scope.spawn(move || {
-            parallel_map(tasks, workers, |(index, dir)| {
-                let _ = tx.send((index, walk(&dir, scan_root, shared)));
-            });
-        });
+        for _ in 0..walk_workers() {
+            scope.spawn(|| queue.work());
+        }
         let mut last_tick = Instant::now();
-        loop {
-            match rx.recv_timeout(TICK) {
-                Ok((index, (node, task))) => {
-                    preview.finished(scan_root, &node);
-                    finished[index] = Some((node, task));
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            }
+        while !queue.is_done() {
+            std::thread::sleep(Duration::from_millis(20));
             if last_tick.elapsed() >= TICK {
                 last_tick = Instant::now();
-                let root = preview.root(scan_root, &fold, limits.max_children_per_dir);
+                let root = queue.preview();
                 on_tick(ScanTick {
                     entries: shared.entries(),
                     logical_bytes: root.logical_bytes,
@@ -84,18 +67,12 @@ pub fn scan_inventory_with(
             }
         }
     });
-    // Merge in task order so project lists do not depend on worker timing.
-    for (node, task) in finished.into_iter().flatten() {
-        fold.merge(task, limits.max_projects);
-        fold.insert_node(node);
-    }
-    shared.add_entries(plan.shells.len() as u64);
-    Ok(finish(fold, &scan_root, &shared))
+    Ok(finish(queue.into_fold(), &scan_root, &shared))
 }
 
 fn finish(mut fold: Fold, scan_root: &Path, shared: &Shared) -> InventoryReport {
     let capped = shared.capped();
-    let mut tree = fold.collapse(scan_root, shared.limits.max_children_per_dir, scan_root);
+    let mut tree = fold.take(scan_root);
     tree.incomplete |= capped;
     tree.logical_bytes = tree.logical_bytes.max(fold.visited_logical);
     if fold.is_project(scan_root) {
@@ -104,10 +81,20 @@ fn finish(mut fold: Fold, scan_root: &Path, shared: &Shared) -> InventoryReport 
         fold.project_disk_bytes
             .insert(scan_root.to_path_buf(), tree.disk_bytes());
     }
+    // Workers finish in any order; keep a stable, path-ordered project list.
+    let mut projects = fold.projects;
+    projects.sort();
+    projects.truncate(shared.limits.max_projects);
+    let kept: std::collections::HashSet<&Path> =
+        projects.iter().map(|path| path.as_path()).collect();
+    fold.project_bytes
+        .retain(|path, _| kept.contains(path.as_path()));
+    fold.project_disk_bytes
+        .retain(|path, _| kept.contains(path.as_path()));
     InventoryReport {
         root: scan_root.to_path_buf(),
         tree,
-        projects: fold.projects,
+        projects,
         project_bytes: fold.project_bytes.into_iter().collect(),
         project_disk_bytes: fold.project_disk_bytes.into_iter().collect(),
         entries: shared.entries(),

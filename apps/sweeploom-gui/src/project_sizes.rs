@@ -12,6 +12,9 @@ use sweeploom_storage::{DiskUsage, directory_disk_usage};
 
 type Measured = (PathBuf, Result<DiskUsage, String>);
 
+/// Saved sizes younger than this are not re-walked on launch; Refresh still does.
+const RECENT_MS: u64 = 12 * 60 * 60 * 1000;
+
 /// Marker facts for one project row, read once per Review rebuild.
 #[derive(Clone)]
 pub(crate) struct ProjectFacts {
@@ -42,6 +45,8 @@ pub(crate) struct ProjectSizes {
     values: HashMap<PathBuf, Result<DiskUsage, String>>,
     /// Measured since the last refresh. Everything else is a saved value.
     fresh: HashSet<PathBuf>,
+    /// Saved values recent enough to skip until the next explicit refresh.
+    recent: HashSet<PathBuf>,
     worker: Option<Receiver<Measured>>,
     discard_worker: bool,
     revision: u64,
@@ -51,14 +56,17 @@ pub(crate) struct ProjectSizes {
 impl ProjectSizes {
     pub(crate) fn restore(history: &crate::scan_history::ScanHistory) -> Self {
         let mut sizes = Self::default();
+        let now = crate::scan_history::now_ms();
         for series in history
             .series()
             .iter()
             .filter(|series| series.source == crate::scan_history::Source::Projects)
         {
-            sizes
-                .values
-                .insert(series.path.clone(), Ok(series.latest().usage));
+            let latest = series.latest();
+            if now.saturating_sub(latest.at) < RECENT_MS {
+                sizes.recent.insert(series.path.clone());
+            }
+            sizes.values.insert(series.path.clone(), Ok(latest.usage));
         }
         sizes
     }
@@ -78,6 +86,7 @@ impl ProjectSizes {
     /// Re-measure everything in the background, keeping current values on screen.
     pub(crate) fn invalidate(&mut self) {
         self.fresh.clear();
+        self.recent.clear();
         self.discard_worker = self.worker.is_some();
         self.revision = self.revision.wrapping_add(1);
     }
@@ -126,7 +135,7 @@ impl ProjectSizes {
         }
         let paths: Vec<_> = paths
             .iter()
-            .filter(|path| !self.fresh.contains(*path))
+            .filter(|path| !self.fresh.contains(*path) && !self.recent.contains(*path))
             .take(8)
             .cloned()
             .collect();

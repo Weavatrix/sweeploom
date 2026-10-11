@@ -20,6 +20,7 @@ mod review;
 mod session_actions;
 mod session_detail;
 mod session_fills;
+mod session_git;
 mod session_label;
 mod session_members;
 mod session_observe;

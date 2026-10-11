@@ -147,30 +147,6 @@ pub(super) fn parse_devices(value: &Value) -> Vec<Item> {
     sims(value).iter().map(|sim| item(sim, &set)).collect()
 }
 
-/// Synchronous form for the job runner: the whole stream folded into one listing.
-pub(super) fn ios_listing() -> Listing {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    let (tx, rx) = crossbeam_channel::unbounded();
-    stream(&home, &tx);
-    drop(tx);
-    let mut listing = Listing::default();
-    for message in rx.try_iter() {
-        match message {
-            ListingMsg::Initial(next) => listing = next,
-            ListingMsg::Measured(item) => {
-                if let Some(old) = listing.items.iter_mut().find(|old| old.id == item.id) {
-                    *old = item;
-                }
-            }
-            ListingMsg::Failed(error) => listing.note = error,
-            ListingMsg::Done => {}
-        }
-    }
-    listing
-}
-
 /// Rows from disk at once, simctl confirmation next, then app/Git verdicts and sizes.
 pub(super) fn stream(home: &Path, tx: &Sender<ListingMsg>) {
     let host = command("/usr/sbin/sysctl", &["-n", "kern.osversion"])

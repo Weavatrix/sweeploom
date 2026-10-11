@@ -36,16 +36,17 @@ pub(super) fn breakdowns(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                 open = Some(Nav::DiskHistory);
             }
             if let Some(scan) = app.scan_history.scans().last() {
-                let name = scan
-                    .report
-                    .root
-                    .file_name()
-                    .map_or_else(|| scan.report.root.display().to_string(), |n| n.to_string_lossy().into_owned());
+                let name = scan.report.root.file_name().map_or_else(
+                    || scan.report.root.display().to_string(),
+                    |n| n.to_string_lossy().into_owned(),
+                );
                 let caption = format!(
                     "Last Explorer scan: {name} · {}",
                     crate::format::ago(crate::scan_history::now_ms(), scan.at)
                 );
-                let text = egui::RichText::new(caption).size(12.5).color(theme::muted(ui));
+                let text = egui::RichText::new(caption)
+                    .size(12.5)
+                    .color(theme::muted(ui));
                 if widgets::pointer(ui.add(egui::Label::new(text).sense(egui::Sense::click())))
                     .on_hover_text(scan.report.root.display().to_string())
                     .clicked()
@@ -110,7 +111,7 @@ fn disk_segments(app: &SweepLoomApp, ui: &egui::Ui) -> (String, Vec<Segment>) {
         return ("No volume information".into(), Vec::new());
     };
     let used = total.saturating_sub(*avail);
-    let review = super::review_bytes(app);
+    let review = super::tiles::review_bytes(app);
     let reclaim = review.map_or(0, |(bytes, _)| bytes.min(used));
     let review = review.filter(|(bytes, _)| *bytes > 0);
     let mut segments = vec![Segment {
@@ -153,7 +154,10 @@ fn largest(app: &SweepLoomApp, ui: &mut egui::Ui) -> bool {
             continue;
         }
         let path = series.path.as_path();
-        if top.iter().any(|(p, ..)| p.starts_with(path) || path.starts_with(p)) {
+        if top
+            .iter()
+            .any(|(p, ..)| p.starts_with(path) || path.starts_with(p))
+        {
             continue;
         }
         top.push((path, bytes, series.delta().map(|(d, _)| d)));
@@ -163,7 +167,11 @@ fn largest(app: &SweepLoomApp, ui: &mut egui::Ui) -> bool {
     if top.is_empty() {
         return false;
     }
-    ui.label(egui::RichText::new("Largest measured locations").size(12.5).color(theme::muted(ui)));
+    ui.label(
+        egui::RichText::new("Largest measured locations")
+            .size(12.5)
+            .color(theme::muted(ui)),
+    );
     ui.add_space(theme::XS);
     let max = top.first().map_or(1, |(_, b, _)| *b).max(1);
     let mut clicked = false;
@@ -179,10 +187,20 @@ fn largest(app: &SweepLoomApp, ui: &mut egui::Ui) -> bool {
                     ui.add(egui::Label::new(egui::RichText::new(name).size(13.0)).truncate());
                 },
             );
-            widgets::meter(ui, *bytes as f32 / max as f32, theme::series(ui, 0), 80.0, 6.0);
+            widgets::meter(
+                ui,
+                *bytes as f32 / max as f32,
+                theme::series(ui, 0),
+                80.0,
+                6.0,
+            );
             ui.label(egui::RichText::new(format_bytes(*bytes)).size(13.0));
             if let Some(delta) = delta.filter(|d| *d != 0) {
-                let tone = if delta > 0 { theme::Tone::Caution } else { theme::Tone::Ok };
+                let tone = if delta > 0 {
+                    theme::Tone::Caution
+                } else {
+                    theme::Tone::Ok
+                };
                 ui.label(
                     egui::RichText::new(crate::scan_history::signed_bytes(delta))
                         .size(12.0)
@@ -196,7 +214,13 @@ fn largest(app: &SweepLoomApp, ui: &mut egui::Ui) -> bool {
     clicked
 }
 
-const WORKLOADS: [&str; 5] = ["AI agents", "Dev servers & builds", "MCP servers", "Browsers", "Apps & other"];
+const WORKLOADS: [&str; 5] = [
+    "AI agents",
+    "Dev servers & builds",
+    "MCP servers",
+    "Browsers",
+    "Apps & other",
+];
 
 fn workload(kind: sweeploom_core::SessionKind) -> usize {
     use sweeploom_core::SessionKind as K;
@@ -234,5 +258,8 @@ fn workload_segments(app: &SweepLoomApp, ui: &egui::Ui) -> (String, Vec<Segment>
             },
         })
         .collect();
-    (format!("{} RSS across sessions", format_bytes(total)), segments)
+    (
+        format!("{} RSS across sessions", format_bytes(total)),
+        segments,
+    )
 }

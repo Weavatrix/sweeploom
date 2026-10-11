@@ -233,7 +233,11 @@ fn rescan_keeps_previous_sizes_on_screen_but_records_only_fresh_ones() {
     second.send(ListingMsg::Measured(verdict)).unwrap();
     cleanup.poll_listings(&mut history);
     let shown = &cleanup.active().listing.as_ref().unwrap().items[0];
-    assert_eq!(shown.bytes, Some(700), "previous size stays until re-measured");
+    assert_eq!(
+        shown.bytes,
+        Some(700),
+        "previous size stays until re-measured"
+    );
     assert!(shown.selected);
     assert_eq!(shown.status, "Project still exists");
     std::thread::sleep(std::time::Duration::from_millis(5));
@@ -242,5 +246,9 @@ fn rescan_keeps_previous_sizes_on_screen_but_records_only_fresh_ones() {
     let series = history
         .get(Source::Native, &PathBuf::from("/cache"))
         .unwrap();
-    assert_eq!(series.points.len(), 1, "carried sizes are not new measurements");
+    assert_eq!(
+        series.points.len(),
+        1,
+        "carried sizes are not new measurements"
+    );
 }

@@ -98,7 +98,7 @@ fn inventory_projects_outside_developer_roots_are_merged() {
     let found = project_roots(
         Some(&scan_root),
         &locations(&home),
-        &[external.clone()],
+        std::slice::from_ref(&external),
         None,
     );
     assert!(found.contains(&home.join("dev").join("one")));

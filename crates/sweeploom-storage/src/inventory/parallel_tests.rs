@@ -31,7 +31,10 @@ fn marker(dir: &Path, name: &str) {
 fn one_huge_tree_cannot_crowd_out_its_siblings() {
     let root = temp_root("fair");
     for index in 0..80 {
-        marker(&root.join("a-mono").join(format!("pkg{index:02}")), "package.json");
+        marker(
+            &root.join("a-mono").join(format!("pkg{index:02}")),
+            "package.json",
+        );
     }
     marker(&root.join("a-mono"), "package.json");
     marker(&root.join("b-ios"), "App.xcodeproj");
@@ -41,7 +44,10 @@ fn one_huge_tree_cannot_crowd_out_its_siblings() {
     fs::remove_dir_all(&root).ok();
     assert_eq!(found.len(), 10, "{found:?}");
     for name in ["a-mono", "b-ios", "c-swift", "d-repo"] {
-        assert!(found.contains(&root.join(name)), "{name} missing: {found:?}");
+        assert!(
+            found.contains(&root.join(name)),
+            "{name} missing: {found:?}"
+        );
     }
 }
 
@@ -50,9 +56,18 @@ fn discovery_skips_hidden_generated_and_bundle_folders() {
     let root = temp_root("skips");
     let app = root.join("app");
     marker(&app, "Cargo.toml");
-    marker(&app.join(".claude").join("worktrees").join("copy"), "Cargo.toml");
-    marker(&app.join("DerivedDataUI").join("SourcePackages").join("dep"), "Package.swift");
-    marker(&app.join(".build").join("checkouts").join("dep"), "Package.swift");
+    marker(
+        &app.join(".claude").join("worktrees").join("copy"),
+        "Cargo.toml",
+    );
+    marker(
+        &app.join("DerivedDataUI").join("SourcePackages").join("dep"),
+        "Package.swift",
+    );
+    marker(
+        &app.join(".build").join("checkouts").join("dep"),
+        "Package.swift",
+    );
     marker(&app.join("Pods").join("Lib"), "Podfile");
     marker(&app.join("App.xcodeproj").join("inner"), "Cargo.toml");
     marker(&app.join("ios"), "App.xcworkspace");
@@ -96,9 +111,20 @@ fn parallel_inventory_matches_the_tree_and_is_deterministic() {
     assert!(first.folder_bytes(&root.join("top07")).is_some());
     assert_eq!(first.tree, second.tree);
     assert_eq!(first.projects, second.projects);
-    let sizes: Vec<u64> = first.tree.children.iter().map(|child| child.disk_bytes()).collect();
+    let sizes: Vec<u64> = first
+        .tree
+        .children
+        .iter()
+        .map(|child| child.disk_bytes())
+        .collect();
     assert!(sizes.windows(2).all(|pair| pair[0] >= pair[1]), "{sizes:?}");
-    assert!(first.tree.children.iter().all(|child| child.children.len() == 3));
+    assert!(
+        first
+            .tree
+            .children
+            .iter()
+            .all(|child| child.children.len() == 3)
+    );
 }
 
 #[test]
@@ -112,7 +138,12 @@ fn streamed_preview_lists_top_level_folders_while_walking() {
     .unwrap();
     fs::remove_dir_all(&root).ok();
     for preview in previews {
-        assert!(preview.children.iter().all(|child| child.children.is_empty()));
+        assert!(
+            preview
+                .children
+                .iter()
+                .all(|child| child.children.is_empty())
+        );
         assert!(preview.logical_bytes <= report.tree.logical_bytes);
     }
 }

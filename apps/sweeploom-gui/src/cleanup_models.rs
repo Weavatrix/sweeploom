@@ -195,7 +195,7 @@ fn blob_usage(root: &Path, value: &Value) -> DiskUsage {
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .chain(value.get("config").into_iter());
+        .chain(value.get("config"));
     for descriptor in descriptors {
         let digest = super::text(descriptor, "digest");
         if !valid_digest(&digest) {

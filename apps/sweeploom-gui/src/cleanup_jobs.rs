@@ -20,15 +20,11 @@ impl SweepLoomApp {
         state.start(rx);
         std::thread::spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match pane {
-                Pane::Docker | Pane::Ios => {
-                    let listing = if pane == Pane::Docker {
-                        docker_listing(&home)
-                    } else {
-                        ios_listing()
-                    };
-                    let _ = tx.send(ListingMsg::Initial(listing));
+                Pane::Docker => {
+                    let _ = tx.send(ListingMsg::Initial(docker_listing(&home)));
                     let _ = tx.send(ListingMsg::Done);
                 }
+                Pane::Ios => ios::stream(&home, &tx),
                 _ => sources::stream(&home, pane, &tx),
             }));
             if result.is_err() {

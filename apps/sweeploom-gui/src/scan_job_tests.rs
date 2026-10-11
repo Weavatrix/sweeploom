@@ -1,6 +1,7 @@
 use super::merge::{merge_rows, replace_rows};
 use super::*;
 use std::fs;
+use std::path::Path;
 use std::time::Duration;
 use sweeploom_core::{
     ActivityEvidence, Blocker, CandidateId, CandidateKind, CandidateOwner, DeletionStrategy,
@@ -79,7 +80,11 @@ fn review_thread_streams_projects_then_rows_then_finishes() {
     let _ = fs::remove_dir_all(&root);
     let (_, rows) = outcome.expect("rebuild finished");
     let node_modules = project.join("node_modules");
-    assert!(streamed.iter().any(|row| row.candidate.path == node_modules));
+    assert!(
+        streamed
+            .iter()
+            .any(|row| row.candidate.path == node_modules)
+    );
     assert!(rows.iter().any(|row| row.candidate.path == node_modules));
 }
 
@@ -110,9 +115,18 @@ fn row(path: &str, bytes: u64, selected: bool) -> ReviewRow {
 
 #[test]
 fn streamed_rows_update_in_place_and_keep_every_other_row() {
-    let mut review = vec![row("/p/target", 10, false), row("/q/node_modules", 20, true)];
-    merge_rows(&mut review, vec![row("/p/target", 30, true), row("/r/.venv", 5, false)]);
-    let paths: Vec<_> = review.iter().map(|item| item.candidate.path.clone()).collect();
+    let mut review = vec![
+        row("/p/target", 10, false),
+        row("/q/node_modules", 20, true),
+    ];
+    merge_rows(
+        &mut review,
+        vec![row("/p/target", 30, true), row("/r/.venv", 5, false)],
+    );
+    let paths: Vec<_> = review
+        .iter()
+        .map(|item| item.candidate.path.clone())
+        .collect();
     assert_eq!(
         paths,
         ["/p/target", "/q/node_modules", "/r/.venv"].map(PathBuf::from)
@@ -133,5 +147,9 @@ fn final_rows_drop_vanished_paths_and_never_keep_blocked_rows_selected() {
     assert_eq!(review.len(), 2);
     assert!(!review[0].selected);
     assert_eq!(review[1].candidate.path, PathBuf::from("/new"));
-    assert!(review.iter().all(|item| item.candidate.path != PathBuf::from("/gone")));
+    assert!(
+        review
+            .iter()
+            .all(|item| item.candidate.path != Path::new("/gone"))
+    );
 }

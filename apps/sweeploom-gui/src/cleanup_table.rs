@@ -215,34 +215,39 @@ fn fill_row(
             &item.history_key(),
         );
     });
-    row.col(|ui| {
-        let status = if item.enabled && !item.cleanable(processes) {
-            format!("In use or awaiting process evidence; {}", item.status)
-        } else {
-            item.status.clone()
-        };
-        let tone = if item.enabled && !item.cleanable(processes) {
-            crate::theme::Tone::Caution
-        } else if item.enabled {
-            crate::theme::Tone::Neutral
-        } else {
-            crate::theme::Tone::Muted
-        };
-        ui.spacing_mut().item_spacing.x = 6.0;
-        let rest = match verdict(&status) {
-            Some((word, tone, rest)) => {
-                widgets::pill(ui, word, tone);
-                rest
-            }
-            None => status.as_str(),
-        };
-        ui.add(
-            egui::Label::new(egui::RichText::new(rest).color(crate::theme::tone(ui, tone)))
-                .truncate(),
-        )
-        .on_hover_text(&status);
-    });
+    row.col(|ui| status_cell(ui, item, processes));
     reveal
+}
+
+fn status_cell(
+    ui: &mut egui::Ui,
+    item: &Item,
+    processes: Option<&[sweeploom_core::ProcessSnapshot]>,
+) {
+    let status = if item.enabled && !item.cleanable(processes) {
+        format!("In use or awaiting process evidence; {}", item.status)
+    } else {
+        item.status.clone()
+    };
+    let tone = if item.enabled && !item.cleanable(processes) {
+        crate::theme::Tone::Caution
+    } else if item.enabled {
+        crate::theme::Tone::Neutral
+    } else {
+        crate::theme::Tone::Muted
+    };
+    ui.spacing_mut().item_spacing.x = 6.0;
+    let rest = match verdict(&status) {
+        Some((word, tone, rest)) => {
+            widgets::pill(ui, word, tone);
+            rest
+        }
+        None => status.as_str(),
+    };
+    ui.add(
+        egui::Label::new(egui::RichText::new(rest).color(crate::theme::tone(ui, tone))).truncate(),
+    )
+    .on_hover_text(&status);
 }
 
 /// Leading verdict word ("Suggested · …") as a pill, so the column scans at a glance.

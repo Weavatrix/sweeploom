@@ -28,6 +28,11 @@ use crate::sort::Sort;
 use crate::theme;
 use crate::tray::{self, TrayIconHandle};
 
+#[path = "app_build.rs"]
+mod build;
+#[path = "app_live.rs"]
+mod live_state;
+
 /// Live UI application.
 pub struct SweepLoomApp {
     pub(crate) nav: Nav,
@@ -126,182 +131,22 @@ impl SweepLoomApp {
         tray::install_wake(cc.egui_ctx.clone());
         let mut sampler = ProcessSampler::new();
         let (snapshot, sessions) = live::sample_with(&mut sampler, &locations);
-        let mut app = Self {
-            nav: Nav::Overview,
+        let mut app = build::build(build::Boot {
             sampler,
-            last_sample: Instant::now(),
-            last_quiet: Instant::now(),
-            snapshot: Some(snapshot),
+            snapshot,
             sessions,
-            node_versions: Default::default(),
-            selected_session: None,
-            group_raw: false,
-            session_search: String::new(),
-            show_all_apps: false,
-            session_sort: Sort::size_desc(),
-            review_sort: Sort::size_desc(),
-            project_sort: Sort::size_desc(),
-            project_group: ProjectGroup::Parent,
-            collapsed_project_groups: HashSet::new(),
-            project_cards: Vec::new(),
-            project_card_stamp: u64::MAX,
-            project_sizes: Default::default(),
-            ai_sort: Sort::size_desc(),
-            ai_group: AiGroup::Tool,
-            collapsed_ai_groups: HashSet::new(),
-            expanded_history: HashSet::new(),
-            expanded_sessions: HashSet::new(),
-            explorer_sort: Sort::size_desc(),
-            selected_explorer: HashSet::new(),
-            selected_projects: HashSet::new(),
-            disk_actions: Default::default(),
-            native_cleanup: Default::default(),
-            expanded_explorer: HashSet::new(),
-            process_sort: Sort::size_desc(),
-            history_sort: Sort::size_desc(),
-            history: HistoryStore::default(),
-            inventory: saved.as_ref().map(|saved| saved.report.clone()),
-            inventory_error: None,
-            inventory_at: saved.as_ref().map(|saved| saved.at),
-            inventory_cached: saved.is_some(),
-            disk_history_filter: String::new(),
-            disk_history_selected: None,
-            scan_root: saved.as_ref().map_or_else(
-                || locations.home.display().to_string(),
-                |saved| saved.report.root.display().to_string(),
-            ),
+            saved,
+            cached_projects,
             scan_history,
             locations,
-            confirm_terminate: false,
-            pending_stop: None,
-            observation: ObservationTracker::default(),
-            confirm_force: false,
-            pending_force: None,
-            action_message: None,
-            review: Vec::new(),
-            last_receipt: None,
-            last_cleanup_summary: None,
-            free_gb: "1".to_owned(),
-            free_ram_gb: "2".to_owned(),
-            reduce_cpu: "10".to_owned(),
-            planned_keys: HashSet::new(),
-            helper_keys: HashSet::new(),
-            confirm_planned: false,
-            confirm_helpers: false,
-            browser: BrowserUi::default(),
-            current_project: live::current_project(),
-            project_roots: cached_projects,
-            last_busy: HashMap::new(),
-            volumes: volume_space(),
-            scanning: false,
-            scan_entries: 0,
-            scan_bytes: 0,
-            scan_hint: String::new(),
-            ai_offers: None,
-            ai_listing: false,
             prefs,
-            hidden: false,
-            hid_at: Instant::now(),
-            tray: None,
-            force_quit: false,
             start_hidden,
-            scan_rx: None,
-            rebuild_rx: None,
-            review_after_scan: false,
-            apply_rx: None,
-            ai_rx: None,
-        };
+        });
         live::stamp_first(&mut app);
         app.rebuild_review();
         // Startup Review refresh must not erase persisted folder measurements.
         app.project_sizes = cached_sizes;
         app
-    }
-
-    pub(crate) fn observation_gap(&self) -> bool {
-        self.observation.has_gap()
-    }
-
-    pub(crate) fn persist_prefs(&self) {
-        self.prefs
-            .save(&self.locations.app_config.join("prefs.json"));
-    }
-
-    pub(crate) fn sync_tray(&mut self) {
-        if self.prefs.tray_enabled && tray::is_supported() {
-            if self.tray.is_none() {
-                self.tray = tray::create();
-            }
-        } else {
-            self.tray = None;
-        }
-    }
-
-    pub(crate) fn leave_background(&mut self, ctx: &egui::Context) {
-        self.hidden = false;
-        ctx.send_viewport_cmd(ViewportCommand::InnerSize(egui::vec2(1360.0, 860.0)));
-        // Visible(false) stops Windows redraws, so restore both flags.
-        ctx.send_viewport_cmd(ViewportCommand::Visible(true));
-        ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
-        ctx.send_viewport_cmd(ViewportCommand::Focus);
-        ctx.request_repaint();
-        self.refresh_now();
-    }
-
-    pub(crate) fn enter_background(&mut self, ctx: &egui::Context) {
-        self.hidden = true;
-        self.hid_at = Instant::now();
-        self.history = HistoryStore::default();
-        // Disk results (AI stores, Review, Projects, Explorer) survive the tray;
-        // only live process state is dropped.
-        self.snapshot = None;
-        self.sessions.clear();
-        self.planned_keys.clear();
-        self.selected_session = None;
-        self.pending_stop = None;
-        self.observation.mark_gap();
-        self.sampler.enter_quiet();
-        ctx.send_viewport_cmd(ViewportCommand::CancelClose);
-        // Keep the window visible to winit so tray clicks still wake a frame.
-        ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
-        ctx.request_repaint();
-    }
-
-    pub(crate) fn refresh_live(&mut self) {
-        if self.last_sample.elapsed() < Duration::from_secs(1) {
-            return;
-        }
-        self.refresh_now();
-    }
-
-    fn refresh_now(&mut self) {
-        let mut snapshot = self.sampler.refresh(Duration::ZERO);
-        snapshot.resolve_parents();
-        let _ = enrich_network(&mut snapshot.processes);
-        self.history
-            .record(&snapshot.processes, snapshot.captured_at);
-        let roots = live::session_roots(self);
-        live::rescore(
-            &mut self.sessions,
-            &mut self.last_busy,
-            &mut snapshot,
-            self.current_project.as_ref(),
-            &roots,
-            &mut self.observation,
-        );
-        let live_keys: HashSet<ProcessKey> = self
-            .sessions
-            .iter()
-            .flat_map(|session| session.processes.iter().copied())
-            .collect();
-        self.planned_keys.retain(|key| live_keys.contains(key));
-        self.helper_keys.retain(|key| live_keys.contains(key));
-        let live_sessions: HashSet<SessionId> = self.sessions.iter().map(|item| item.id).collect();
-        self.browser
-            .tree_ids
-            .retain(|id| live_sessions.contains(id));
-        self.snapshot = Some(snapshot);
-        self.last_sample = Instant::now();
     }
 }
 

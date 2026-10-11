@@ -9,7 +9,6 @@ use sweeploom_session::{plan_free_ram, plan_quiet_workstation, plan_reduce_cpu};
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
 use crate::widgets;
-use sweeploom_dev::inspect;
 
 /// Planner group: pre-select sessions by RAM, CPU or quiet target. Confirm UI is [`extras`].
 pub fn controls(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -160,7 +159,7 @@ fn draw_confirm(app: &mut SweepLoomApp, ui: &mut egui::Ui, planned: &[LiveSessio
         session
             .project
             .as_ref()
-            .is_some_and(|project| inspect(&project.0).assessment().is_blocked())
+            .is_some_and(|project| super::session_git::blocked(ui.ctx(), &project.0) == Some(true))
     }) {
         ui.colored_label(
             ui.visuals().warn_fg_color,

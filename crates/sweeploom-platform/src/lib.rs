@@ -191,6 +191,7 @@ fn native_identity(_path: &Path, _meta: &std::fs::Metadata) -> Option<(u64, u64)
     None
 }
 
+#[cfg(windows)]
 fn path_fingerprint(path: &Path) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();

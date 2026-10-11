@@ -2,19 +2,20 @@
 
 use eframe::egui::{self, RichText};
 use sweeploom_browser::BrowserPressure;
-use sweeploom_core::{Recommendation, reclaim_set};
+use sweeploom_core::Recommendation;
 
 use super::session_label;
 use super::session_pressure;
 use crate::app::SweepLoomApp;
 use crate::format::format_bytes;
-use crate::icons::Glyph;
 use crate::nav::Nav;
 use crate::theme;
-use crate::widgets::{self, Metric, PressureItem, StatTile, TileViz, Tone, cpu_cores, list_row_at};
+use crate::widgets::{self, PressureItem, cpu_cores, list_row_at};
 
 #[path = "overview_board.rs"]
 mod board;
+#[path = "overview_tiles.rs"]
+mod tiles;
 
 pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     widgets::page_title(
@@ -23,7 +24,7 @@ pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Live pressure across memory, CPU and disk. Click a tile or a session to open it.",
     );
     let cores = cpu_cores::history(ui.ctx());
-    if let Some(nav) = widgets::metric_grid(ui, &overview_cards(app, &cores)) {
+    if let Some(nav) = widgets::metric_grid(ui, &tiles::overview_cards(app, &cores)) {
         app.nav = nav;
     }
     widgets::card(ui, |ui| {
@@ -78,166 +79,6 @@ fn draw_heaviest(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         app.selected_session = Some(hog.id);
         app.nav = Nav::Sessions;
     }
-}
-
-fn overview_cards(app: &SweepLoomApp, cores: &cpu_cores::CoreHistory) -> Vec<Metric> {
-    let memory = app
-        .snapshot
-        .as_ref()
-        .map(|item| item.memory)
-        .unwrap_or_default();
-    let cpu = app
-        .snapshot
-        .as_ref()
-        .map(|item| item.cpu.usage_percent)
-        .unwrap_or(0.0);
-    let idle = app
-        .sessions
-        .iter()
-        .filter(|session| session.recommendation.recommendation != Recommendation::Keep);
-    let stale = idle
-        .clone()
-        .filter(|session| {
-            matches!(
-                session.recommendation.recommendation,
-                Recommendation::Recommended | Recommendation::StronglyRecommended
-            )
-        })
-        .count();
-    let reclaimable = idle
-        .clone()
-        .map(|session| session.recommendation.estimated_reclaimable_rss)
-        .sum::<u64>();
-    let stale_cpu: f32 = idle
-        .map(|session| session.cpu_percent.max(0.0))
-        .sum::<f32>()
-        .abs();
-    let mem_total = memory.total_bytes.max(1);
-    let mem_avail = memory
-        .available_bytes
-        .max(memory.total_bytes.saturating_sub(memory.used_bytes));
-    let mem_used = 1.0 - (mem_avail as f32 / mem_total as f32);
-    let tile = |icon, label: &str, value: String, sub: String, tone, viz| StatTile {
-        icon: Some(icon),
-        label: label.into(),
-        value,
-        sub,
-        tone,
-        viz,
-    };
-    let mut cards = vec![
-        Metric {
-            tile: tile(
-                Glyph::Memory,
-                "Memory available",
-                format_bytes(mem_avail),
-                format!(
-                    "{:.0}% of {} in use",
-                    mem_used * 100.0,
-                    format_bytes(memory.total_bytes)
-                ),
-                if mem_used >= 0.9 {
-                    Tone::Warn
-                } else {
-                    Tone::Neutral
-                },
-                TileViz::Meter(mem_used.clamp(0.0, 1.0)),
-            ),
-            open: Nav::Sessions,
-        },
-        Metric {
-            tile: tile(
-                Glyph::Cpu,
-                "CPU load",
-                format!("{cpu:.0}%"),
-                format!("{} · {stale_cpu:.0}% in idle sessions", cores.summary()),
-                if cpu >= 85.0 {
-                    Tone::Warn
-                } else {
-                    Tone::Neutral
-                },
-                TileViz::Trend(cores.total.iter().copied().collect(), Some(100.0)),
-            ),
-            open: Nav::Sessions,
-        },
-        Metric {
-            tile: tile(
-                Glyph::Sessions,
-                "Idle sessions",
-                if stale == 0 {
-                    "None".into()
-                } else {
-                    format_bytes(reclaimable)
-                },
-                if stale == 0 {
-                    "nothing idle yet".into()
-                } else {
-                    format!("{stale} idle to review")
-                },
-                if stale == 0 { Tone::Ok } else { Tone::Caution },
-                TileViz::None,
-            ),
-            open: Nav::Sessions,
-        },
-    ];
-    cards.push(disk_card(app));
-    cards
-}
-
-fn disk_card(app: &SweepLoomApp) -> Metric {
-    let review = review_bytes(app);
-    let sub = review.map_or_else(
-        || "open Review to measure".to_owned(),
-        |(bytes, complete)| {
-            if bytes == 0 {
-                return "nothing reclaimable in Review".to_owned();
-            }
-            format!(
-                "{} reclaimable in Review",
-                crate::format::format_bytes_bound(bytes, complete)
-            )
-        },
-    );
-    let (value, fill, tone) = match app.volumes.first() {
-        Some((_, total, avail)) => (
-            format_bytes(*avail),
-            1.0 - (*avail as f32 / (*total).max(1) as f32),
-            if *avail < 8 * 1024 * 1024 * 1024 {
-                Tone::Warn
-            } else {
-                Tone::Neutral
-            },
-        ),
-        None => ("—".to_owned(), 0.0, Tone::Neutral),
-    };
-    Metric {
-        tile: StatTile {
-            icon: Some(Glyph::Volume),
-            label: "Disk free".into(),
-            value,
-            sub,
-            tone,
-            viz: TileViz::Meter(fill.clamp(0.0, 1.0)),
-        },
-        open: Nav::Storage,
-    }
-}
-
-/// Unique Review estimate, if Review has rows.
-pub(super) fn review_bytes(app: &SweepLoomApp) -> Option<(u64, bool)> {
-    if app.review.is_empty() {
-        return None;
-    }
-    let unique = reclaim_set(
-        &app.review
-            .iter()
-            .map(|row| row.candidate.clone())
-            .collect::<Vec<_>>(),
-    );
-    Some((
-        unique.unique_estimate.bytes,
-        unique.unique_estimate.complete,
-    ))
 }
 
 fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {

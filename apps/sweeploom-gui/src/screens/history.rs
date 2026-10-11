@@ -170,8 +170,8 @@ fn fill_group(row: &mut egui_extras::TableRow<'_, '_>, line: &Line, toggle: &mut
             } else {
                 format!("{count} processes")
             })
-                .size(12.0)
-                .color(theme::muted(ui)),
+            .size(12.0)
+            .color(theme::muted(ui)),
         );
     });
     row.col(|ui| {
@@ -261,5 +261,11 @@ fn avg_cell(ui: &mut egui::Ui, avg: &str) {
 
 fn trend_cell(ui: &mut egui::Ui, spark: &[f32]) {
     let width = (ui.available_width() - 4.0).max(40.0);
-    sparkline_max(ui, spark, egui::vec2(width, 20.0), theme::series(ui, 0), None);
+    sparkline_max(
+        ui,
+        spark,
+        egui::vec2(width, 20.0),
+        theme::series(ui, 0),
+        None,
+    );
 }

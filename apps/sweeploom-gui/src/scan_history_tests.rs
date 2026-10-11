@@ -51,7 +51,7 @@ fn restart_restores_explorer_trees_project_sizes_and_growth() {
     assert!(loaded.error.is_none());
     assert_eq!(loaded.scans()[0].report, report);
     assert_eq!(loaded.scans()[0].at, 1000);
-    assert_eq!(loaded.projects(), &[project.clone()]);
+    assert_eq!(loaded.projects(), std::slice::from_ref(&project));
     assert_eq!(
         loaded
             .get(Source::Projects, &project)

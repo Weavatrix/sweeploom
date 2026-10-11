@@ -180,7 +180,8 @@ impl SweepLoomApp {
         }
         let root = PathBuf::from(self.scan_root.trim());
         let same_root = self.inventory.as_ref().is_some_and(|report| {
-            report.root == root || std::fs::canonicalize(&root).is_ok_and(|path| path == report.root)
+            report.root == root
+                || std::fs::canonicalize(&root).is_ok_and(|path| path == report.root)
         });
         if !same_root {
             self.inventory = None;
@@ -210,7 +211,7 @@ impl SweepLoomApp {
 
     pub(crate) fn poll_disk(&mut self) {
         take_scan(self);
-        take_ai(self);
+        merge::take_ai(self);
         merge::take_rebuild(self);
         take_apply_job(self);
     }
@@ -267,45 +268,6 @@ fn apply_finished(app: &mut SweepLoomApp, outcome: Result<(), String>) {
             }
         }
         Err(error) => app.inventory_error = Some(error),
-    }
-}
-
-fn take_ai(app: &mut SweepLoomApp) {
-    let outcome = {
-        let Some(rx) = &app.ai_rx else {
-            return;
-        };
-        match rx.try_recv() {
-            Ok(outcome) => outcome,
-            Err(_) => return,
-        }
-    };
-    app.ai_rx = None;
-    app.ai_listing = false;
-    match outcome {
-        Ok(offers) => {
-            let n = offers.len();
-            let values = offers
-                .iter()
-                .flat_map(|offer| {
-                    std::iter::once(crate::scan_history::candidate_value(
-                        &offer.candidate,
-                        !offer.capped,
-                    ))
-                    .chain(offer.entries.iter().map(|entry| {
-                        crate::scan_history::candidate_value(&entry.candidate, !offer.capped)
-                    }))
-                })
-                .collect();
-            app.scan_history.record_batch(
-                crate::scan_history::Source::Ai,
-                values,
-                crate::scan_history::now_ms(),
-            );
-            app.ai_offers = Some(offers);
-            app.action_message = Some(format!("{n} AI store(s) sized"));
-        }
-        Err(error) => app.action_message = Some(error),
     }
 }
 

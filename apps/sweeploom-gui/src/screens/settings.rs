@@ -10,17 +10,23 @@ use crate::widgets::{self, page_title, section};
 
 pub fn ui_settings(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(ui, "Settings", "Local-only. Telemetry stays off.");
-    ui.set_max_width(760.0);
-    appearance(app, ui);
-    background(app, ui);
-    about(app, ui);
+    ui.scope(|ui| {
+        ui.set_max_width(760.0);
+        appearance(app, ui);
+        background(app, ui);
+        about(app, ui);
+    });
 }
 
 fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
-        ui.add_sized(
+        ui.allocate_ui_with_layout(
             egui::vec2(132.0, 28.0),
-            egui::Label::new(RichText::new(label).color(crate::theme::muted(ui))),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.set_width(132.0);
+                ui.label(RichText::new(label).color(crate::theme::muted(ui)));
+            },
         );
         add(ui);
     });
@@ -122,7 +128,7 @@ fn about(app: &SweepLoomApp, ui: &mut egui::Ui) {
             .num_columns(2)
             .spacing([crate::theme::LG, 6.0])
             .show(ui, |ui| {
-                let mut line = |ui: &mut egui::Ui, key: &str, value: String| {
+                let line = |ui: &mut egui::Ui, key: &str, value: String| {
                     ui.label(RichText::new(key).color(crate::theme::muted(ui)));
                     ui.label(value);
                     ui.end_row();
@@ -136,7 +142,11 @@ fn about(app: &SweepLoomApp, ui: &mut egui::Ui) {
                 line(ui, "Home", app.locations.home.display().to_string());
                 line(ui, "Config", app.locations.app_config.display().to_string());
                 if let Some(snapshot) = &app.snapshot {
-                    line(ui, "Observed processes", snapshot.processes.len().to_string());
+                    line(
+                        ui,
+                        "Observed processes",
+                        snapshot.processes.len().to_string(),
+                    );
                 }
                 line(ui, "Hidden launch", "sweeploom-gui --tray".into());
             });

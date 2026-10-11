@@ -42,7 +42,7 @@ const SKIP: &[&str] = &[
     "SourcePackages",
 ];
 const MAX_DEPTH: usize = 5;
-const MAX_ENTRIES: usize = 30_000;
+const ROOT_ENTRIES: usize = 20_000;
 
 pub(super) fn derived_data(home: &Path) -> PathBuf {
     home.join("Library/Developer/Xcode/DerivedData")
@@ -183,30 +183,34 @@ fn siblings(dir: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Breadth-first per root, each with its own entry budget, so one huge tree cannot hide the rest.
 fn scan(home: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
-    let mut budget = MAX_ENTRIES;
-    let mut stack: Vec<(PathBuf, usize)> = ROOTS.iter().map(|root| (home.join(root), 0)).collect();
-    while let Some((dir, depth)) = stack.pop() {
-        for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
-            if budget == 0 {
-                return found;
-            }
-            budget -= 1;
-            let Ok(kind) = entry.file_type() else {
-                continue;
-            };
-            let name = entry.file_name().to_string_lossy().into_owned();
-            let bundle = name.ends_with(".xcodeproj") || name.ends_with(".xcworkspace");
-            if (bundle && kind.is_dir()) || (name == "project.yml" && kind.is_file()) {
-                found.push(entry.path());
-            } else if kind.is_dir()
-                && depth < MAX_DEPTH
-                && !name.starts_with('.')
-                && !SKIP.contains(&name.as_str())
-                && !name.ends_with(".app")
-            {
-                stack.push((entry.path(), depth + 1));
+    for root in ROOTS {
+        let mut budget = ROOT_ENTRIES;
+        let mut queue = std::collections::VecDeque::from([(home.join(root), 0)]);
+        while let Some((dir, depth)) = queue.pop_front() {
+            for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
+                if budget == 0 {
+                    queue.clear();
+                    break;
+                }
+                budget -= 1;
+                let Ok(kind) = entry.file_type() else {
+                    continue;
+                };
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let bundle = name.ends_with(".xcodeproj") || name.ends_with(".xcworkspace");
+                if (bundle && kind.is_dir()) || (name == "project.yml" && kind.is_file()) {
+                    found.push(entry.path());
+                } else if kind.is_dir()
+                    && depth < MAX_DEPTH
+                    && !name.starts_with('.')
+                    && !SKIP.contains(&name.as_str())
+                    && !name.ends_with(".app")
+                {
+                    queue.push_back((entry.path(), depth + 1));
+                }
             }
         }
     }

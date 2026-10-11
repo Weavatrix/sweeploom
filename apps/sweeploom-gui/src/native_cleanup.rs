@@ -26,7 +26,7 @@ use apply::{apply_native, cache_candidate};
 use commands::{allocated, command, text, valid_id, value_bytes, value_count};
 use crossbeam_channel::Receiver;
 use docker::{docker_command, docker_listing};
-use ios::{ios_listing, parse_devices};
+use ios::parse_devices;
 use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]

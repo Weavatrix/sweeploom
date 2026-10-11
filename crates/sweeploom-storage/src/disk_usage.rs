@@ -110,10 +110,9 @@ impl Totals {
             use std::os::unix::fs::MetadataExt;
             if metadata.is_file()
                 && metadata.nlink() > 1
-                && !self
-                    .hard_links
-                    .lock()
-                    .map_or(true, |mut seen| seen.insert((metadata.dev(), metadata.ino())))
+                && !self.hard_links.lock().map_or(true, |mut seen| {
+                    seen.insert((metadata.dev(), metadata.ino()))
+                })
             {
                 return;
             }

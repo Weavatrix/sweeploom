@@ -1,5 +1,6 @@
 //! Debug-only screen tour: `SWEEPLOOM_SHOTS=<dir>` saves every screen as PNG, then quits.
-//! Optional `SWEEPLOOM_SHOTS_ONLY=sessions,cleanup` and `SWEEPLOOM_SHOTS_PREFIX=final`.
+//! Optional `SWEEPLOOM_SHOTS_ONLY=sessions,cleanup`, `SWEEPLOOM_SHOTS_PREFIX=final`,
+//! `SWEEPLOOM_SHOTS_THEMES=dark` and `SWEEPLOOM_SHOTS_FPS=1` (log frame times).
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -12,6 +13,8 @@ use crate::nav::Nav;
 use crate::prefs::ThemeMode;
 
 const PANE_KEY: &str = "sweeploom-shot-pane";
+/// Pane marker that scrolls the Sessions detail instead of picking a Cleanup pane.
+const SCROLL: usize = 99;
 
 struct Shot {
     name: String,
@@ -31,9 +34,10 @@ struct Tour {
 
 static TOUR: Mutex<Option<Option<Tour>>> = Mutex::new(None);
 
-const SCREENS: [(&str, Nav, Option<usize>); 16] = [
+const SCREENS: [(&str, Nav, Option<usize>); 17] = [
     ("overview", Nav::Overview, None),
     ("sessions", Nav::Sessions, None),
+    ("sessions-activity", Nav::Sessions, Some(SCROLL)),
     ("history", Nav::History, None),
     ("review", Nav::Storage, None),
     ("explorer", Nav::Explorer, None),
@@ -85,6 +89,14 @@ fn start(app: &SweepLoomApp) -> Option<Tour> {
 /// Cleanup pane forced by the tour, if any.
 pub fn pane(ctx: &egui::Context) -> Option<usize> {
     ctx.data(|data| data.get_temp::<usize>(egui::Id::new(PANE_KEY)))
+        .filter(|pane| *pane != SCROLL)
+}
+
+/// Detail scroll offset forced by the tour, if any.
+pub fn scroll(ctx: &egui::Context) -> Option<f32> {
+    ctx.data(|data| data.get_temp::<usize>(egui::Id::new(PANE_KEY)))
+        .filter(|pane| *pane == SCROLL)
+        .map(|_| 430.0)
 }
 
 /// Advance the tour by one frame. No-op unless `SWEEPLOOM_SHOTS` is set.
@@ -102,6 +114,13 @@ pub fn drive(ctx: &egui::Context, app: &mut SweepLoomApp) {
     let Some(tour) = slot else {
         return;
     };
+    if std::env::var_os("SWEEPLOOM_SHOTS_FPS").is_some() {
+        static LAST: Mutex<Option<Instant>> = Mutex::new(None);
+        let mut last = LAST.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(at) = last.replace(Instant::now()) {
+            eprintln!("frame {:?}", at.elapsed());
+        }
+    }
     ctx.request_repaint_after(Duration::from_millis(60));
     let Some(shot) = tour.shots.get(tour.index) else {
         app.prefs.theme = tour.theme;
@@ -124,7 +143,8 @@ pub fn drive(ctx: &egui::Context, app: &mut SweepLoomApp) {
             .map(|session| session.id);
     }
     let settle = match (shot.nav, shot.pane) {
-        (Nav::Ai | Nav::Storage | Nav::Projects, _) => 8,
+        (Nav::Ai, _) => 60,
+        (Nav::Storage | Nav::Projects, _) => 8,
         (_, Some(_)) => 5,
         _ => 3,
     };

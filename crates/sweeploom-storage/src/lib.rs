@@ -1,8 +1,10 @@
-//! Disk inventory on top of `weavatrix-scan`.
+//! Disk inventory, project discovery and folder sizing.
 //!
-//! Artifact discovery disables repository ignore and standard skips so `target`
-//! and `node_modules` remain visible. Source heat uses the opposite policy.
-//! Weavatrix Scan itself is not modified; SweepLoom sets public options.
+//! Full folder sizes use Weavatrix Scan's parallel walker. The inspector tree
+//! is folded bottom-up from a folder-level work queue so partial totals can
+//! stream. Artifact discovery disables repository ignore and standard skips so
+//! `target` and `node_modules` remain visible. Source heat uses the opposite
+//! policy. Weavatrix Scan itself is not modified; SweepLoom sets public options.
 
 #![cfg_attr(not(test), warn(missing_docs))]
 

@@ -1,6 +1,11 @@
 {
-  "generated": "2026-10-10",
+  "generated": "2026-10-11",
   "commits": [
+    {
+      "hash": "31d75b7",
+      "date": "2026-10-11",
+      "subject": "WIP: redesign GUI, full iOS/Xcode discovery, project roots, site, docs"
+    },
     {
       "hash": "236a93d",
       "date": "2026-09-15",

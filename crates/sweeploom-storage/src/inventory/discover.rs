@@ -51,7 +51,11 @@ pub fn discover_projects_from(roots: &[PathBuf], max_projects: usize) -> Vec<Pat
     let mut seen = HashSet::new();
     let found: Vec<Vec<PathBuf>> = found
         .into_iter()
-        .map(|tree| tree.into_iter().filter(|path| seen.insert(path.clone())).collect())
+        .map(|tree| {
+            tree.into_iter()
+                .filter(|path| seen.insert(path.clone()))
+                .collect()
+        })
         .collect();
     fair_take(found, max_projects)
 }
@@ -128,7 +132,9 @@ fn walk_tree(start: PathBuf, total: &AtomicUsize) -> Vec<PathBuf> {
 
 fn take(total: &AtomicUsize) -> bool {
     total
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| left.checked_sub(1))
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
+            left.checked_sub(1)
+        })
         .is_ok()
 }
 

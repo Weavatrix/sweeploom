@@ -105,12 +105,12 @@ fn actions(
         app.native_cleanup.applying.is_some() || app.apply_rx.is_some() || app.disk_actions.busy();
     let native: Vec<_> = selected
         .iter()
-        .filter(|item| item.cleanable(processes.as_deref()) && item.native())
+        .filter(|item| item.cleanable(processes) && item.native())
         .cloned()
         .collect();
     let caches: Vec<_> = selected
         .iter()
-        .filter(|item| item.cleanable(processes.as_deref()) && item.kind == Kind::Cache)
+        .filter(|item| item.cleanable(processes) && item.kind == Kind::Cache)
         .collect();
     if matches!(
         app.native_cleanup.pane,
@@ -139,7 +139,7 @@ fn actions(
     let trash_paths: Vec<_> = selected
         .iter()
         .filter(|item| {
-            item.cleanable(processes.as_deref()) && matches!(item.kind, Kind::Cache | Kind::Trash)
+            item.cleanable(processes) && matches!(item.kind, Kind::Cache | Kind::Trash)
         })
         .filter_map(|item| item.path.clone())
         .collect();

@@ -12,8 +12,6 @@ pub const MD: f32 = 12.0;
 pub const LG: f32 = 16.0;
 /// 24 px — page side padding, gap between sections.
 pub const XL: f32 = 24.0;
-/// 32 px — large separation.
-pub const XXL: f32 = 32.0;
 
 /// Small radius: checkboxes, bars, pills.
 pub const RADIUS_SM: u8 = 4;
@@ -46,12 +44,6 @@ fn dark(ui: &egui::Ui) -> bool {
 fn pick(ui: &egui::Ui, dark_rgb: [u8; 3], light_rgb: [u8; 3]) -> Color32 {
     let [r, g, b] = if dark(ui) { dark_rgb } else { light_rgb };
     Color32::from_rgb(r, g, b)
-}
-
-/// Tertiary text: axis ticks, units, timestamps.
-#[must_use]
-pub fn faint(ui: &egui::Ui) -> Color32 {
-    pick(ui, [112, 118, 130], [128, 134, 146])
 }
 
 /// Track behind meters and bars; inset wells.

@@ -190,11 +190,13 @@ fn fill_row(
         }
     });
     row.col(|ui| {
-        if pointer(ui.add(
-            eframe::egui::Label::new(RichText::new(&item.role))
-                .truncate()
-                .sense(eframe::egui::Sense::click()),
-        ))
+        if pointer(
+            ui.add(
+                eframe::egui::Label::new(RichText::new(&item.role))
+                    .truncate()
+                    .sense(eframe::egui::Sense::click()),
+            ),
+        )
         .clicked()
         {
             *opened = Some(item.id);
@@ -246,16 +248,26 @@ fn summary(ui: &mut eframe::egui::Ui, pressure: &BrowserPressure) {
             "{} across {} {}",
             format_bytes(pressure.rss_bytes()),
             pressure.hosts.len(),
-            if pressure.hosts.len() == 1 { "family" } else { "families" }
+            if pressure.hosts.len() == 1 {
+                "family"
+            } else {
+                "families"
+            }
         );
         crate::widgets::breakdown(ui, "Browser memory", &total, &segments);
         ui.add_space(crate::theme::SM);
         let mut notes = vec!["Main browser processes stay Keep.".to_owned()];
         for host in &pressure.hosts {
             if host.main_processes == 0 && host.background_services > 0 {
-                notes.push(format!("{}: background services only; main browser not observed.", host.family));
+                notes.push(format!(
+                    "{}: background services only; main browser not observed.",
+                    host.family
+                ));
             } else if host.main_processes == 0 {
-                notes.push(format!("{}: helpers only; main browser not observed.", host.family));
+                notes.push(format!(
+                    "{}: helpers only; main browser not observed.",
+                    host.family
+                ));
             }
         }
         crate::widgets::caption(ui, notes.join(" "));

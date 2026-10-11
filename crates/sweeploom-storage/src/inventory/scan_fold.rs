@@ -1,41 +1,15 @@
-//! Bottom-up aggregation shared by subtree workers and the final assembly.
+//! Bottom-up aggregation: folders fold into their parent once complete.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-
-use weavatrix_scan::WalkEntry;
 
 use super::node::{DirectoryNode, InventoryLimits};
 use super::roots::is_discoverable_below;
+use super::scan_meta::FileMeta;
 use crate::classify::{
     PathCategory, classify_path_component, is_project_marker, is_source_extension,
     keep_nested_children,
 };
-
-/// One `lstat` worth of file facts.
-pub(super) struct FileMeta {
-    pub bytes: u64,
-    pub allocated: Option<u64>,
-    pub mtime: Option<SystemTime>,
-}
-
-/// The only metadata call per file: size, allocated blocks and mtime together.
-pub(super) fn file_meta(path: &Path) -> Option<FileMeta> {
-    let meta = std::fs::symlink_metadata(path).ok()?;
-    #[cfg(unix)]
-    let allocated = {
-        use std::os::unix::fs::MetadataExt;
-        Some(meta.blocks().saturating_mul(512))
-    };
-    #[cfg(not(unix))]
-    let allocated = None;
-    Some(FileMeta {
-        bytes: meta.len(),
-        allocated,
-        mtime: meta.modified().ok(),
-    })
-}
 
 struct Pending {
     node: DirectoryNode,
@@ -62,22 +36,6 @@ pub(super) struct Fold {
 }
 
 impl Fold {
-    pub fn absorb(&mut self, entry: &WalkEntry, stop_at: &Path, scan_root: &Path, limits: InventoryLimits) {
-        let path = map_entry(entry.path());
-        if entry.is_symlink() {
-            return;
-        }
-        self.record_project(&path, scan_root, limits.max_projects);
-        if entry.is_dir() {
-            self.directory(&path, stop_at, scan_root, limits.max_children_per_dir);
-            return;
-        }
-        match file_meta(&path) {
-            Some(meta) => self.file(&path, &meta, limits),
-            None => self.errors += 1,
-        }
-    }
-
     pub fn record_project(&mut self, marker: &Path, scan_root: &Path, max_projects: usize) {
         if self.projects.len() >= max_projects || !is_project_marker(marker) {
             return;
@@ -110,14 +68,24 @@ impl Fold {
             DirectoryNode::bump_mtime(&mut node.newest_generated_mtime, meta.mtime);
         }
         if meta.bytes >= limits.large_file_bytes {
-            let leaf =
-                DirectoryNode::file_leaf(path.to_path_buf(), meta.bytes, meta.allocated, meta.mtime);
+            let leaf = DirectoryNode::file_leaf(
+                path.to_path_buf(),
+                meta.bytes,
+                meta.allocated,
+                meta.mtime,
+            );
             insert_child(&mut node.children, leaf, limits.max_children_per_dir);
         }
     }
 
     /// A folder's contents are complete: keep it at `stop_at`, otherwise fold it into its parent.
-    pub fn directory(&mut self, path: &Path, stop_at: &Path, scan_root: &Path, max_children: usize) {
+    pub fn directory(
+        &mut self,
+        path: &Path,
+        stop_at: &Path,
+        scan_root: &Path,
+        max_children: usize,
+    ) {
         let node = self
             .pending
             .remove(path)
@@ -142,44 +110,7 @@ impl Fold {
             .map_or_else(|| DirectoryNode::new(path.to_path_buf()), |slot| slot.node)
     }
 
-    /// Attach every pending folder below `root`, deepest first, in a stable order.
-    pub fn collapse(&mut self, root: &Path, max_children: usize, scan_root: &Path) -> DirectoryNode {
-        let mut paths: Vec<PathBuf> = self.pending.keys().filter(|path| *path != root).cloned().collect();
-        paths.sort_by(|left, right| {
-            right
-                .components()
-                .count()
-                .cmp(&left.components().count())
-                .then_with(|| left.cmp(right))
-        });
-        for path in paths {
-            let (Some(slot), Some(parent)) = (self.pending.remove(&path), path.parent()) else {
-                continue;
-            };
-            self.attach(parent, slot.node, max_children, scan_root);
-        }
-        self.take(root)
-    }
-
-    /// The entry cap stopped a walk: fold whatever is pending into one incomplete node.
-    pub fn fold_partial(&mut self, root: &Path) -> DirectoryNode {
-        let mut paths: Vec<PathBuf> = self.pending.keys().filter(|path| *path != root).cloned().collect();
-        paths.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
-        for path in paths {
-            let (Some(slot), Some(parent)) = (self.pending.remove(&path), path.parent()) else {
-                continue;
-            };
-            let node = slot.node;
-            let parent_node = &mut self.slot(parent).node;
-            accumulate(parent_node, &node);
-            parent_node.incomplete = true;
-        }
-        let mut root = self.take(root);
-        root.incomplete = true;
-        root
-    }
-
-    /// Projects and rollups found by one subtree worker.
+    /// Projects and counters from one folder read off the lock.
     pub fn merge(&mut self, other: Self, max_projects: usize) {
         for project in other.projects {
             if self.projects.len() < max_projects && self.project_set.insert(project.clone()) {
@@ -196,13 +127,21 @@ impl Fold {
         self.project_set.contains(path)
     }
 
-    fn attach(&mut self, parent: &Path, mut child: DirectoryNode, max_children: usize, scan_root: &Path) {
+    fn attach(
+        &mut self,
+        parent: &Path,
+        mut child: DirectoryNode,
+        max_children: usize,
+        scan_root: &Path,
+    ) {
         if !keep_nested_children(&child.path) || too_deep(scan_root, &child.path) {
             child.children.clear();
         }
         if self.project_set.contains(&child.path) {
-            self.project_bytes.insert(child.path.clone(), child.logical_bytes);
-            self.project_disk_bytes.insert(child.path.clone(), child.disk_bytes());
+            self.project_bytes
+                .insert(child.path.clone(), child.logical_bytes);
+            self.project_disk_bytes
+                .insert(child.path.clone(), child.disk_bytes());
         }
         let node = &mut self.slot(parent).node;
         accumulate(node, &child);
@@ -226,13 +165,20 @@ pub(super) fn accumulate(node: &mut DirectoryNode, child: &DirectoryNode) {
     node.files = node.files.saturating_add(child.files);
     DirectoryNode::bump_mtime(&mut node.newest_mtime, child.newest_mtime);
     DirectoryNode::bump_mtime(&mut node.newest_source_mtime, child.newest_source_mtime);
-    DirectoryNode::bump_mtime(&mut node.newest_generated_mtime, child.newest_generated_mtime);
+    DirectoryNode::bump_mtime(
+        &mut node.newest_generated_mtime,
+        child.newest_generated_mtime,
+    );
 }
 
-/// Keep children largest first without re-sorting the whole list per insert.
+/// Keep children largest first (path breaks ties) without re-sorting per insert.
+/// A total order keeps the kept set independent of the order workers finish.
 pub(super) fn insert_child(children: &mut Vec<DirectoryNode>, child: DirectoryNode, max: usize) {
     let bytes = child.disk_bytes();
-    let at = children.partition_point(|item| item.disk_bytes() >= bytes);
+    let at = children.partition_point(|item| {
+        let size = item.disk_bytes();
+        size > bytes || (size == bytes && item.path <= child.path)
+    });
     if at < max {
         children.insert(at, child);
         children.truncate(max);
@@ -258,16 +204,4 @@ fn too_deep(scan_root: &Path, path: &Path) -> bool {
 
 fn sum_allocated(left: Option<u64>, right: Option<u64>) -> Option<u64> {
     Some(left?.saturating_add(right?))
-}
-
-/// Strip the Windows verbatim prefix the walker adds to canonical roots.
-pub(super) fn map_entry(path: &Path) -> std::borrow::Cow<'_, Path> {
-    #[cfg(windows)]
-    {
-        let text = path.to_string_lossy();
-        if let Some(rest) = text.strip_prefix(r"\\?\") {
-            return std::borrow::Cow::Owned(PathBuf::from(rest));
-        }
-    }
-    std::borrow::Cow::Borrowed(path)
 }

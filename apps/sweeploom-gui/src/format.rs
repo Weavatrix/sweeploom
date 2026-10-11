@@ -86,10 +86,8 @@ pub fn ago(now_ms: u64, at_ms: u64) -> String {
 /// Home-relative path for compact captions.
 #[must_use]
 pub fn tilde(path: &Path, home: &Path) -> String {
-    path.strip_prefix(home).map_or_else(
-        |_| short_path(path),
-        |rest| format!("~/{}", rest.display()),
-    )
+    path.strip_prefix(home)
+        .map_or_else(|_| short_path(path), |rest| format!("~/{}", rest.display()))
 }
 
 /// Human safety cell. Avoids Debug truncation.

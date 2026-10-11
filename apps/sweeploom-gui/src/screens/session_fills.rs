@@ -11,7 +11,6 @@ pub(super) fn fill_line(
     sessions: &[LiveSession],
     presentations: &[SessionRow],
     planned: &mut std::collections::HashSet<sweeploom_core::ProcessKey>,
-    selected_id: Option<sweeploom_core::SessionId>,
     row: &mut egui_extras::TableRow<'_, '_>,
     selected: &mut Option<sweeploom_core::SessionId>,
     toggle: &mut Option<String>,
@@ -24,15 +23,7 @@ pub(super) fn fill_line(
             }
         }
         Some(line @ Line::Session { .. }) => {
-            fill_session(
-                sessions,
-                presentations,
-                planned,
-                selected_id,
-                row,
-                selected,
-                line,
-            );
+            fill_session(sessions, presentations, planned, row, selected, line);
         }
         None => {}
     }
@@ -98,7 +89,6 @@ fn fill_session(
     sessions: &[LiveSession],
     presentations: &[SessionRow],
     planned: &mut std::collections::HashSet<sweeploom_core::ProcessKey>,
-    selected_id: Option<sweeploom_core::SessionId>,
     row: &mut egui_extras::TableRow<'_, '_>,
     selected: &mut Option<sweeploom_core::SessionId>,
     line: &Line,
@@ -114,7 +104,7 @@ fn fill_session(
     let Some(session) = sessions.get(*index) else {
         return;
     };
-    let is_selected = selected_id == Some(session.id);
+    let is_selected = *selected == Some(session.id);
     let id = session.id;
     let Some(presentation) = presentations.iter().find(|p| p.index == *index) else {
         return;

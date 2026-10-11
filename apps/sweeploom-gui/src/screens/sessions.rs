@@ -181,7 +181,6 @@ fn draw_session_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                             &app.sessions,
                             &rows,
                             &mut planned,
-                            selected,
                             &mut row,
                             &mut selected,
                             &mut toggle,

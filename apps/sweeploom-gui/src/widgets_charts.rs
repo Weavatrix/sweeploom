@@ -189,6 +189,8 @@ pub fn breakdown(ui: &mut egui::Ui, title: &str, total: &str, segments: &[Segmen
     });
     ui.add_space(6.0);
     segment_bar(ui, segments, 12.0);
-    ui.add_space(theme::SM);
-    legend(ui, segments);
+    if segments.iter().any(|s| s.value > 0.0) {
+        ui.add_space(theme::SM);
+        legend(ui, segments);
+    }
 }

@@ -224,35 +224,60 @@ fn core_tip(label: &str, series: Option<&VecDeque<f32>>) -> String {
     )
 }
 
-/// Compact heat strip: one row per core, time runs left to right.
+/// Compact heat strip: one row per core, time runs left to right (~1 s per column).
 pub fn heat_strip(ui: &mut egui::Ui, history: &CoreHistory) {
     if history.cores.is_empty() {
         crate::widgets::caption(ui, "Per-core load appears after the second sample.");
         return;
     }
-    let row_h = 9.0;
-    for (_, cores) in history.groups() {
+    let (row_h, gap, group_gap) = (10.0, 4.0, 10.0);
+    let groups = history.groups();
+    let rows: usize = groups.iter().map(|(_, cores)| cores.len()).sum();
+    let height = rows as f32 * (row_h + gap) + (groups.len() - 1) as f32 * group_gap;
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
+    let font = egui::FontId::proportional(11.0);
+    let muted = theme::muted(ui);
+    let mut y = rect.top();
+    let mut tip = None;
+    for (_, cores) in &groups {
         for (label, index) in cores {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = theme::SM;
-                ui.add_sized(
-                    egui::vec2(24.0, row_h),
-                    egui::Label::new(RichText::new(&label).size(10.5).color(theme::muted(ui))),
-                );
-                let width = (ui.available_width() - 44.0).max(60.0);
-                let (rect, response) =
-                    ui.allocate_exact_size(egui::vec2(width, row_h), Sense::hover());
-                strip(ui, rect, history.cores.get(index));
-                response.on_hover_text(core_tip(&label, history.cores.get(index)));
-                ui.label(
-                    RichText::new(format!("{:.0}%", history.now(index)))
-                        .size(11.0)
-                        .color(theme::muted(ui)),
-                );
-            });
-            ui.add_space(-4.0);
+            let row = egui::Rect::from_min_size(
+                egui::pos2(rect.left(), y),
+                egui::vec2(rect.width(), row_h),
+            );
+            let painter = ui.painter();
+            painter.text(
+                row.left_center(),
+                egui::Align2::LEFT_CENTER,
+                label,
+                font.clone(),
+                muted,
+            );
+            painter.text(
+                row.right_center(),
+                egui::Align2::RIGHT_CENTER,
+                format!("{:.0}%", history.now(*index)),
+                font.clone(),
+                muted,
+            );
+            let bar = egui::Rect::from_min_max(
+                egui::pos2(row.left() + 28.0, row.top()),
+                egui::pos2(row.right() - 40.0, row.bottom()),
+            );
+            strip(ui, bar, history.cores.get(*index));
+            if response
+                .hover_pos()
+                .is_some_and(|pos| row.expand2(egui::vec2(0.0, gap / 2.0)).contains(pos))
+            {
+                tip = Some(core_tip(label, history.cores.get(*index)));
+            }
+            y += row_h + gap;
         }
-        ui.add_space(6.0);
+        y += group_gap;
+    }
+    if let Some(tip) = tip {
+        response.on_hover_text(tip);
     }
 }
 

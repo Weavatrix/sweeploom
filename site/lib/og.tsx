@@ -33,14 +33,11 @@ export function OgCard({ kicker, title, footer }: { kicker: string; title: strin
     >
       <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
         <MarkSvg size={64} />
-        <div style={{ display: "flex", fontSize: 40, fontWeight: 700, letterSpacing: -0.5 }}>
-          <span>Sweep</span>
-          <span style={{ color: "#dcae5c" }}>Loom</span>
-        </div>
+        <div style={{ display: "flex", fontSize: 40, fontWeight: 700 }}>SweepLoom</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <div style={{ display: "flex", fontSize: 22, letterSpacing: 4, textTransform: "uppercase", color: "#dcae5c" }}>{kicker}</div>
-        <div style={{ display: "flex", fontSize: title.length > 60 ? 54 : 66, lineHeight: 1.08, fontWeight: 700, letterSpacing: -1.5, maxWidth: 1000 }}>
+        <div style={{ display: "flex", fontSize: 22, letterSpacing: 3, textTransform: "uppercase", color: "#dcae5c" }}>{kicker}</div>
+        <div style={{ display: "flex", fontSize: title.length > 60 ? 54 : 66, lineHeight: 1.1, fontWeight: 700, maxWidth: 1000 }}>
           {title}
         </div>
       </div>

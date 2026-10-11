@@ -5,7 +5,8 @@ mod node;
 mod roots;
 mod scan;
 mod scan_fold;
-mod scan_plan;
+mod scan_meta;
+mod scan_queue;
 
 pub use discover::{discover_projects, discover_projects_from};
 pub use node::{DirectoryNode, InventoryLimits, InventoryReport};

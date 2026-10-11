@@ -24,7 +24,10 @@ where
     if items.len() <= 1 || workers <= 1 {
         return items.into_iter().map(map).collect();
     }
-    let inputs: Vec<Mutex<Option<T>>> = items.into_iter().map(|item| Mutex::new(Some(item))).collect();
+    let inputs: Vec<Mutex<Option<T>>> = items
+        .into_iter()
+        .map(|item| Mutex::new(Some(item)))
+        .collect();
     let outputs: Vec<Mutex<Option<R>>> = inputs.iter().map(|_| Mutex::new(None)).collect();
     let next = AtomicUsize::new(0);
     std::thread::scope(|scope| {
@@ -65,7 +68,10 @@ mod tests {
             }
             value * value
         });
-        assert_eq!(squares, (0..200).map(|value| value * value).collect::<Vec<_>>());
+        assert_eq!(
+            squares,
+            (0..200).map(|value| value * value).collect::<Vec<_>>()
+        );
         assert!(walk_workers() >= 2);
     }
 }

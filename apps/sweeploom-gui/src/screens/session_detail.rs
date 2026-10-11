@@ -29,12 +29,17 @@ pub fn draw_details(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         return;
     };
     ui.add_space(theme::SM);
-    egui::ScrollArea::vertical()
+    let area = egui::ScrollArea::vertical()
         .id_salt(("session-details", session.id.0))
-        .auto_shrink([false, true])
-        .show(ui, |ui| {
-            widgets::card(ui, |ui| session_details(app, ui, &session));
-        });
+        .auto_shrink([false, true]);
+    #[cfg(debug_assertions)]
+    let area = match crate::chrome::shots::scroll(ui.ctx()) {
+        Some(offset) => area.vertical_scroll_offset(offset),
+        None => area,
+    };
+    area.show(ui, |ui| {
+        widgets::card(ui, |ui| session_details(app, ui, &session));
+    });
 }
 
 fn session_details(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {

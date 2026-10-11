@@ -46,7 +46,13 @@ pub(crate) fn node_offers_with(
         return Vec::new();
     }
     let mut offers = Vec::new();
-    push_offer(&mut offers, project, "node_modules", RebuildCost::Medium, false);
+    push_offer(
+        &mut offers,
+        project,
+        "node_modules",
+        RebuildCost::Medium,
+        false,
+    );
     for rel in ["node_modules/.vite", ".vite"] {
         push_offer(&mut offers, project, rel, RebuildCost::Low, true);
     }

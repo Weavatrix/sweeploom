@@ -25,5 +25,5 @@ const commits = raw
     return { hash, date, subject: subject.replace(/\.$/, "") };
   });
 
-writeFileSync(out, JSON.stringify({ generated: new Date().toISOString().slice(0, 10), commits }, null, 2) + "\n");
+writeFileSync(out, JSON.stringify({ generated: new Date().toLocaleDateString("sv-SE"), commits }, null, 2) + "\n");
 console.log(`wrote ${commits.length} commits to ${path.relative(process.cwd(), out)}`);

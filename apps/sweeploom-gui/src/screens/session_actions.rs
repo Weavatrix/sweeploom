@@ -2,7 +2,6 @@
 
 use eframe::egui::{self, RichText};
 use sweeploom_core::{LiveSession, PendingTermination, SessionKind};
-use sweeploom_dev::inspect;
 use sweeploom_platform::ProcessControlCapabilities;
 use sweeploom_process::{
     SysinfoProcessControl, force_stop_session, still_running, stop_session_gracefully,
@@ -16,8 +15,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         return;
     }
     if let Some(project) = &session.project {
-        let git = inspect(&project.0);
-        if git.assessment().is_blocked() {
+        if super::session_git::blocked(ui.ctx(), &project.0) == Some(true) {
             ui.colored_label(
                 ui.visuals().warn_fg_color,
                 "WARNING: project has Git changes. Stopping the session does not discard them.",
@@ -25,11 +23,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
         }
     }
     ui.horizontal(|ui| {
-        if crate::widgets::pointer(
-            ui.button(RichText::new("Terminate session").color(ui.visuals().warn_fg_color)),
-        )
-        .clicked()
-        {
+        if crate::widgets::danger_button(ui, "Terminate session", true).clicked() {
             let root = session.processes.first().copied();
             app.pending_stop =
                 root.and_then(|root| PendingTermination::freeze(root, &session.processes));
@@ -73,7 +67,7 @@ pub fn draw(app: &mut SweepLoomApp, ui: &mut egui::Ui, session: &LiveSession) {
             app.pending_stop = None;
         }
         if graceful {
-            if crate::widgets::pointer(ui.button("Terminate gracefully")).clicked() {
+            if crate::widgets::apply_button(ui, "Terminate gracefully").clicked() {
                 apply_stop(app, &pending.approved_keys, false);
             }
         } else {
@@ -107,7 +101,7 @@ pub(crate) fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui) -> bool {
         ),
     );
     if !app.confirm_force {
-        if crate::widgets::pointer(ui.button("Force kill remaining…")).clicked() {
+        if crate::widgets::danger_button(ui, "Force kill remaining…", true).clicked() {
             app.confirm_force = true;
         }
         return true;
@@ -117,7 +111,14 @@ pub(crate) fn draw_force(app: &mut SweepLoomApp, ui: &mut egui::Ui) -> bool {
             app.confirm_force = false;
         }
         if crate::widgets::pointer(
-            ui.button(RichText::new("Force kill").color(ui.visuals().error_fg_color)),
+            ui.add(
+                egui::Button::new(
+                    RichText::new("Force kill")
+                        .color(egui::Color32::WHITE)
+                        .strong(),
+                )
+                .fill(crate::theme::warn()),
+            ),
         )
         .clicked()
         {

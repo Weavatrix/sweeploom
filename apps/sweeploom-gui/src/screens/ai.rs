@@ -9,12 +9,14 @@ use sweeploom_core::DeletionStrategy;
 
 use crate::app::SweepLoomApp;
 use crate::format::{format_bytes, short_path};
-use crate::nav::Nav;
 use crate::sort::{Col, header_cell};
 use crate::theme;
 use crate::widgets::{self, page_title, table_scroll_height};
 
-use super::ai_rows::{self, AiGroup, Line};
+use super::ai_rows::{self, Line};
+
+#[path = "ai_bar.rs"]
+mod bar;
 
 pub fn ui_ai(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(
@@ -22,60 +24,28 @@ pub fn ui_ai(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "AI",
         "Select rows to inspect in Finder. Clean regenerable caches/logs or explicitly move history and generated media to Trash. Credentials, databases and managed worktrees remain protected.",
     );
-    toolbar(app, ui);
+    bar::toolbar(app, ui);
     if app.ai_offers.is_none() && !app.ai_listing {
         app.run_ai_listing();
     }
     if app.ai_listing {
-        ui.horizontal(|ui| {
-            ui.allocate_ui(egui::vec2(18.0, 18.0), |ui| {
+        widgets::card(ui, |ui| {
+            ui.horizontal(|ui| {
                 ui.spinner();
+                ui.label(RichText::new("Sizing AI stores…").strong());
             });
-            ui.label("Sizing AI stores…");
+            widgets::caption(
+                ui,
+                "Large session stores (Codex, Claude, Cursor) can take a minute to measure. Rows appear when sizing finishes.",
+            );
         });
+        ui.add_space(theme::MD);
     }
     if app.ai_offers.as_ref().is_some_and(Vec::is_empty) {
         ui.label("No local AI session stores were found under the home directory.");
         return;
     }
     draw_table(app, ui);
-}
-
-fn toolbar(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    crate::disk_history::history_link(app, ui);
-    ui.add_space(theme::SM);
-    widgets::toolbar(ui, |ui| {
-        let mut group = app.ai_group;
-        ui.label(RichText::new("Group by").size(13.0).color(theme::muted(ui)));
-        if widgets::segmented(
-            ui,
-            &mut group,
-            &[
-                (AiGroup::Tool, AiGroup::Tool.label()),
-                (AiGroup::Category, AiGroup::Category.label()),
-                (AiGroup::None, AiGroup::None.label()),
-            ],
-        ) {
-            app.ai_group = group;
-        }
-        ui.add(egui::Separator::default().vertical().spacing(theme::MD));
-        if widgets::button(ui, "Refresh listing", !app.ai_listing).clicked() {
-            app.run_ai_listing();
-        }
-        let paths = app
-            .ai_offers
-            .iter()
-            .flatten()
-            .flat_map(|offer| &offer.entries)
-            .filter(|entry| entry.selected)
-            .map(|entry| entry.candidate.path.clone())
-            .collect::<Vec<_>>();
-        if widgets::button(ui, "Open Review", true).clicked() {
-            app.nav = Nav::Storage;
-        }
-        crate::disk_actions::toolbar(app, ui, &paths);
-    });
-    widgets::action_note(ui, app.action_message.as_deref());
 }
 
 fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
@@ -131,32 +101,8 @@ fn draw_table(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                 body.rows(widgets::TABLE_ROW, row_count, |mut row| {
                     match visible.get(row.index()) {
                         Some(line @ Line::Group { key, .. }) => {
-                            let mut members = Vec::new();
-                            let mut inside = false;
-                            for candidate_line in &lines {
-                                match candidate_line {
-                                    Line::Group {
-                                        key: candidate_key, ..
-                                    } => inside = candidate_key == key,
-                                    Line::Item(o, e) if inside => members.push((*o, *e)),
-                                    _ => {}
-                                }
-                            }
-                            let mut selected = !members.is_empty()
-                                && members.iter().all(|&(o, e)| offers[o].entries[e].selected);
-                            let before = selected;
-                            fill_group(
-                                &mut row,
-                                line,
-                                !collapsed.contains(key),
-                                &mut toggle,
-                                &mut selected,
-                            );
-                            if before != selected {
-                                for (o, e) in members {
-                                    offers[o].entries[e].selected = selected;
-                                }
-                            }
+                            let open = !collapsed.contains(key);
+                            bar::group_row(&mut row, &lines, line, key, offers, open, &mut toggle);
                         }
                         Some(Line::Item(offer, entry)) => {
                             fill_item(

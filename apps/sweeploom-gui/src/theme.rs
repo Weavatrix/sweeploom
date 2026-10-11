@@ -6,6 +6,8 @@ use eframe::egui::{
 
 use crate::prefs::ThemeMode;
 
+#[path = "theme_fonts.rs"]
+mod fonts;
 #[path = "theme_palette.rs"]
 mod palette;
 pub use palette::*;
@@ -53,6 +55,7 @@ pub const fn chrome() -> Color32 {
 /// Apply fonts, spacing, and the resolved palette.
 pub fn apply(ctx: &egui::Context, mode: ThemeMode, scale: f32) {
     ctx.set_zoom_factor(scale.clamp(0.8, 1.6));
+    fonts::install(ctx);
     let dark = match mode {
         ThemeMode::Dark => true,
         ThemeMode::Light => false,

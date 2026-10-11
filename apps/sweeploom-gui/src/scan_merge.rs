@@ -170,3 +170,42 @@ pub(super) fn apply_tick(app: &mut SweepLoomApp, tick: ScanTick) {
         capped: false,
     });
 }
+
+pub(super) fn take_ai(app: &mut SweepLoomApp) {
+    let outcome = {
+        let Some(rx) = &app.ai_rx else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(outcome) => outcome,
+            Err(_) => return,
+        }
+    };
+    app.ai_rx = None;
+    app.ai_listing = false;
+    match outcome {
+        Ok(offers) => {
+            let n = offers.len();
+            let values = offers
+                .iter()
+                .flat_map(|offer| {
+                    std::iter::once(crate::scan_history::candidate_value(
+                        &offer.candidate,
+                        !offer.capped,
+                    ))
+                    .chain(offer.entries.iter().map(|entry| {
+                        crate::scan_history::candidate_value(&entry.candidate, !offer.capped)
+                    }))
+                })
+                .collect();
+            app.scan_history.record_batch(
+                crate::scan_history::Source::Ai,
+                values,
+                crate::scan_history::now_ms(),
+            );
+            app.ai_offers = Some(offers);
+            app.action_message = Some(format!("{n} AI store(s) sized"));
+        }
+        Err(error) => app.action_message = Some(error),
+    }
+}

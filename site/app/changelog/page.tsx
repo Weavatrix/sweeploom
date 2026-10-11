@@ -79,9 +79,10 @@ function CommitList({ commits }: { commits: Commit[] }) {
 export default function ChangelogPage() {
   const commits = changelog.commits as Commit[];
   const releaseIndex = commits.findIndex((c) => c.hash === RELEASE_HASH);
-  const release = releaseIndex >= 0 ? commits.slice(0, releaseIndex + 1) : [];
+  const unreleased = releaseIndex >= 0 ? commits.slice(0, releaseIndex) : [];
+  const release = releaseIndex >= 0 ? [commits[releaseIndex]] : [];
   const before = releaseIndex >= 0 ? commits.slice(releaseIndex + 1) : commits;
-  const releaseDate = release.at(-1)?.date ?? "2026-09-15";
+  const releaseDate = release[0]?.date ?? "2026-09-15";
 
   return (
     <>
@@ -107,7 +108,7 @@ export default function ChangelogPage() {
               <h2 className="font-display text-2xl font-semibold">Unreleased</h2>
               <span className="chip chip-gold">in development</span>
             </div>
-            <p className="mt-2 text-sm text-muted">Work on main that is not yet part of a tagged release.</p>
+            <p className="mt-2 text-sm text-muted">Work on main since 0.1.0 that is not yet part of a release.</p>
             <ul className="mt-5 grid gap-3">
               {UNRELEASED.map((item) => (
                 <li key={item.title} className="card p-4">
@@ -116,6 +117,14 @@ export default function ChangelogPage() {
                 </li>
               ))}
             </ul>
+            {unreleased.length ? (
+              <div className="mt-6">
+                <h3 className="font-mono text-xs tracking-widest text-faint uppercase">Commits since 0.1.0</h3>
+                <div className="mt-3">
+                  <CommitList commits={unreleased} />
+                </div>
+              </div>
+            ) : null}
           </li>
 
           {release.length ? (

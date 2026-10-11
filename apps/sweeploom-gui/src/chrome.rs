@@ -105,11 +105,9 @@ fn header_status(ui: &mut egui::Ui, app: &SweepLoomApp) {
     } else {
         ("Live", Color32::from_rgb(120, 220, 160), false)
     };
-    let galley = ui.painter().layout_no_wrap(
-        text.to_owned(),
-        egui::FontId::proportional(12.5),
-        color,
-    );
+    let galley =
+        ui.painter()
+            .layout_no_wrap(text.to_owned(), egui::FontId::proportional(12.5), color);
     let size = egui::vec2(galley.size().x + 34.0, 26.0);
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
     let painter = ui.painter();
@@ -139,7 +137,8 @@ fn header_status(ui: &mut egui::Ui, app: &SweepLoomApp) {
     let tip = format!("Theme: {}", app.prefs.theme.label());
     response.on_hover_text(tip);
     if busy {
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(80));
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(80));
     }
 }
 

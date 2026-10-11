@@ -43,14 +43,19 @@ impl DevKind {
     }
 
     fn of_marker(name: &str) -> Option<Self> {
-        let ext = name.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase());
+        let ext = name
+            .rsplit_once('.')
+            .map(|(_, ext)| ext.to_ascii_lowercase());
         Some(match name {
             "Cargo.toml" => Self::Cargo,
             "package.json" => Self::Node,
             "go.mod" => Self::Go,
             "pyproject.toml" | "requirements.txt" | "setup.py" | "Pipfile" => Self::Python,
             "Package.swift" => Self::Swift,
-            "pom.xml" | "build.gradle" | "build.gradle.kts" | "settings.gradle"
+            "pom.xml"
+            | "build.gradle"
+            | "build.gradle.kts"
+            | "settings.gradle"
             | "settings.gradle.kts" => Self::Jvm,
             _ => match ext.as_deref() {
                 Some("xcodeproj" | "xcworkspace") => Self::Xcode,

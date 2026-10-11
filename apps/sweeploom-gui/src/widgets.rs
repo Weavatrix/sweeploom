@@ -30,7 +30,6 @@ pub fn pointer(response: egui::Response) -> egui::Response {
 }
 
 /// Standard card frame: surface, hairline, 10 px radius, 16 px padding.
-#[must_use]
 pub fn card_frame(ui: &egui::Ui) -> egui::Frame {
     egui::Frame::default()
         .fill(theme::card_fill(ui))
@@ -109,12 +108,16 @@ pub fn chip(ui: &mut egui::Ui, text: &str, fill: Color32, color: Color32) -> egu
     badge(ui, text, fill, color, theme::RADIUS as f32)
 }
 
-fn badge(ui: &mut egui::Ui, text: &str, fill: Color32, color: Color32, radius: f32) -> egui::Response {
-    let galley = ui.painter().layout_no_wrap(
-        text.to_owned(),
-        egui::FontId::proportional(12.0),
-        color,
-    );
+fn badge(
+    ui: &mut egui::Ui,
+    text: &str,
+    fill: Color32,
+    color: Color32,
+    radius: f32,
+) -> egui::Response {
+    let galley =
+        ui.painter()
+            .layout_no_wrap(text.to_owned(), egui::FontId::proportional(12.0), color);
     let max = (ui.available_width() - 16.0).max(24.0);
     let width = galley.size().x.min(max) + 16.0;
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, 20.0), Sense::hover());
