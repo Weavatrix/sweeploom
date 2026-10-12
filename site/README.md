@@ -88,7 +88,8 @@ The Terms page renders `content/legal/TERMS.md`. `npm run build` first runs
 `scripts/sync-legal.mjs`, which copies `../TERMS.md` from the repository
 root, so the site and the repo always say the same thing. Commit the copy
 so the site still builds outside the repo. The Privacy and License pages
-are written in TSX and must stay consistent with TERMS.md section 4.
+are written in TSX and must stay consistent with TERMS.md sections 4
+(privacy) and 5 (Mac App Store edition).
 
 ## Screenshots
 

@@ -92,7 +92,8 @@ const FAQ = [
       <p>
         No telemetry, no account, no update checks. The CLI and MCP server make no network requests. The desktop app&apos;s
         only network use is a local Ollama server on <code>127.0.0.1:11434</code>, to list and remove models, and the
-        browser companion talks only to a local process. See the <Link href="/privacy/">privacy policy</Link>.
+        browser companion talks only to a local process. The upcoming Mac App Store edition makes no network connections at
+        all. See the <Link href="/privacy/">privacy policy</Link>.
       </p>
     ),
   },
@@ -128,7 +129,21 @@ const FAQ = [
     q: "What does it cost?",
     a: (
       <p>
-        Nothing. SweepLoom is open source under the Mozilla Public License 2.0. See <Link href="/license/">License</Link>.
+        The full edition costs nothing: it is open source under the Mozilla Public License 2.0 (see{" "}
+        <Link href="/license/">License</Link>). A sandboxed Mac App Store edition is coming soon for USD 1.99; it is in
+        TestFlight testing and not on sale yet.
+      </p>
+    ),
+  },
+  {
+    q: "What's the difference between the App Store edition and the free edition?",
+    a: (
+      <p>
+        The App Store edition is the same desktop app built for Apple&apos;s App Sandbox. It works only inside folders you
+        grant in the macOS folder picker, makes no network connections and starts no other programs. That rules out
+        Sessions and stopping processes, Docker, Simulator devices and runtimes, the browser companion, Ollama models, Rust
+        toolchains and the CLI and MCP server, which stay in the free full edition you build from source. Apple handles the
+        purchase and refunds. The <Link href="/download/#editions">comparison table</Link> has the details.
       </p>
     ),
   },

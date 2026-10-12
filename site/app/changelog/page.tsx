@@ -30,6 +30,20 @@ const UNRELEASED: { title: string; body: React.ReactNode }[] = [
       </>
     ),
   },
+  {
+    title: "Mac App Store edition (in TestFlight)",
+    body: (
+      <>
+        A sandboxed build of the desktop app (<code className="inline-code">--features mas</code>) that works only in folders
+        you grant, spawns no processes and makes no network connections. It is in TestFlight testing, not on sale. The full
+        edition stays free.{" "}
+        <Link href="/download/#editions" className="link">
+          Compare editions
+        </Link>
+        .
+      </>
+    ),
+  },
   { title: "Per-core CPU", body: "Overview and Sessions chart every core, with the performance / efficiency split on Apple Silicon." },
   {
     title: "iOS & Xcode discovery from disk",

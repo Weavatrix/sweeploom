@@ -1,10 +1,11 @@
 # SweepLoom Terms of Use
 
-**Effective date:** 2026-10-10
+**Effective date:** 2026-10-12
 
 These terms cover the SweepLoom software — the `sweeploom` CLI, the MCP
-server, the Codex plugin, the Rust library, the desktop app, and the
-browser companion extension — and the website at
+server, the Codex plugin, the Rust library, the desktop app (including
+its Mac App Store edition), and the browser companion extension — and
+the website at
 [sweeploom.com](https://sweeploom.com). SweepLoom is built by Sergii
 Ziborov at [Weavatrix](https://github.com/Weavatrix) (“we”, “us”).
 
@@ -19,6 +20,10 @@ copy, modify, and distribute the code come from that license. If
 anything in these terms conflicts with the MPL-2.0 as applied to the
 code, the MPL-2.0 wins. Nothing here takes away a right the MPL-2.0
 gives you.
+
+The Mac App Store edition is a compiled copy of the desktop app that
+Apple distributes under Apple's terms. Section 5 explains how that fits
+with the MPL-2.0.
 
 Third-party components keep their own licenses. For example,
 `weavatrix-scan`, `weavatrix-git`, and `mcport` are MIT-licensed.
@@ -74,7 +79,8 @@ does not check for updates over the network.
 
 **Network use.** The CLI and the MCP server make no network requests. The
 desktop app connects only to a local Ollama server at `127.0.0.1:11434`,
-if one is running, to list and remove models. The browser companion
+if one is running, to list and remove models. The Mac App Store edition
+makes no network connections at all. The browser companion
 extension exchanges messages only with a local SweepLoom process through
 the browser's native-messaging channel; it makes no network requests.
 Cleanup actions may run local tools (such as `docker`, `simctl`, or
@@ -101,7 +107,62 @@ inspect accordingly.
 website, its hosting provider processes basic request data, such as IP
 address and browser type, to deliver and protect the pages.
 
-## 5. No warranty
+## 5. The Mac App Store edition
+
+The desktop app also has a Mac App Store edition: the same app, built to
+run in Apple's App Sandbox. It is coming to the Mac App Store and is
+being tested through Apple's TestFlight; it is not on sale yet. The full
+edition stays free and open source, and you can still build it from
+source.
+
+**Buying it.** The planned price is USD 1.99. Purchases are handled by
+Apple through the App Store, including payment; we do not receive your
+payment details.
+
+**Which license applies.** Your license to an App Store copy is Apple's
+Standard End User License Agreement (the “Licensed Application End User
+License Agreement”,
+<https://www.apple.com/legal/internet-services/itunes/dev/stdeula/>).
+For that copy, if Apple's agreement and these terms conflict, Apple's
+agreement prevails. The rest of these terms still apply to it where
+they do not conflict.
+
+**The source stays open.** Section 3.2 of the MPL-2.0 lets a compiled
+program be distributed under different terms, as long as those terms do
+not limit your rights in the source code and you are told where to get
+it. So the App Store executable is distributed under Apple's terms,
+while the complete source code of the same app remains available under
+the MPL-2.0 at <https://github.com/Weavatrix/sweeploom>. Apple's terms
+do not reduce your rights in that source. Settings → About in the app
+says the same and links to it.
+
+**Refunds.** Refunds for App Store purchases are handled by Apple, not
+by us. Request one at <https://reportaproblem.apple.com>.
+
+**What it can reach.** The App Store edition works only inside folders
+you grant with the macOS folder picker. It remembers each grant as a
+security-scoped bookmark stored in its own app container, and you can
+remove a grant in Settings at any time. It moves items to the Trash
+through macOS, reads Git state from the repository files itself, starts
+no other programs, and makes no network connections. Features that need
+more access than the sandbox allows (Sessions and stopping processes,
+Docker, iOS Simulator devices and runtimes, the browser companion,
+Ollama models, Rust toolchain removal, and the CLI and MCP server) are
+only in the full edition.
+
+**You still review every cleanup.** Section 3 applies in full. A folder
+grant lets SweepLoom read and clean inside that folder after you
+confirm; it does not make a cleanup safe. Generated output is still
+deleted permanently. Inside the sandbox, macOS does not let SweepLoom
+see which other apps are running, so it cannot tell whether a build,
+simulator, or app is using a file: quit them before you confirm.
+
+**No data collection.** The App Store edition collects no data and
+contains no analytics. Apple processes purchase and download data under
+its own privacy policy; see our
+[Privacy Policy](https://sweeploom.com/privacy/).
+
+## 6. No warranty
 
 SweepLoom and the website are provided **“as is”**, without warranty of
 any kind, express, implied, or statutory, consistent with Section 6 of
@@ -116,7 +177,7 @@ benchmark reproduces on your machine, or that the software works with
 every version of the third-party tools it inspects. The entire risk as
 to the quality and performance of the software is with you.
 
-## 6. Limitation of liability
+## 7. Limitation of liability
 
 To the fullest extent permitted by law, and consistent with Section 7 of
 the MPL-2.0, neither Weavatrix nor any contributor is liable to you for
@@ -130,7 +191,7 @@ Some jurisdictions do not allow the exclusion or limitation of certain
 damages. Where that applies, our liability is limited to the smallest
 amount the law allows.
 
-## 7. Acceptable use
+## 8. Acceptable use
 
 When you use SweepLoom or the website, do not:
 
@@ -148,10 +209,10 @@ states, it does not grant rights in contributors' trademarks, service
 marks, or logos. You may refer to SweepLoom truthfully, for example
 “based on SweepLoom”.
 
-## 8. Third-party products and trademarks
+## 9. Third-party products and trademarks
 
 SweepLoom inspects and works alongside software made by others. Apple,
-macOS, iOS, Xcode, Docker, Claude, Claude Code, Codex, Cursor, OpenCode,
+App Store, Mac App Store, TestFlight, macOS, iOS, Xcode, Docker, Claude, Claude Code, Codex, Cursor, OpenCode,
 Gemini, Grok, Ollama, Hugging Face, LM Studio, Windows, Edge, Chrome,
 Firefox, and other names mentioned in SweepLoom or its documentation are
 trademarks of their respective owners (for example Apple Inc., Docker,
@@ -161,13 +222,13 @@ They are used only to describe what SweepLoom works with. SweepLoom and
 Weavatrix are not affiliated with, endorsed by, or sponsored by any of
 these owners. Your use of their products is governed by their own terms.
 
-## 9. Contributions
+## 10. Contributions
 
 Unless you state otherwise, issues, pull requests, and other
 contributions you submit to the SweepLoom repository are provided under
 the MPL-2.0, the same license as the code.
 
-## 10. Changes
+## 11. Changes
 
 SweepLoom is under active development. Features may change or be removed
 at any time.
@@ -181,7 +242,7 @@ version of the code you already received.
 If any part of these terms is found unenforceable, the rest stays in
 effect.
 
-## 11. Contact
+## 12. Contact
 
 Questions about these terms, bug reports, and security concerns go
 through GitHub issues:

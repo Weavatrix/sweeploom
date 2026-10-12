@@ -43,7 +43,17 @@ run `sweeploom` with the argument `mcp` ([MCP.md](MCP.md)).
 no network requests. The desktop app talks only to a local Ollama server
 on `127.0.0.1:11434` (to list and remove models), and the browser
 companion uses the browser's native-messaging channel to a local process
-([BROWSER.md](BROWSER.md)).
+([BROWSER.md](BROWSER.md)). The Mac App Store edition makes no network
+connections at all.
+
+**App Store edition vs free edition?** The App Store edition (USD 1.99,
+coming soon; in TestFlight testing, not on sale) is the desktop app in
+the App Sandbox: only folders you grant, no subprocesses, no network,
+no data collected. Sessions, process control, Docker, simulators, the
+browser companion, Ollama, and the CLI/MCP server stay in the free
+MPL-2.0 full edition. Apple handles purchases and refunds
+([MACOS.md](MACOS.md#mac-app-store-edition),
+[TERMS.md](../TERMS.md#5-the-mac-app-store-edition)).
 
 **Website?** [sweeploom.com](https://sweeploom.com). Source, issues, and
 these docs live in this GitHub repo.

@@ -6,7 +6,7 @@ import { SITE, docsUrl, repoFile } from "@/lib/site";
 export const metadata = pageMeta({
   title: "Privacy Policy",
   description:
-    "SweepLoom is local-first: no account, no telemetry, no update checks. The CLI and MCP server make no network requests. sweeploom.com has no analytics, no cookies and no trackers.",
+    "SweepLoom is local-first: no account, no telemetry, no update checks. The CLI and MCP server make no network requests, and the Mac App Store edition makes none at all. sweeploom.com has no analytics, no cookies and no trackers.",
   path: "/privacy/",
 });
 
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      effective="2026-10-10"
+      effective="2026-10-12"
       current="/privacy/"
       intro={
         <p>
@@ -37,15 +37,19 @@ export default function PrivacyPage() {
           one is running, to list and remove models.
         </li>
         <li>
+          <strong>The Mac App Store edition</strong> (coming soon) collects no data and makes no network connections at all.
+          Apple handles its purchases under Apple&apos;s own privacy policy.
+        </li>
+        <li>
           <strong>This website</strong> is a static site with no analytics, no cookies, no trackers and self-hosted fonts.
         </li>
       </ul>
 
       <h2 id="software">The SweepLoom software</h2>
       <p>
-        This covers the <code>sweeploom</code> CLI, the MCP server, the Rust library, the desktop app, the Codex plugin and
-        the browser companion extension. They are built by Sergii Ziborov at Weavatrix (“we”), and none of them sends data to
-        us. We operate no server they talk to.
+        This covers the <code>sweeploom</code> CLI, the MCP server, the Rust library, the desktop app (including its{" "}
+        <a href="#app-store">Mac App Store edition</a>), the Codex plugin and the browser companion extension. They are
+        built by Sergii Ziborov at Weavatrix (“we”), and none of them sends data to us. We operate no server they talk to.
       </p>
 
       <h3 id="what-it-reads">What it reads on your computer</h3>
@@ -70,7 +74,7 @@ export default function PrivacyPage() {
         <li>
           <strong>Local tools you already use:</strong> cleanup in the desktop app can query and run <code>docker</code>,{" "}
           <code>xcrun simctl</code>, <code>rustup</code> and the local Ollama API. Those tools follow their own behavior and
-          terms.
+          terms. The Mac App Store edition runs none of them.
         </li>
       </ul>
 
@@ -103,6 +107,35 @@ export default function PrivacyPage() {
         Installing SweepLoom uses Git and Cargo, which download source from GitHub and dependencies from crates.io under
         those services&apos; own policies. That happens at install time, not when SweepLoom runs.
       </p>
+
+      <h2 id="app-store">Mac App Store edition</h2>
+      <p>
+        The desktop app also has a sandboxed Mac App Store edition. It is coming to the Mac App Store and is being tested
+        through Apple&apos;s TestFlight; it is not on sale yet.
+      </p>
+      <ul>
+        <li>
+          <strong>The app collects no data.</strong> It has no analytics, makes no network connections, starts no other
+          programs and sends nothing to us.
+        </li>
+        <li>
+          <strong>It reads only folders you grant.</strong> It runs in the macOS App Sandbox and works only inside folders you
+          choose in the macOS folder picker. Each grant is remembered as a security-scoped bookmark in the app&apos;s own
+          container, together with its settings and scan history. You can remove a grant in Settings at any time.
+        </li>
+        <li>
+          <strong>Apple handles the purchase.</strong> Buying and downloading the app is processed by Apple under{" "}
+          <a href="https://www.apple.com/legal/privacy/">Apple&apos;s privacy policy</a>. We do not receive your payment
+          details or other personal data from Apple. Apple gives developers aggregate reports in App Store Connect, such as
+          sales and download totals and app analytics, which do not identify you.
+        </li>
+        <li>
+          <strong>Apple&apos;s own diagnostics.</strong> If you choose to share analytics with app developers in macOS, Apple
+          may pass on crash reports for the app. If you test it through TestFlight, Apple may share the details you were
+          invited with and any feedback you send. Both follow Apple&apos;s settings and terms; SweepLoom itself collects
+          neither.
+        </li>
+      </ul>
 
       <h2 id="website">This website</h2>
       <ul>

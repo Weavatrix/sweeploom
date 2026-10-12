@@ -53,8 +53,16 @@ inside the grants, and Move to Trash / Show in Finder use `NSFileManager` and
 `NSWorkspace`. Features that need other apps' processes or command-line tools
 (Sessions, stopping processes, Docker, simulators, the browser companion, Ollama,
 rustup) are explained in the app with a link to this repository. All Objective-C
-and libc calls live in `crates/sweeploom-macos`, the only crate that allows
-`unsafe`.
+and libc calls live in `crates/sweeploom-macos`, the only crate with `unsafe`
+code compiled on macOS (`sweeploom-network` has some, for Windows only). Git
+state is read in pure Rust with `weavatrix-git`. The build spawns no
+subprocesses, has no network entitlement, and collects no data.
+
+Status: uploaded to App Store Connect for TestFlight testing only; not yet
+approved or on sale. Planned price USD 1.99; the full edition stays free. Apple's
+Standard EULA covers App Store copies, and under MPL-2.0 §3.2 Settings → About
+states that the source of that build is available in this repository
+([TERMS.md](../TERMS.md#5-the-mac-app-store-edition) section 5).
 
 ```sh
 python3 scripts/macos-mas.py --dev                     # sandboxed, development-signed

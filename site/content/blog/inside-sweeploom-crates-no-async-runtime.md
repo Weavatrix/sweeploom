@@ -1,5 +1,5 @@
 ---
-title: "Inside SweepLoom: fifteen crates and no async runtime"
+title: "Inside SweepLoom: sixteen crates and no async runtime"
 date: "2026-10-12"
 summary: "A tool that deletes files should be boring on the inside. How SweepLoom's workspace is split into crates, which invariants every crate keeps, why cargo-deny bans tokio, hyper and reqwest, and how the desktop app scans in parallel with nothing but std threads and channels."
 tags: ["architecture", "rust", "engineering", "safety"]
@@ -9,7 +9,7 @@ When the job of a program is to decide what can be removed from your disk, the i
 
 ## The crate map
 
-SweepLoom is one Cargo workspace with fourteen library and binary crates plus the desktop app:
+SweepLoom is one Cargo workspace with fifteen library and binary crates plus the desktop app:
 
 ```text
 sweeploom-core        no OS APIs, no egui
@@ -25,11 +25,14 @@ sweeploom-general     temp, logs, dumps, Downloads review
 sweeploom-rules       declarative TOML cleaner rules
 sweeploom-browser     companion protocol: tab heat, discard, Later
 sweeploom-history     bounded in-memory observed history
+sweeploom-macos       AppKit/Foundation/libc bridge for the App Store edition
 sweeploom (cli)       CLI, MCP server, Rust library facade
 sweeploom-gui         egui + eframe (glow)
 ```
 
 The layering matters more than the count. `sweeploom-core` holds the vocabulary (candidates, safety, recommendations, redaction) and is not allowed to touch the operating system or the UI. Everything that does touch the OS sits in a thin crate of its own, so the rules can be tested without a real machine. `sweeploom-exec` owns the plan, revalidate and receipt sequence for generated cleanup, and its Trash path for user data. The CLI, the MCP server and the desktop app's Project output all apply through it; only native objects (Docker, `simctl`, Ollama, `rustup`) are handed to their own tools.
+
+The newest crate, `sweeploom-macos`, exists for the sandboxed Mac App Store edition, which is the desktop app built with the `mas` cargo feature (coming to the Mac App Store, currently in TestFlight testing). It wraps every Objective-C and libc call that edition needs in a safe function: the folder picker that grants access to a folder, security-scoped bookmarks that keep a grant across launches, Move to Trash through `NSFileManager`, Show in Finder through `NSWorkspace`, and the real home folder, because inside the sandbox `$HOME` is the app container. On other platforms it compiles to the same API and returns `Unsupported`. The free full edition does not depend on it.
 
 The `sweeploom` crate is the facade. It is the CLI binary, the MCP server (behind a default `mcp` feature, using the MIT-licensed `mcport` crate for stdio JSON-RPC) and the library you can depend on from Git. Because the CLI, MCP and library are the same crate, an agent calling `cleanup_candidates` and a person typing `sweeploom clean .` get the same rows.
 
@@ -123,7 +126,7 @@ Because symbols are stripped, the panic hook also appends the message and source
 
 ## Budgets as architecture
 
-Two more rules keep the codebase readable. The workspace forbids `unsafe` code outright (`unsafe_code = "forbid"`) and warns on missing docs. And a CI step called *Architecture budget* fails any tracked Rust, Markdown, TOML or YAML file over **300 lines** and any Rust function over **100 lines**. It is blunt, and it is why the GUI is many small files with names like `cleanup_ios_merge.rs` instead of a few large ones.
+Two more rules keep the codebase readable. The workspace forbids `unsafe` code (`unsafe_code = "forbid"`) and warns on missing docs. Two crates opt out: `sweeploom-network`, for Windows-only TCP byte counters, and `sweeploom-macos`, which denies `unsafe` by default and allows it item by item, each next to a `SAFETY:` note. And a CI step called *Architecture budget* fails any tracked Rust, Markdown, TOML or YAML file over **300 lines** and any Rust function over **100 lines**. It is blunt, and it is why the GUI is many small files with names like `cleanup_ios_merge.rs` instead of a few large ones.
 
 ## The trade-offs
 

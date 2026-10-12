@@ -22,6 +22,8 @@ SweepLoom does not vendor, fork, or relicense them.
 
 ## Crate map
 
+Sixteen workspace crates:
+
 ```text
 sweeploom-core        no OS APIs, no egui
 sweeploom-platform    paths, trash, process control
@@ -36,6 +38,7 @@ sweeploom-general     temp, logs, dumps, Downloads review
 sweeploom-rules       declarative TOML cleaner rules
 sweeploom-browser     companion protocol: tab heat, discard, Later
 sweeploom-history     bounded in-memory observed history
+sweeploom-macos       AppKit/Foundation/libc bridge for the App Store edition
 sweeploom (cli)       CLI, MCP server, Rust library facade
 sweeploom-gui         egui + eframe (glow)
 ```
@@ -48,3 +51,9 @@ sweeploom-gui         egui + eframe (glow)
 - Command lines are redacted before UI / logs / receipts.
 - No LLM on the destructive path.
 - No default telemetry.
+- `unsafe` is forbidden workspace-wide, with two opt-outs:
+  `sweeploom-network` (Windows-only FFI for TCP byte counters) and
+  `sweeploom-macos`, which denies `unsafe` by default and allows it per
+  item next to a `SAFETY:` note. Only the GUI's `mas` feature (the
+  sandboxed Mac App Store edition, see
+  [MACOS.md](MACOS.md#mac-app-store-edition)) uses `sweeploom-macos`.

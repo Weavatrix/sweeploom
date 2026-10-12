@@ -30,6 +30,21 @@ function C({ children }: { children: React.ReactNode }) {
   return <code className="inline-code">{children}</code>;
 }
 
+/* Full edition vs the sandboxed Mac App Store edition (apps/sweeploom-gui/src/edition.rs). */
+const EDITIONS: [string, string, string][] = [
+  ["Status", "Available now, built from source", "Coming soon; in TestFlight testing, not on sale yet"],
+  ["Price", "Free", "USD 1.99, through the Mac App Store"],
+  ["License", "MPL-2.0", "Apple’s Standard EULA for the App Store copy; the source stays MPL-2.0"],
+  ["Platforms", "Windows, macOS, Linux", "macOS 12 or newer"],
+  ["What it can read", "Whatever your account can read", "Only folders you grant in the macOS folder picker"],
+  ["Disk cleanup: project output, caches, Xcode data, AI stores, large files", "Yes", "Yes, inside granted folders"],
+  ["Sessions and stopping processes", "Yes", "No: the sandbox hides other apps’ processes"],
+  ["Docker, Simulator devices and runtimes", "Yes", "No: needs docker and simctl"],
+  ["Browser companion, Ollama models, Rust toolchains", "Yes", "No: they need access outside the sandbox"],
+  ["CLI and MCP server", "Yes", "No: desktop app only"],
+  ["Network and telemetry", "Local Ollama only; no telemetry", "None"],
+];
+
 export default function DownloadPage() {
   return (
     <>
@@ -130,6 +145,47 @@ export default function DownloadPage() {
               <a href={docsUrl("MACOS.md")} className="link mt-4 inline-flex items-center gap-1.5 text-sm">
                 docs/MACOS.md <icons.external size={14} />
               </a>
+            </div>
+            <div id="editions" className="scroll-mt-24 grid gap-4">
+              <h3 className="font-display text-lg font-semibold text-text">macOS: Mac App Store edition (coming soon)</h3>
+              <p>
+                A sandboxed build of the same desktop app is coming to the Mac App Store for USD 1.99. It is in TestFlight
+                testing and is not on sale yet. It makes no network connections, starts no other programs and collects no
+                data. The full edition on this page stays free and open source.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <caption className="sr-only">Full edition compared with the Mac App Store edition</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Feature</th>
+                      <th scope="col">Full edition</th>
+                      <th scope="col">Mac App Store edition</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {EDITIONS.map(([row, full, store]) => (
+                      <tr key={row}>
+                        <td className="font-medium text-text">{row}</td>
+                        <td className="text-muted">{full}</td>
+                        <td className="text-muted">{store}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-sm">
+                Purchases and refunds go through Apple. The App Store copy is licensed under Apple&apos;s terms, and its
+                complete source stays available under MPL-2.0. See{" "}
+                <Link href="/terms/#5-the-mac-app-store-edition" className="link">
+                  Terms, section 5
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy/#app-store" className="link">
+                  Privacy
+                </Link>
+                .
+              </p>
             </div>
           </Step>
 

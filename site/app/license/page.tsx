@@ -14,7 +14,7 @@ export default function LicensePage() {
   return (
     <LegalPage
       title="License"
-      effective="2026-10-10"
+      effective="2026-10-12"
       current="/license/"
       intro={
         <p>
@@ -65,7 +65,10 @@ export default function LicensePage() {
         </thead>
         <tbody>
           <tr>
-            <td>SweepLoom (Weavatrix/sweeploom): CLI, MCP server, library, desktop app, companion extensions, Codex plugin</td>
+            <td>
+              SweepLoom (Weavatrix/sweeploom): CLI, MCP server, library, desktop app (including the Mac App Store edition&apos;s
+              source), companion extensions, Codex plugin
+            </td>
             <td>MPL-2.0</td>
           </tr>
           <tr>
@@ -82,6 +85,30 @@ export default function LicensePage() {
       </table>
       <p>
         SweepLoom consumes the MIT Weavatrix libraries; it does not vendor, fork or relicense them.
+      </p>
+
+      <h2 id="app-store">The Mac App Store edition</h2>
+      <p>
+        A sandboxed build of the desktop app is coming to the Mac App Store (it is in TestFlight testing and not on sale
+        yet). Section 3.2 of the MPL-2.0 allows a compiled program to be distributed under different terms, as long as
+        those terms do not limit your rights in the source code and you are told where to get it. So:
+      </p>
+      <ul>
+        <li>
+          <strong>The App Store copy</strong> is licensed to you under Apple&apos;s Standard End User License Agreement.
+          Purchases and refunds go through Apple.
+        </li>
+        <li>
+          <strong>The source code</strong> of that same app stays available under MPL-2.0 at{" "}
+          <a href="https://github.com/Weavatrix/sweeploom">github.com/Weavatrix/sweeploom</a>, and Apple&apos;s terms do not
+          reduce your rights in it. Settings → About in the app says so and links there.
+        </li>
+        <li>
+          <strong>The full edition</strong>, with every feature, stays free: build it from source.
+        </li>
+      </ul>
+      <p>
+        Details are in section 5 of the <Link href="/terms/#5-the-mac-app-store-edition">Terms of Use</Link>.
       </p>
 
       <h2 id="site">This website</h2>

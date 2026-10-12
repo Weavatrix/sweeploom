@@ -131,6 +131,17 @@ On macOS, build the signed `.app` so folder permissions survive updates:
 Settings are local-only; telemetry is off. An optional tray mode runs on
 Windows and macOS.
 
+## Editions
+
+Everything in this README is the **full edition**: free, MPL-2.0, built
+from source. A sandboxed **Mac App Store edition** of the desktop app
+(USD 1.99) is coming soon; it is in TestFlight testing and not on sale
+yet. It works only in folders you grant, makes no network connections,
+starts no other programs, and leaves out Sessions, Docker, simulators,
+the browser companion, Ollama, and the CLI and MCP server. Apple's EULA
+covers the App Store copy; its source stays here under MPL-2.0
+([MACOS.md](docs/MACOS.md#mac-app-store-edition), [Terms §5](TERMS.md#5-the-mac-app-store-edition)).
+
 ## MCP for agents
 
 Point any MCP host at the installed binary:
@@ -212,7 +223,7 @@ and [docs/BENCHMARKS-LIVE.md](docs/BENCHMARKS-LIVE.md).
 | [LIBRARY.md](docs/LIBRARY.md) | Rust library examples |
 | [SAFETY.md](docs/SAFETY.md) | Safety model, what the classes mean, MCP gate |
 | [CLEANUP.md](docs/CLEANUP.md) | Desktop Cleanup sources and actions |
-| [MACOS.md](docs/MACOS.md) | Signed macOS app bundle |
+| [MACOS.md](docs/MACOS.md) | Signed macOS app bundle; Mac App Store edition |
 | [BROWSER.md](docs/BROWSER.md) | Browser companion: install, what it sends, tab actions |
 | [BENCHMARKS.md](docs/BENCHMARKS.md) | With vs without: token tax, classify, live agents, MCP gate |
 | [BENCHMARKS-LIVE.md](docs/BENCHMARKS-LIVE.md) | Live coding-agent check (2026-09-15) |
