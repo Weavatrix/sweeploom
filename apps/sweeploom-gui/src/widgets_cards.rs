@@ -1,6 +1,6 @@
-//! Metric cards, stat tiles and clickable list rows.
+//! Metric cards and stat tiles.
 
-use eframe::egui::{self, CornerRadius, Margin, RichText, Sense};
+use eframe::egui::{self, CornerRadius, RichText, Sense};
 
 use super::{Tone, hover_stroke, meter, pointer, sparkline_max};
 use crate::icons::{self, Glyph};
@@ -182,26 +182,28 @@ fn pressure_card(ui: &mut egui::Ui, item: &PressureItem, size: egui::Vec2) -> eg
         Tone::Muted
     };
     let clicked = pointer(card_box(ui, size, true, |ui| {
-        ui.horizontal(|ui| {
+        // Metrics claim their width first; the title truncates into what is left.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add(
-                egui::Label::new(RichText::new(&item.title).size(14.5).strong())
-                    .selectable(false)
-                    .truncate(),
+                egui::Label::new(
+                    RichText::new(format!("{:.0}% CPU", item.cpu))
+                        .size(12.5)
+                        .color(theme::tone(ui, cpu_tone)),
+                )
+                .selectable(false),
             );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(theme::SM);
+            ui.add(
+                egui::Label::new(RichText::new(&item.rss).size(14.5).strong()).selectable(false),
+            );
+            ui.add_space(theme::SM);
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.add(
-                    egui::Label::new(
-                        RichText::new(format!("{:.0}% CPU", item.cpu))
-                            .size(12.5)
-                            .color(theme::tone(ui, cpu_tone)),
-                    )
-                    .selectable(false),
-                );
-                ui.add_space(theme::SM);
-                ui.add(
-                    egui::Label::new(RichText::new(&item.rss).size(14.5).strong())
-                        .selectable(false),
-                );
+                    egui::Label::new(RichText::new(&item.title).size(14.5).strong())
+                        .selectable(false)
+                        .truncate(),
+                )
+                .on_hover_text(&item.title);
             });
         });
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
@@ -252,42 +254,5 @@ pub fn card_box(
     );
     child.set_clip_rect(inner.expand(4.0).intersect(ui.clip_rect()));
     add_contents(&mut child);
-    response
-}
-
-/// Clickable listing row. Returns the row response.
-pub fn list_row_at(ui: &mut egui::Ui, title: &str, meta: &str, detail: &str) -> egui::Response {
-    let id = ui.id().with(title);
-    let inner = egui::Frame::default()
-        .fill(theme::card_fill(ui))
-        .stroke(theme::card_stroke(ui))
-        .corner_radius(CornerRadius::same(8))
-        .inner_margin(Margin::symmetric(14, 10))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.add(
-                    egui::Label::new(RichText::new(title).strong())
-                        .selectable(false)
-                        .truncate(),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if !meta.is_empty() {
-                        ui.add(egui::Label::new(RichText::new(meta).strong()).selectable(false));
-                    }
-                    if !detail.is_empty() {
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(detail).size(12.5).color(theme::muted(ui)),
-                            )
-                            .selectable(false)
-                            .truncate(),
-                        );
-                    }
-                });
-            });
-        });
-    let response = pointer(inner.response.interact(Sense::click()));
-    hover_stroke(ui, id, response.rect, response.hovered(), 8.0);
-    ui.add_space(6.0);
     response
 }

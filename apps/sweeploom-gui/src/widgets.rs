@@ -14,6 +14,8 @@ mod controls;
 pub mod cpu_cores;
 #[path = "widgets_layout.rs"]
 mod layout;
+#[path = "widgets_rows.rs"]
+mod rows;
 #[cfg(test)]
 #[path = "widgets_tests.rs"]
 mod tests;
@@ -23,6 +25,7 @@ pub use cards::*;
 pub use charts::*;
 pub use controls::*;
 pub use layout::*;
+pub use rows::*;
 
 /// Pointing hand on anything the user can click.
 pub fn pointer(response: egui::Response) -> egui::Response {

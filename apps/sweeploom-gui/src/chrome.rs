@@ -77,12 +77,16 @@ pub fn draw(ctx: &egui::Context, app: &mut SweepLoomApp) {
             if app.nav.owns_scroll() {
                 draw_page(app, ui);
             } else {
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        draw_page(app, ui);
-                    });
+                let area = egui::ScrollArea::vertical().auto_shrink([false, false]);
+                #[cfg(debug_assertions)]
+                let area = match shots::page_scroll(ui.ctx()) {
+                    Some(offset) => area.vertical_scroll_offset(offset),
+                    None => area,
+                };
+                area.show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    draw_page(app, ui);
+                });
             }
         });
 }

@@ -17,6 +17,8 @@ const PANE_KEY: &str = "sweeploom-shot-pane";
 const SIZE: egui::Vec2 = egui::vec2(1374.0, 858.75);
 /// Pane marker that scrolls the Sessions detail instead of picking a Cleanup pane.
 const SCROLL: usize = 99;
+/// Marker that scrolls the whole page down (Overview below the fold).
+const PAGE: usize = 98;
 
 struct Shot {
     name: String,
@@ -36,8 +38,9 @@ struct Tour {
 
 static TOUR: Mutex<Option<Option<Tour>>> = Mutex::new(None);
 
-const SCREENS: [(&str, Nav, Option<usize>); 17] = [
+const SCREENS: [(&str, Nav, Option<usize>); 18] = [
     ("overview", Nav::Overview, None),
+    ("overview-lower", Nav::Overview, Some(PAGE)),
     ("sessions", Nav::Sessions, None),
     ("sessions-activity", Nav::Sessions, Some(SCROLL)),
     ("history", Nav::History, Some(0)),
@@ -101,7 +104,7 @@ fn start(app: &SweepLoomApp) -> Option<Tour> {
 /// Cleanup pane forced by the tour, if any.
 pub fn pane(ctx: &egui::Context) -> Option<usize> {
     ctx.data(|data| data.get_temp::<usize>(egui::Id::new(PANE_KEY)))
-        .filter(|pane| *pane != SCROLL)
+        .filter(|pane| *pane != SCROLL && *pane != PAGE)
 }
 
 /// Detail scroll offset forced by the tour, if any.
@@ -109,6 +112,13 @@ pub fn scroll(ctx: &egui::Context) -> Option<f32> {
     ctx.data(|data| data.get_temp::<usize>(egui::Id::new(PANE_KEY)))
         .filter(|pane| *pane == SCROLL)
         .map(|_| 430.0)
+}
+
+/// Page scroll offset forced by the tour, if any.
+pub fn page_scroll(ctx: &egui::Context) -> Option<f32> {
+    ctx.data(|data| data.get_temp::<usize>(egui::Id::new(PANE_KEY)))
+        .filter(|pane| *pane == PAGE)
+        .map(|_| 760.0)
 }
 
 /// Advance the tour by one frame. No-op unless `SWEEPLOOM_SHOTS` is set.
