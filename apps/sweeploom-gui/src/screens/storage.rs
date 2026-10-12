@@ -20,6 +20,7 @@ pub fn ui_storage(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Folder inspector. Symlinks are not followed. Scan runs in the background. Use the arrow to expand, checkbox to select, or right-click for actions. Double-click to scan a folder. Size shows allocated disk blocks.",
     );
     header::header(app, ui);
+    crate::folder_access_ui::onboarding(app, ui);
     if app.inventory.is_some() {
         folder_table(app, ui);
     } else if app.scan_rx.is_none() {

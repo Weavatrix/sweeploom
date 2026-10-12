@@ -47,6 +47,15 @@ impl Pane {
         Self::Models,
         Self::Data,
     ];
+    /// Sources shown as tabs. Docker and simulators need command-line tools the
+    /// App Store edition cannot run.
+    fn visible() -> &'static [Self] {
+        if crate::edition::STORE {
+            &Self::ALL[2..]
+        } else {
+            &Self::ALL
+        }
+    }
     fn label(self) -> &'static str {
         match self {
             Self::Docker => "Docker",
@@ -137,6 +146,8 @@ struct Listing {
     items: Vec<Item>,
     note: String,
     complete: bool,
+    /// App Store edition: existing folders this source needs access to.
+    access: Vec<PathBuf>,
 }
 enum ListingMsg {
     Initial(Listing),
@@ -157,7 +168,7 @@ impl Default for NativeCleanup {
     fn default() -> Self {
         Self {
             project: true,
-            pane: Pane::Docker,
+            pane: Pane::visible()[0],
             panes: Pane::ALL
                 .into_iter()
                 .map(|pane| (pane, state::PaneState::default()))
@@ -177,6 +188,11 @@ impl NativeCleanup {
     /// Land on the Project output segment.
     pub(crate) fn show_project(&mut self) {
         self.project = true;
+    }
+
+    /// Folder grants changed: file-backed sources list again when shown.
+    pub(crate) fn access_changed(&mut self) {
+        self.invalidate_files();
     }
 }
 

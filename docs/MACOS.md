@@ -42,3 +42,30 @@ Downloads, or Desktop access once for the new identity. Launch the `.app` bundle
 for subsequent runs and updates; launching the bare binary with `cargo run` does
 not use that bundle's identity. macOS owns these grants; the app does not copy,
 reset, or store them. Scan history remains in the existing local data directory.
+
+## Mac App Store edition
+
+The App Store build is the same GUI with the `mas` cargo feature. It runs in the
+App Sandbox (`com.weavatrix.sweeploom.mas`), so it reads only folders the user
+grants with the folder panel; app-scoped security-scoped bookmarks restore those
+grants on launch. Scans, project discovery, Explorer and Cleanup sources stay
+inside the grants, and Move to Trash / Show in Finder use `NSFileManager` and
+`NSWorkspace`. Features that need other apps' processes or command-line tools
+(Sessions, stopping processes, Docker, simulators, the browser companion, Ollama,
+rustup) are explained in the app with a link to this repository. All Objective-C
+and libc calls live in `crates/sweeploom-macos`, the only crate that allows
+`unsafe`.
+
+```sh
+python3 scripts/macos-mas.py --dev                     # sandboxed, development-signed
+python3 scripts/macos-mas.py --dev --native-only --fast   # quicker local iteration
+ASC_ISSUER_ID=… python3 scripts/asc.py profile          # MAC_APP_STORE profile → target/
+python3 scripts/macos-mas.py --store --profile target/SweepLoom_Mac_App_Store.provisionprofile
+```
+
+`--store` builds a universal binary, embeds the profile, signs with Apple
+Distribution and writes `target/SweepLoom-mas.pkg` signed with the Mac installer
+certificate. Use a released Xcode (`--xcode`); App Store Connect rejects beta
+SDKs. `--build N` sets `CFBundleVersion` (default: UTC `YYYYMMDDHHMM`). Debug
+builds also accept `SWEEPLOOM_MAS_GRANTS=/a:/b` to test grant-scoped screens in a
+sandboxed bundle without the panel.

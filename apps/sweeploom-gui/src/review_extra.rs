@@ -25,15 +25,31 @@ pub fn project_roots(
     current_project: Option<&Path>,
 ) -> Vec<PathBuf> {
     let cwd = std::env::current_dir().ok();
-    let roots = discovery_roots(&locations.home, current_project, cwd.as_deref());
+    let roots = if crate::edition::STORE {
+        granted_roots(&crate::folder_access::granted(), &locations.home)
+    } else {
+        discovery_roots(&locations.home, current_project, cwd.as_deref())
+    };
     let mut projects = discover_projects_from(&roots, MAX_PROJECTS);
     if let Some(root) = inventory_root {
         merge_inventory(&mut projects, root, inventory_projects);
     }
     prepend_project(&mut projects, current_project);
     prepend_project(&mut projects, cwd.as_deref());
+    projects.retain(|project| crate::folder_access::allowed(project));
     projects.truncate(MAX_PROJECTS);
     projects
+}
+
+/// App Store edition: walk each granted folder; a granted home walks its developer
+/// folders. Tool homes and caches (`~/.cargo`, `~/Library/…`) are cleanup sources,
+/// not project trees: registry checkouts there must not become projects.
+fn granted_roots(granted: &[PathBuf], home: &Path) -> Vec<PathBuf> {
+    granted
+        .iter()
+        .filter(|root| !root.starts_with(home) || is_discoverable_below(home, root))
+        .flat_map(|root| review_scan_roots(root, home))
+        .collect()
 }
 
 fn discovery_roots(home: &Path, current: Option<&Path>, cwd: Option<&Path>) -> Vec<PathBuf> {
@@ -105,6 +121,7 @@ pub fn extra_rows(locations: &UserLocations) -> Vec<ReviewRow> {
             title: offer.title,
         });
     }
+    rows.retain(|row| crate::folder_access::allowed(&row.candidate.path));
     rows
 }
 

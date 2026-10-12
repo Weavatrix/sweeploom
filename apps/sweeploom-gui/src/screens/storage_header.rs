@@ -29,6 +29,7 @@ pub(super) fn header(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         if clicked {
             app.run_scan();
         }
+        crate::folder_access_ui::explorer_picker(app, ui);
         ui.add(
             egui::Separator::default()
                 .vertical()

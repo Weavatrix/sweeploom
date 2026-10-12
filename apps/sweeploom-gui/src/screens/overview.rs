@@ -23,6 +23,7 @@ pub fn ui_overview(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         "Overview",
         "Live pressure across memory, CPU and disk. Click a tile or a session to open it.",
     );
+    crate::folder_access_ui::onboarding(app, ui);
     let cores = cpu_cores::history(ui.ctx());
     if let Some(dest) = widgets::metric_grid(ui, &tiles::overview_cards(app, &cores)) {
         app.go(dest);
@@ -143,7 +144,11 @@ fn draw_opportunities(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     if shown == 0 {
         widgets::caption(
             ui,
-            "No idle sessions. Open Cleanup for Cargo target / node_modules, or Browser for process trees.",
+            if crate::edition::STORE {
+                "Nothing to reclaim yet. Open Cleanup for Cargo target, node_modules and Xcode data in your granted folders."
+            } else {
+                "No idle sessions. Open Cleanup for Cargo target / node_modules, or Browser for process trees."
+            },
         );
     }
 }

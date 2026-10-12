@@ -24,6 +24,15 @@ enum View {
 }
 
 pub fn ui_sessions(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
+    if crate::edition::STORE {
+        widgets::page_title(ui, "Sessions", HELP);
+        crate::edition::full_only(
+            ui,
+            "Live sessions need the full open-source edition",
+            "App Store apps run in the macOS App Sandbox, which hides other apps' processes. This edition shows host memory and CPU on Overview, but it cannot list, group or stop dev servers, agents and builds.",
+        );
+        return;
+    }
     if let Some(snapshot) = &app.snapshot {
         app.node_versions.poll(&snapshot.processes, ui.ctx());
     }

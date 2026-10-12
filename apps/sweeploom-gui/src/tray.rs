@@ -122,10 +122,14 @@ mod native {
         append_item(menu, items, "hide", "Hide to tray")?;
         append_sep(menu, seps)?;
         append_item(menu, items, "overview", "Overview")?;
-        append_item(menu, items, "sessions", "Sessions")?;
+        if !crate::edition::STORE {
+            append_item(menu, items, "sessions", "Sessions")?;
+        }
         append_item(menu, items, "review", "Cleanup")?;
         append_item(menu, items, "projects", "Projects")?;
-        append_item(menu, items, "browser", "Browser")?;
+        if !crate::edition::STORE {
+            append_item(menu, items, "browser", "Browser")?;
+        }
         append_item(menu, items, "ai", "AI")?;
         append_item(menu, items, "explorer", "Explorer")?;
         append_item(menu, items, "history", "History")?;

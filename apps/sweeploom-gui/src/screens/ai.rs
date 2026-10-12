@@ -42,7 +42,11 @@ pub fn ui_ai(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         ui.add_space(theme::MD);
     }
     if app.ai_offers.as_ref().is_some_and(Vec::is_empty) {
-        ui.label("No local AI session stores were found under the home directory.");
+        ui.label(if crate::edition::STORE {
+            "No AI session stores in the folders you granted."
+        } else {
+            "No local AI session stores were found under the home directory."
+        });
         return;
     }
     draw_table(app, ui);

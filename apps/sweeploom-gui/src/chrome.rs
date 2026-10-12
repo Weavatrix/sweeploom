@@ -39,12 +39,14 @@ pub fn draw(ctx: &egui::Context, app: &mut SweepLoomApp) {
                         .color(Color32::from_rgb(244, 246, 248)),
                 );
                 ui.add_space(4.0);
-                widgets::chip(
-                    ui,
-                    "preview",
-                    Color32::from_rgb(36, 32, 24),
-                    theme::accent_soft(),
-                );
+                if !crate::edition::STORE {
+                    widgets::chip(
+                        ui,
+                        "preview",
+                        Color32::from_rgb(36, 32, 24),
+                        theme::accent_soft(),
+                    );
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     header_status(ui, app);
                 });
@@ -134,7 +136,7 @@ fn header_status(ui: &mut egui::Ui, app: &SweepLoomApp) {
 
 fn draw_nav(ui: &mut egui::Ui, app: &mut SweepLoomApp) {
     let mut last_section = "";
-    for nav in Nav::ALL {
+    for nav in Nav::ALL.into_iter().filter(|nav| nav.visible()) {
         if nav.section() != last_section {
             last_section = nav.section();
             ui.add_space(theme::LG);

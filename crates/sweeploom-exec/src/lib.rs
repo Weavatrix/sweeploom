@@ -6,7 +6,9 @@
 
 mod manual_trash;
 mod revalidation;
-pub use manual_trash::{TrashTarget, apply_trash_with, prepare_trash, trash_path_reason};
+pub use manual_trash::{
+    TrashTarget, apply_trash_using, apply_trash_with, prepare_trash, trash_path_reason,
+};
 pub use revalidation::{revalidate, revalidate_with};
 
 use revalidation::{capture_revision, is_symlink};

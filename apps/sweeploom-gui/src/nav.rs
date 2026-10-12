@@ -91,6 +91,12 @@ impl Nav {
         }
     }
 
+    /// Sidebar entries. The App Store edition has no browser companion.
+    #[must_use]
+    pub const fn visible(self) -> bool {
+        !(crate::edition::STORE && matches!(self, Self::Browser))
+    }
+
     /// Screens that manage their own scrolling (tables pinned to the window).
     #[must_use]
     pub const fn owns_scroll(self) -> bool {

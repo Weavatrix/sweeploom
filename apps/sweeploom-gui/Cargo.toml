@@ -17,6 +17,12 @@ workspace = true
 name = "sweeploom-gui"
 path = "src/main.rs"
 
+[features]
+default = []
+# Sandboxed Mac App Store edition: folder grants, no subprocesses.
+# Packaged by scripts/macos-mas.py; off for the open-source build.
+mas = ["dep:sweeploom-macos", "dep:weavatrix-git"]
+
 [dependencies]
 sweeploom-core = { workspace = true }
 sweeploom-platform = { workspace = true }
@@ -30,6 +36,8 @@ sweeploom-general = { workspace = true }
 sweeploom-history = { workspace = true }
 sweeploom-ai = { workspace = true }
 sweeploom-browser = { workspace = true }
+sweeploom-macos = { workspace = true, optional = true }
+weavatrix-git = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true }
 eframe = { workspace = true }
 egui = { workspace = true }

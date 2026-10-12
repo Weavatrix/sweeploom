@@ -11,6 +11,8 @@ use sweeploom_storage::DiskUsage;
 #[path = "cleanup_catalog.rs"]
 mod catalog;
 use catalog::{Policy, RULES};
+#[path = "cleanup_access.rs"]
+mod access;
 #[path = "cleanup_app_paths.rs"]
 mod app_paths;
 use app_paths::{app_caches, downloads};
@@ -50,10 +52,14 @@ pub(super) fn discover(home: &Path, pane: Pane) -> Listing {
 
 pub(super) fn stream(home: &Path, pane: Pane, tx: &Sender<ListingMsg>) {
     let mut listing = discover(home, pane);
-    if pane == Pane::Data {
+    let store = crate::edition::STORE;
+    if store {
+        // Sandbox: granted folders only; rustup and Ollama need subprocesses.
+        access::restrict(home, pane, &mut listing);
+    } else if pane == Pane::Data {
         super::toolchains::classify(home, &mut listing.items);
     }
-    if pane == Pane::Models {
+    if pane == Pane::Models && !store {
         let (models, note) = super::models::listing(home);
         listing.items.extend(models);
         if !note.is_empty() {

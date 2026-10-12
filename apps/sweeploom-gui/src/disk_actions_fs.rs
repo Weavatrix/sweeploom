@@ -1,5 +1,5 @@
 //! Filesystem helpers for disk actions: tree pruning and Finder reveal.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub(super) fn remove_nodes(node: &mut sweeploom_storage::DirectoryNode, removed: &[PathBuf]) {
     let mut logical = 0;
@@ -29,9 +29,28 @@ pub(super) fn remove_nodes(node: &mut sweeploom_storage::DirectoryNode, removed:
     node.files = node.files.saturating_sub(files);
 }
 
+/// The sandbox hides other apps' processes, so "in use" checks see nothing.
+pub(crate) const SANDBOX_CAUTION: &str = "App Store edition: macOS does not let SweepLoom see which apps are running, so quit builds, simulators and apps that use these files first.";
+
+/// Move to Trash after every identity/path check; the sandbox uses NSFileManager.
+pub(super) fn trash(
+    items: &[sweeploom_exec::TrashTarget],
+    home: &Path,
+    processes: &[sweeploom_core::ProcessSnapshot],
+) -> (Vec<PathBuf>, Vec<String>) {
+    if crate::edition::STORE {
+        sweeploom_exec::apply_trash_using(items, home, processes, crate::edition::bridge::trash)
+    } else {
+        sweeploom_exec::apply_trash_with(items, home, processes)
+    }
+}
+
 pub(super) fn reveal(paths: &[PathBuf]) -> Result<(), String> {
     if paths.is_empty() {
         return Err("Nothing selected.".into());
+    }
+    if crate::edition::STORE {
+        return crate::edition::bridge::reveal(paths);
     }
     #[cfg(target_os = "macos")]
     let mut command = {

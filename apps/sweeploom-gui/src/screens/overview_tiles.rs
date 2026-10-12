@@ -30,9 +30,47 @@ pub(super) fn overview_cards(app: &SweepLoomApp, cores: &cpu_cores::CoreHistory)
     vec![
         memory_card(app),
         cpu_card(app, cores),
-        idle_card(app),
+        if crate::edition::STORE {
+            access_card(app)
+        } else {
+            idle_card(app)
+        },
         disk_card(app),
     ]
+}
+
+/// Where the live tiles lead: Sessions, which the App Store edition cannot show.
+fn live_dest() -> Dest {
+    Dest::Screen(if crate::edition::STORE {
+        Nav::Overview
+    } else {
+        Nav::Sessions
+    })
+}
+
+/// App Store edition: how many folders SweepLoom may read.
+fn access_card(app: &SweepLoomApp) -> Metric {
+    let count = app.folder_access.active().len();
+    let (value, sub, tone) = if count == 0 {
+        (
+            "None".into(),
+            "grant folders to start".into(),
+            Tone::Caution,
+        )
+    } else {
+        (count.to_string(), "folders granted".into(), Tone::Ok)
+    };
+    Metric {
+        tile: tile(
+            Glyph::Explorer,
+            "Folder access",
+            value,
+            sub,
+            tone,
+            TileViz::None,
+        ),
+        open: Dest::Screen(Nav::Settings),
+    }
 }
 
 fn memory_card(app: &SweepLoomApp) -> Metric {
@@ -63,7 +101,7 @@ fn memory_card(app: &SweepLoomApp) -> Metric {
             },
             TileViz::Meter(mem_used.clamp(0.0, 1.0)),
         ),
-        open: Dest::Screen(Nav::Sessions),
+        open: live_dest(),
     }
 }
 
@@ -89,7 +127,11 @@ fn cpu_card(app: &SweepLoomApp, cores: &cpu_cores::CoreHistory) -> Metric {
             Glyph::Cpu,
             "CPU load",
             format!("{cpu:.0}%"),
-            format!("{} · {stale_cpu:.0}% in idle sessions", cores.summary()),
+            if crate::edition::STORE {
+                cores.summary()
+            } else {
+                format!("{} · {stale_cpu:.0}% in idle sessions", cores.summary())
+            },
             if cpu >= 85.0 {
                 Tone::Warn
             } else {
@@ -97,7 +139,7 @@ fn cpu_card(app: &SweepLoomApp, cores: &cpu_cores::CoreHistory) -> Metric {
             },
             TileViz::Trend(cores.total.iter().copied().collect(), Some(100.0)),
         ),
-        open: Dest::Screen(Nav::Sessions),
+        open: live_dest(),
     }
 }
 

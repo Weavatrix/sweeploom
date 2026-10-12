@@ -3180,12 +3180,14 @@ dependencies = [
  "sweeploom-exec",
  "sweeploom-general",
  "sweeploom-history",
+ "sweeploom-macos",
  "sweeploom-network",
  "sweeploom-platform",
  "sweeploom-process",
  "sweeploom-session",
  "sweeploom-storage",
  "tray-icon",
+ "weavatrix-git",
 ]
 
 [[package]]
@@ -3193,6 +3195,16 @@ name = "sweeploom-history"
 version = "0.1.0"
 dependencies = [
  "sweeploom-core",
+]
+
+[[package]]
+name = "sweeploom-macos"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
 ]
 
 [[package]]

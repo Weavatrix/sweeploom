@@ -21,6 +21,13 @@ pub(super) fn breakdowns(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
         |ui| {
             widgets::breakdown(ui, "Memory", &memory.0, &memory.1);
             ui.add_space(theme::LG);
+            if crate::edition::STORE {
+                crate::edition::full_only_note(
+                    ui,
+                    "Memory by app and session needs process access the App Sandbox does not give.",
+                );
+                return;
+            }
             let (total, workloads) = workload_segments(app, ui);
             widgets::breakdown(ui, "Resident memory by workload", &total, &workloads);
             ui.add_space(theme::MD);

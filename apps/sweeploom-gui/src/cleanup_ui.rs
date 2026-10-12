@@ -29,7 +29,15 @@ pub(crate) fn ui(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
             app.native_cleanup.pane = pane;
         }
     }
+    if crate::edition::STORE {
+        crate::edition::full_only_note(
+            ui,
+            "Docker and Simulator cleanup run command-line tools that App Store apps cannot use.",
+        );
+        ui.add_space(theme::SM);
+    }
     if app.native_cleanup.project {
+        crate::folder_access_ui::onboarding(app, ui);
         crate::screens::ui_review(app, ui);
         return;
     }
@@ -47,9 +55,9 @@ fn tabs(app: &SweepLoomApp) -> Vec<(Option<Pane>, String)> {
     };
     std::iter::once((None, project))
         .chain(
-            Pane::ALL
-                .into_iter()
-                .map(|pane| (Some(pane), tab_label(&app.native_cleanup, pane))),
+            Pane::visible()
+                .iter()
+                .map(|&pane| (Some(pane), tab_label(&app.native_cleanup, pane))),
         )
         .collect()
 }
@@ -70,6 +78,21 @@ fn native(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     {
         widgets::caption(ui, listing.note.trim());
         ui.add_space(theme::SM);
+    }
+    let access = (app.native_cleanup.active().listing.as_ref())
+        .map_or_else(Vec::new, |listing| listing.access.clone());
+    if !access.is_empty() {
+        let body = format!(
+            "{} also keeps data in folders SweepLoom cannot read yet. Grant them to list and clean it.",
+            app.native_cleanup.pane.label()
+        );
+        crate::folder_access_ui::prompt(
+            app,
+            ui,
+            "More locations need folder access",
+            &body,
+            &access,
+        );
     }
     table::draw(app, ui, processes.as_deref());
 }

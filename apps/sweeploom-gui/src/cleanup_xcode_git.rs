@@ -12,6 +12,10 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "mas")]
+#[path = "cleanup_xcode_git_pure.rs"]
+mod pure;
+
 const TIMEOUT: Duration = Duration::from_secs(4);
 const WORKERS: usize = 6;
 
@@ -56,6 +60,10 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
 }
 
 fn state(root: &Path) -> GitState {
+    #[cfg(feature = "mas")]
+    if crate::edition::STORE {
+        return pure::state(root);
+    }
     GitState {
         branch: branch(root),
         last_commit: git(root, &["log", "-1", "--format=%ct"])

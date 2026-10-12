@@ -12,9 +12,11 @@ pub fn ui_settings(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     page_title(ui, "Settings", "Local-only. Telemetry stays off.");
     ui.scope(|ui| {
         ui.set_max_width(760.0);
+        crate::folder_access_ui::settings(app, ui);
         appearance(app, ui);
         background(app, ui);
         about(app, ui);
+        super::settings_about::edition(ui);
     });
 }
 
@@ -112,6 +114,11 @@ fn background(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
                 {
                     app.action_message = Some(error);
                 }
+            } else if crate::edition::STORE {
+                widgets::caption(
+                    ui,
+                    "To open SweepLoom when you sign in, add it in System Settings → General → Login Items.",
+                );
             } else {
                 widgets::caption(
                     ui,
@@ -133,6 +140,8 @@ fn about(app: &SweepLoomApp, ui: &mut egui::Ui) {
                     ui.label(value);
                     ui.end_row();
                 };
+                line(ui, "Version", env!("CARGO_PKG_VERSION").into());
+                line(ui, "Edition", crate::edition::label().into());
                 line(ui, "Telemetry", "None".into());
                 line(
                     ui,
@@ -141,6 +150,9 @@ fn about(app: &SweepLoomApp, ui: &mut egui::Ui) {
                 );
                 line(ui, "Home", app.locations.home.display().to_string());
                 line(ui, "Config", app.locations.app_config.display().to_string());
+                if crate::edition::STORE {
+                    return;
+                }
                 if let Some(snapshot) = &app.snapshot {
                     line(
                         ui,
@@ -150,5 +162,6 @@ fn about(app: &SweepLoomApp, ui: &mut egui::Ui) {
                 }
                 line(ui, "Hidden launch", "sweeploom-gui --tray".into());
             });
+        super::settings_about::links(ui);
     });
 }

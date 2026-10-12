@@ -26,6 +26,7 @@ pub(super) struct Boot {
     pub scan_history: ScanHistory,
     pub locations: UserLocations,
     pub prefs: Prefs,
+    pub folder_access: crate::folder_access::FolderAccess,
     pub start_hidden: bool,
 }
 
@@ -72,7 +73,7 @@ pub(super) fn build(b: Boot) -> SweepLoomApp {
         disk_history_filter: String::new(),
         disk_history_selected: None,
         scan_root: b.saved.as_ref().map_or_else(
-            || b.locations.home.display().to_string(),
+            || default_root(&b.locations, &b.folder_access),
             |saved| saved.report.root.display().to_string(),
         ),
         scan_history: b.scan_history,
@@ -105,6 +106,7 @@ pub(super) fn build(b: Boot) -> SweepLoomApp {
         ai_offers: None,
         ai_listing: false,
         prefs: b.prefs,
+        folder_access: b.folder_access,
         hidden: false,
         hid_at: Instant::now(),
         tray: None,
@@ -116,4 +118,15 @@ pub(super) fn build(b: Boot) -> SweepLoomApp {
         apply_rx: None,
         ai_rx: None,
     }
+}
+
+/// Explorer starts at home, or at the first granted folder in the App Store edition.
+fn default_root(locations: &UserLocations, access: &crate::folder_access::FolderAccess) -> String {
+    if !crate::edition::STORE {
+        return locations.home.display().to_string();
+    }
+    access
+        .active()
+        .first()
+        .map_or_else(String::new, |path| path.display().to_string())
 }

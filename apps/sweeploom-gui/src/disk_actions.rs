@@ -8,7 +8,7 @@ use sweeploom_exec::{TrashTarget, prepare_trash};
 
 #[path = "disk_actions_fs.rs"]
 mod fs;
-use fs::{remove_nodes, reveal};
+use fs::{remove_nodes, reveal, trash};
 
 #[derive(Default)]
 pub(crate) struct DiskActions {
@@ -191,6 +191,9 @@ impl SweepLoomApp {
             ui.set_width(580.0);
             ui.heading(title);
             ui.label(hint);
+            if crate::edition::STORE {
+                ui.colored_label(ui.visuals().warn_fg_color, fs::SANDBOX_CAUTION);
+            }
             ui.separator();
             egui::ScrollArea::vertical()
                 .max_height(280.0)
@@ -227,7 +230,7 @@ impl SweepLoomApp {
                     self.disk_actions.trash_rx = Some(rx);
                     self.action_message = Some("Moving selected items to Trash…".into());
                     std::thread::spawn(move || {
-                        let result = sweeploom_exec::apply_trash_with(&items, &home, &processes);
+                        let result = trash(&items, &home, &processes);
                         let _ = tx.send(result);
                     });
                 }

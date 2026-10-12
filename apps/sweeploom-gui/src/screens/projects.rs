@@ -58,6 +58,7 @@ pub fn ui_projects(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     widgets::action_note(ui, app.action_message.as_deref());
     crate::disk_history::history_link(app, ui);
     if app.project_cards.is_empty() {
+        crate::folder_access_ui::onboarding(app, ui);
         ui.label(if app.scanning {
             "Discovering projects…"
         } else {

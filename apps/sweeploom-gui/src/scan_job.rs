@@ -70,7 +70,9 @@ pub fn spawn_ai(locations: UserLocations) -> Receiver<Result<Vec<sweeploom_ai::A
     let (tx, rx) = unbounded();
     thread::spawn(move || {
         let outcome = catch_unwind(AssertUnwindSafe(|| {
-            sweeploom_ai::inspect_offers(&locations)
+            let mut offers = sweeploom_ai::inspect_offers(&locations);
+            offers.retain(|offer| crate::folder_access::allowed(&offer.candidate.path));
+            offers
         }))
         .map_err(|_| "AI listing panicked".to_owned());
         let _ = tx.send(outcome);
@@ -179,6 +181,15 @@ impl SweepLoomApp {
             return;
         }
         let root = PathBuf::from(self.scan_root.trim());
+        if crate::edition::STORE
+            && (root.as_os_str().is_empty() || !crate::folder_access::allowed(&root))
+        {
+            self.inventory_error = Some(format!(
+                "SweepLoom can only scan folders you granted. Choose one with “Choose folder…” or in Settings → Folder access. ({})",
+                root.display()
+            ));
+            return;
+        }
         let same_root = self.inventory.as_ref().is_some_and(|report| {
             report.root == root || sweeploom_storage::canonical_path(&root) == report.root
         });

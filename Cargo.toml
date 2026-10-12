@@ -14,6 +14,7 @@ members = [
     "crates/sweeploom-general",
     "crates/sweeploom-browser",
     "crates/sweeploom-history",
+    "crates/sweeploom-macos",
     "crates/sweeploom-cli",
     "apps/sweeploom-gui",
 ]
@@ -42,6 +43,7 @@ sweeploom-ai = { path = "crates/sweeploom-ai", version = "0.1.0" }
 sweeploom-general = { path = "crates/sweeploom-general", version = "0.1.0" }
 sweeploom-browser = { path = "crates/sweeploom-browser", version = "0.1.0" }
 sweeploom-history = { path = "crates/sweeploom-history", version = "0.1.0" }
+sweeploom-macos = { path = "crates/sweeploom-macos", version = "0.1.0" }
 
 weavatrix-scan = { version = "0.5.3", default-features = false }
 weavatrix-git = { version = "0.3.4", default-features = false }

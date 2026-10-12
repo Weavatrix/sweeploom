@@ -8,8 +8,13 @@ mod chrome;
 mod crash_log;
 mod disk_actions;
 mod disk_history;
+mod edition;
+mod folder_access;
+mod folder_access_ui;
 mod format;
 mod icons;
+#[cfg(feature = "mas")]
+mod iconset;
 mod live;
 mod mark;
 mod native_cleanup;
@@ -29,6 +34,14 @@ mod widgets;
 use eframe::egui;
 
 fn main() -> eframe::Result<()> {
+    #[cfg(feature = "mas")]
+    if let Some(dir) = iconset_dir() {
+        if let Err(error) = iconset::write(&dir) {
+            eprintln!("iconset: {error}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     crash_log::install();
     let start_hidden = std::env::args().any(|item| item == "--tray");
     let options = eframe::NativeOptions {
@@ -55,4 +68,11 @@ fn window_icon() -> egui::IconData {
         width,
         height,
     }
+}
+
+/// Packaging hook: `--write-iconset DIR` renders the app icon and exits.
+#[cfg(feature = "mas")]
+fn iconset_dir() -> Option<std::path::PathBuf> {
+    let mut args = std::env::args_os().skip(1);
+    (args.next()? == "--write-iconset").then(|| args.next().map(Into::into))?
 }

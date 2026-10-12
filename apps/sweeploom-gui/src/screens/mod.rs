@@ -30,6 +30,7 @@ mod session_raw;
 mod session_rows;
 mod sessions;
 mod settings;
+mod settings_about;
 mod storage;
 
 pub use ai::ui_ai;

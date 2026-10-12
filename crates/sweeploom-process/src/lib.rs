@@ -12,7 +12,7 @@ pub use control::SysinfoProcessControl;
 pub use session_stop::{force_stop_session, still_running, stop_session_gracefully};
 pub use snapshot::{
     CoreSplit, HostCpu, HostMemory, ProcessSampler, ProcessSnapshotSet, host_cpu, host_memory,
-    volume_space,
+    provide_core_split, volume_space,
 };
 
 use sweeploom_core::{ProcessKey, ProcessSnapshot};

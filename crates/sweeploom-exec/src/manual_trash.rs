@@ -104,6 +104,18 @@ pub fn apply_trash_with(
     })
 }
 
+/// [`apply_trash_with`] with a caller-supplied recoverable backend, e.g. the
+/// sandboxed App Store edition's `NSFileManager` Trash. Every identity, path
+/// and process check still runs before `send` sees a path.
+pub fn apply_trash_using(
+    targets: &[TrashTarget],
+    home: &Path,
+    processes: &[ProcessSnapshot],
+    send: impl FnMut(&Path) -> Result<(), String>,
+) -> (Vec<PathBuf>, Vec<String>) {
+    apply_with(targets, home, processes, send)
+}
+
 fn apply_with(
     targets: &[TrashTarget],
     home: &Path,

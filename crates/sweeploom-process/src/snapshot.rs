@@ -13,8 +13,8 @@ use crate::classify::classify_process;
 
 #[path = "cpu_topology.rs"]
 mod cpu_topology;
-pub use cpu_topology::CoreSplit;
 use cpu_topology::topology;
+pub use cpu_topology::{CoreSplit, provide_core_split};
 
 /// Host memory snapshot.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

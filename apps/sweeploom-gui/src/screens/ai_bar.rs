@@ -8,6 +8,18 @@ use crate::theme;
 use crate::widgets;
 
 pub(super) fn toolbar(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
+    if crate::edition::STORE {
+        let stores = crate::folder_access::missing(&app.locations.home, crate::folder_access::AI);
+        if !stores.is_empty() {
+            crate::folder_access_ui::prompt(
+                app,
+                ui,
+                "AI tool folders need access",
+                "Claude, Codex, Cursor and other agents keep sessions, logs and caches in these folders. Grant them to size and clean those stores.",
+                &stores,
+            );
+        }
+    }
     crate::disk_history::history_link(app, ui);
     ui.add_space(theme::SM);
     widgets::toolbar(ui, |ui| {

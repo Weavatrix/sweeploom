@@ -105,6 +105,7 @@ pub struct SweepLoomApp {
     pub(crate) ai_offers: Option<Vec<AiOffer>>,
     pub(crate) ai_listing: bool,
     pub(crate) prefs: Prefs,
+    pub(crate) folder_access: crate::folder_access::FolderAccess,
     pub(crate) hidden: bool,
     pub(crate) hid_at: Instant,
     pub(crate) tray: Option<TrayIconHandle>,
@@ -120,7 +121,10 @@ pub struct SweepLoomApp {
 impl SweepLoomApp {
     /// Construct and take the first process sample.
     pub fn new(cc: &eframe::CreationContext<'_>, start_hidden: bool) -> Self {
-        let locations = UserLocations::current();
+        let locations = crate::edition::locations();
+        // Grants must be live before the first discovery below.
+        let folder_access =
+            crate::folder_access::FolderAccess::load(locations.app_data.join("folder-access.json"));
         let prefs = Prefs::load(&locations.app_config.join("prefs.json"));
         let scan_history =
             crate::scan_history::ScanHistory::load(locations.app_data.join("scan-history.json"));
@@ -129,6 +133,7 @@ impl SweepLoomApp {
         let cached_sizes = crate::project_sizes::ProjectSizes::restore(&scan_history);
         theme::apply(&cc.egui_ctx, prefs.theme, prefs.ui_scale);
         tray::install_wake(cc.egui_ctx.clone());
+        crate::edition::prepare_sampler();
         let mut sampler = ProcessSampler::new();
         let (snapshot, sessions) = live::sample_with(&mut sampler, &locations);
         let mut app = build::build(build::Boot {
@@ -140,6 +145,7 @@ impl SweepLoomApp {
             scan_history,
             locations,
             prefs,
+            folder_access,
             start_hidden,
         });
         live::stamp_first(&mut app);
@@ -189,6 +195,7 @@ impl eframe::App for SweepLoomApp {
         self.poll_native();
         self.poll_trash();
         self.poll_disk();
+        self.poll_folder_access();
         self.project_sizes
             .poll(&self.project_roots, ctx, &mut self.scan_history);
     }

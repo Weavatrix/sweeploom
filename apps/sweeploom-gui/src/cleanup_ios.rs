@@ -160,7 +160,7 @@ pub(super) fn stream(home: &Path, tx: &Sender<ListingMsg>) {
     let mut listing = Listing {
         items,
         note: NOTE.into(),
-        complete: false,
+        ..Listing::default()
     };
     if tx.send(ListingMsg::Initial(listing.clone())).is_err() {
         return;

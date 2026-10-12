@@ -68,6 +68,16 @@ fn start(app: &SweepLoomApp) -> Option<Tour> {
             continue;
         }
         for (name, nav, pane) in SCREENS {
+            // The App Store edition hides these screens.
+            let hidden = [
+                "sessions-activity",
+                "cleanup-docker",
+                "cleanup-ios",
+                "browser",
+            ];
+            if crate::edition::STORE && hidden.contains(&name) {
+                continue;
+            }
             if only.is_empty() || only.split(',').any(|part| name.contains(part.trim())) {
                 shots.push(Shot {
                     name: format!("{prefix}-{label}-{name}"),
@@ -154,7 +164,17 @@ pub fn drive(ctx: &egui::Context, app: &mut SweepLoomApp) {
             .max_by_key(|session| session.rss_bytes)
             .map(|session| session.id);
     }
+    // The App Store tour has no saved scan to show: walk the first granted folder.
+    if crate::edition::STORE
+        && shot.nav == Nav::Explorer
+        && app.inventory.is_none()
+        && app.scan_rx.is_none()
+        && !app.scan_root.is_empty()
+    {
+        app.run_scan();
+    }
     let settle = match (shot.nav, shot.pane) {
+        (Nav::Explorer, _) if crate::edition::STORE => 12,
         (Nav::Ai, _) => 60,
         (Nav::Projects, _) | (Nav::Cleanup, Some(0)) => 8,
         (_, Some(_)) => 5,

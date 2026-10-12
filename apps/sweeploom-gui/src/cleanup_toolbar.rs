@@ -37,6 +37,7 @@ pub(super) fn draw(
             }
         }
         if app.native_cleanup.pane == Pane::Models
+            && !crate::edition::STORE
             && crate::widgets::button(ui, "Open Ollama", true).clicked()
         {
             #[cfg(target_os = "macos")]
@@ -115,15 +116,18 @@ fn actions(
         .iter()
         .filter(|item| item.cleanable(processes) && item.kind == Kind::Cache)
         .collect();
-    if matches!(
-        app.native_cleanup.pane,
-        Pane::Docker | Pane::Ios | Pane::Models | Pane::Data
-    ) && crate::widgets::danger_button(
-        ui,
-        "Remove selected objects…",
-        !native.is_empty() && !busy,
-    )
-    .clicked()
+    // App Store edition: no Ollama, rustup, docker or simctl objects to remove.
+    if !crate::edition::STORE
+        && matches!(
+            app.native_cleanup.pane,
+            Pane::Docker | Pane::Ios | Pane::Models | Pane::Data
+        )
+        && crate::widgets::danger_button(
+            ui,
+            "Remove selected objects…",
+            !native.is_empty() && !busy,
+        )
+        .clicked()
     {
         app.native_cleanup.pending = Some((app.native_cleanup.pane, native));
     }

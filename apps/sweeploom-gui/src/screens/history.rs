@@ -26,14 +26,17 @@ pub enum HistoryView {
 }
 
 pub fn ui_history(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
-    let hint = match app.history_view {
-        HistoryView::Activity => {
-            "Process CPU and memory observed since SweepLoom started. Groups start collapsed; click a member to open its session."
-        }
-        HistoryView::DiskScans => {
-            "Saved Explorer scans and folder measurements survive restarts. Nothing is invented for time before history was enabled."
-        }
-    };
+    let hint = hint_for(app.history_view);
+    if crate::edition::STORE {
+        page_title(ui, "History", hint_for(HistoryView::DiskScans));
+        crate::edition::full_only_note(
+            ui,
+            "Process activity history needs process access the App Sandbox does not give.",
+        );
+        ui.add_space(crate::theme::SM);
+        crate::disk_history::ui(app, ui);
+        return;
+    }
     page_title(ui, "History", hint);
     let scans = app.scan_history.scans().len();
     let mut view = app.history_view;
@@ -50,6 +53,17 @@ pub fn ui_history(app: &mut SweepLoomApp, ui: &mut egui::Ui) {
     match view {
         HistoryView::Activity => activity(app, ui),
         HistoryView::DiskScans => crate::disk_history::ui(app, ui),
+    }
+}
+
+fn hint_for(view: HistoryView) -> &'static str {
+    match view {
+        HistoryView::Activity => {
+            "Process CPU and memory observed since SweepLoom started. Groups start collapsed; click a member to open its session."
+        }
+        HistoryView::DiskScans => {
+            "Saved Explorer scans and folder measurements survive restarts. Nothing is invented for time before history was enabled."
+        }
     }
 }
 

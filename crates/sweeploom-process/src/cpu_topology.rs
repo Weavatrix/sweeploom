@@ -20,10 +20,23 @@ impl CoreSplit {
     }
 }
 
+/// P/E split supplied by the host app instead of running `sysctl`.
+static PROVIDED: OnceLock<Option<CoreSplit>> = OnceLock::new();
+
+/// Supply the P/E split up front, so detection never spawns `/usr/sbin/sysctl`
+/// (the sandboxed App Store edition reads it with `sysctlbyname`). Only the
+/// first call counts; call it before the first sample.
+pub fn provide_core_split(split: Option<CoreSplit>) {
+    let _ = PROVIDED.set(split);
+}
+
 /// Physical core count and P/E split, cached for the process lifetime.
 pub(super) fn topology() -> (Option<usize>, Option<CoreSplit>) {
     static CACHE: OnceLock<(Option<usize>, Option<CoreSplit>)> = OnceLock::new();
-    *CACHE.get_or_init(|| (sysinfo::System::physical_core_count(), detect_split()))
+    *CACHE.get_or_init(|| {
+        let split = PROVIDED.get().copied().unwrap_or_else(detect_split);
+        (sysinfo::System::physical_core_count(), split)
+    })
 }
 
 #[cfg(target_os = "macos")]

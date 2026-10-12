@@ -1,0 +1,47 @@
+[package]
+name = "sweeploom-macos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Safe AppKit/Foundation bridges for the sandboxed Mac App Store edition of SweepLoom"
+
+# The workspace forbids `unsafe`. This crate is the only exception: it denies
+# unsafe by default and allows it per item, next to a `SAFETY:` note.
+[lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = "allow"
+undocumented_unsafe_blocks = "warn"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2.190"
+objc2 = "0.6.5"
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "NSArray",
+    "NSData",
+    "NSError",
+    "NSFileManager",
+    "NSObject",
+    "NSString",
+    "NSURL",
+] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "NSApplication",
+    "NSOpenPanel",
+    "NSPanel",
+    "NSResponder",
+    "NSSavePanel",
+    "NSWindow",
+    "NSWorkspace",
+] }

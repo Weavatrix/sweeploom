@@ -105,3 +105,25 @@ fn inventory_projects_outside_developer_roots_are_merged() {
     assert!(found.contains(&external));
     let _ = fs::remove_dir_all(&home);
 }
+
+#[test]
+fn granted_folders_are_discovery_roots_and_a_granted_home_uses_developer_folders() {
+    let home = temp_home("granted");
+    fs::create_dir_all(home.join("dev")).unwrap();
+    let other = home.join("Elsewhere");
+    fs::create_dir_all(&other).unwrap();
+    assert_eq!(
+        granted_roots(std::slice::from_ref(&other), &home),
+        vec![other.clone()]
+    );
+    assert_eq!(
+        granted_roots(std::slice::from_ref(&home), &home),
+        vec![home.join("dev")]
+    );
+    assert!(granted_roots(&[], &home).is_empty());
+    for tool_home in [home.join(".cargo"), home.join("Library").join("Developer")] {
+        fs::create_dir_all(&tool_home).unwrap();
+        assert!(granted_roots(&[tool_home], &home).is_empty());
+    }
+    fs::remove_dir_all(home).unwrap();
+}
