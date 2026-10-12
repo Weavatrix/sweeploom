@@ -14,7 +14,7 @@ export const metadata = pageMeta({
 const PRINCIPLES = [
   {
     title: "Local-first",
-    body: "Everything runs on your machine. No account, no cloud, no telemetry. The CLI path carries no HTTP client at all, and the website you are reading has no analytics either.",
+    body: "Everything runs on your machine. No account, no cloud, no telemetry. The CLI path carries no HTTP client at all. The website you are reading has no analytics either: static files on nginx at Hetzner in Germany, access logging off, DNS by Cloudflare.",
   },
   {
     title: "Gated apply",
@@ -65,8 +65,13 @@ export default function AboutPage() {
               applies the same habits, evidence first and explicit gates before any write, to the workstation itself.
             </p>
             <p>
-              SweepLoom builds on two MIT-licensed Weavatrix libraries, <code className="inline-code">weavatrix-scan</code> and{" "}
-              <code className="inline-code">weavatrix-git</code>, which remain MIT. SweepLoom itself is MPL-2.0.
+              SweepLoom builds on MIT-licensed libraries, <code className="inline-code">weavatrix-scan</code>,{" "}
+              <code className="inline-code">weavatrix-git</code> and <code className="inline-code">mcport</code> (the MCP server
+              layer), which remain MIT. SweepLoom itself is MPL-2.0.
+            </p>
+            <p>
+              It ships as a CLI, an <Link href="/mcp/" className="link">MCP server</Link> with a Codex plugin, a Rust library and
+              a nine-tab <Link href="/app/" className="link">desktop app</Link>, all from one engine and one repository.
             </p>
           </div>
           <div className="card grid content-start gap-4 p-6">

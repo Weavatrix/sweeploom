@@ -37,14 +37,16 @@ downloads Inter, Space Grotesk and JetBrains Mono and self-hosts them.
 ```text
 app/                 routes (App Router). Every page is static.
   page.tsx           home
-  features/ docs/ download/ blog/ about/ changelog/
+  features/ app/ mcp/ docs/ download/ blog/ about/ changelog/
+                     app/ = desktop app tour, mcp/ = MCP and Codex plugin guide
   terms/ privacy/ license/ not-found.tsx
   blog/[slug]/       post pages + og.png per post
   og.png/            default 1200×630 Open Graph image (route → out/og.png)
   apple-touch-icon.png/
   rss.xml/           RSS 2.0 feed (route → out/rss.xml)
   sitemap.ts robots.ts
-components/          header, footer, theme switch, code blocks, tabs, …
+components/          header, footer, theme switch, code blocks, tabs, MCP chat
+                     transcripts (Chat), blog copy buttons (CodeCopy), ScrollSpy, …
 content/blog/*.md    blog posts (frontmatter below)
 content/legal/       TERMS.md, synced from the repo root before each build
 content/changelog.json  generated from git log
@@ -72,6 +74,11 @@ tags: ["sessions", "safety"]
 Body in GitHub-flavoured Markdown. Raw HTML is not passed through.
 ```
 
+Fenced code blocks are wrapped at build time (`lib/markdown.ts`) in the same
+terminal frame as the TSX `CodeBlock`, with the language and a Copy button;
+`components/CodeCopy.tsx` makes the buttons work (blocks with `$ ` prompt
+lines copy only the commands). Images can use `/screenshots/*.png`.
+
 The index, post page, per-post OG image, RSS feed and sitemap pick it up on
 the next build. Posts are sorted newest first.
 
@@ -85,18 +92,24 @@ are written in TSX and must stay consistent with TERMS.md section 4.
 
 ## Screenshots
 
-The home page shows four desktop-app screenshots:
+The home page, the desktop app tour (`/app/`) and some blog posts show these
+desktop-app screenshots. All of them are redacted (names and paths blurred);
+the originals are in `../docs/screenshots/`. Never add an unredacted capture.
 
 ```text
-public/screenshots/overview.png
-public/screenshots/sessions.png
-public/screenshots/cleanup.png
-public/screenshots/ai.png
+public/screenshots/overview.png         Overview
+public/screenshots/sessions.png         Sessions
+public/screenshots/project-output.png   Cleanup → Project output (1600×909)
+public/screenshots/cleanup.png          Cleanup → iOS & Xcode
+public/screenshots/projects.png         Projects (1600×1004)
+public/screenshots/ai.png               AI
 ```
 
 Until a file exists, a labelled app-window placeholder is rendered instead
 (existence is checked at build time, so rebuild after adding them). Use
-16:10 images, about 1600×1000, ideally captured in the dark theme.
+16:10 images, about 1600×1000, ideally captured in the dark theme. Pass
+`frame` to `<Screenshot>` to show a shorter capture in a 16:10 frame that
+continues the app's sidebar, so mixed heights line up in a grid.
 
 ## Changelog
 

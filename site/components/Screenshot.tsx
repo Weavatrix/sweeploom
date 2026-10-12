@@ -20,18 +20,39 @@ type Props = {
   screen: string;
   width?: number;
   height?: number;
+  /** Show the capture in a 16:10 frame. A shorter capture is top-aligned and
+      the frame continues the app's own sidebar and background below it, so
+      screenshots of different heights line up in a grid. */
+  frame?: boolean;
 };
+
+/* The desktop app's dark sidebar (0–13.9%), its divider, and main background,
+   sampled from the captures. */
+const APP_BACKDROP =
+  "linear-gradient(to right, #121418 0 13.875%, #1f232b 13.875% 14%, #0f1115 14%)";
 
 function exists(file: string) {
   return fs.existsSync(path.join(process.cwd(), "public", "screenshots", file));
 }
 
-export function Screenshot({ file, alt, caption, screen, width = 1600, height = 1000 }: Props) {
+export function Screenshot({ file, alt, caption, screen, width = 1600, height = 1000, frame = false }: Props) {
   const present = exists(file);
   return (
     <figure className="group">
       <div className="card overflow-hidden p-0">
-        {present ? (
+        {present && frame ? (
+          <div className="relative aspect-[16/10]" style={{ background: APP_BACKDROP }}>
+            <img
+              src={`/screenshots/${file}`}
+              alt={alt}
+              width={width}
+              height={height}
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 block h-full w-full object-contain object-top"
+            />
+          </div>
+        ) : present ? (
           <img
             src={`/screenshots/${file}`}
             alt={alt}

@@ -77,6 +77,16 @@ const FAQ = [
     ),
   },
   {
+    q: "Which coding agents can use it?",
+    a: (
+      <p>
+        The docs cover Claude Code, Cursor, Claude Desktop and Codex, and any host that launches stdio MCP servers can run{" "}
+        <code>sweeploom mcp</code> the same way. Codex also gets a plugin with review skills. Setup for each host is on the{" "}
+        <Link href="/mcp/">MCP page</Link>.
+      </p>
+    ),
+  },
+  {
     q: "Does SweepLoom send anything over the network?",
     a: (
       <p>
@@ -167,6 +177,14 @@ export default function HomePage() {
         </div>
         <div className="wrap relative grid items-center gap-14 pt-14 pb-20 sm:pt-20 lg:grid-cols-[1.05fr_1fr] lg:gap-10 lg:pt-24 lg:pb-28">
           <div>
+            <Link
+              href="/blog/desktop-app-tour/"
+              className="rise mb-6 inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-panel/70 py-1 pr-3 pl-1 text-sm text-muted transition-colors hover:border-gold hover:text-text"
+            >
+              <span className="rounded-full bg-gold px-2 py-0.5 font-mono text-[0.66rem] font-semibold tracking-wide text-ink uppercase">New</span>
+              <span className="truncate">Nine-tab desktop app, faster project discovery</span>
+              <icons.arrow size={14} className="shrink-0" />
+            </Link>
             <p className="rise eyebrow flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>A Weavatrix product</span>
               <span className="text-faint" aria-hidden="true">/</span>
@@ -358,6 +376,7 @@ export default function HomePage() {
                     <CodeBlock code={MCP_JSON} title="~/.cursor/mcp.json · claude_desktop_config.json" />
                     <CodeBlock code="$ claude mcp add -s user sweeploom -- sweeploom mcp" title="Claude Code" />
                   </div>
+                  <div className="grid content-start gap-4">
                   <div className="table-wrap">
                     <table>
                       <caption className="sr-only">SweepLoom MCP tools</caption>
@@ -380,6 +399,10 @@ export default function HomePage() {
                       </tbody>
                     </table>
                   </div>
+                  <Link href="/mcp/" className="link inline-flex items-center gap-1.5 text-sm font-medium">
+                    Per-host setup, the apply gate and example chats <icons.arrow size={14} />
+                  </Link>
+                  </div>
                 </div>
               ),
             },
@@ -395,20 +418,25 @@ export default function HomePage() {
                       title="run the desktop app"
                     />
                     <p className="text-[0.97rem] leading-relaxed text-muted">
-                      A native Rust app (egui) for Windows, macOS and Linux that follows your light, dark and scale
-                      settings, keeps a quiet tray icon on Windows and macOS, and continues scanning while hidden. On macOS,
-                      build the <Link href="/download/#macos" className="link">signed app bundle</Link> so folder
-                      permissions survive updates.
+                      A native Rust app (egui) for Windows, macOS and Linux with nine tabs, light and dark themes, a quiet
+                      tray icon on Windows and macOS, and scans that keep running while you look elsewhere. On macOS, build
+                      the <Link href="/download/#macos" className="link">signed app bundle</Link> so folder permissions
+                      survive updates.
                     </p>
+                    <Link href="/app/" className="link inline-flex items-center gap-1.5 text-sm font-medium">
+                      Tour all nine tabs <icons.arrow size={14} />
+                    </Link>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     {GUI_SCREENS.map((group) => (
                       <div key={group.section} className="card p-4">
                         <p className="eyebrow !text-faint">{group.section}</p>
                         <ul className="mt-3 grid gap-3">
                           {group.items.map((item) => (
                             <li key={item.name}>
-                              <span className="text-sm font-medium">{item.name}</span>
+                              <Link href={`/app/#${item.id}`} className="text-sm font-medium hover:text-accent">
+                                {item.name}
+                              </Link>
                               <span className="mt-0.5 block text-xs leading-snug text-muted">{item.does}</span>
                             </li>
                           ))}
@@ -428,34 +456,55 @@ export default function HomePage() {
         id="screenshots"
         eyebrow="The desktop app"
         title="A local reviewer, not a dashboard you have to trust."
-        lead="Every row shows its origin path or native object ID, size, change since the last scan, and the consequence of removing it."
+        lead="Nine tabs: live pressure, disk and your workspace. Every cleanup row shows its origin path or native object ID, size, change since the last scan, and the consequence of removing it."
         className="border-t border-line"
       >
         <div className="grid gap-8 md:grid-cols-2">
           <Screenshot
             file="overview.png"
             screen="Overview"
-            alt="SweepLoom Overview screen with machine pressure cards"
-            caption="Machine pressure at a glance; every card opens the screen that explains it."
+            alt="SweepLoom Overview: memory, CPU and disk tiles with per-core CPU split into performance and efficiency cores"
+            caption="Memory, per-core CPU and disk pressure; every tile opens the screen that explains it."
           />
           <Screenshot
             file="sessions.png"
             screen="Sessions"
-            alt="SweepLoom Sessions screen with agent session trees"
-            caption="Agents grouped with their MCP servers, terminals and dev servers, each with a Keep or Optional verdict."
+            alt="SweepLoom Sessions: process trees with RSS, CPU, status and project, and a cleanup planner"
+            caption="Processes grouped into sessions with status, project and observed activity; the planner only selects."
+          />
+          <Screenshot
+            file="project-output.png"
+            screen="Cleanup · Project output"
+            alt="SweepLoom Cleanup, Project output tab: Cargo targets with rebuild cost and Safe or Blocked safety"
+            caption="Generated output with rebuild cost; rows in repositories with uncommitted changes are blocked."
+            height={909}
+            frame
           />
           <Screenshot
             file="cleanup.png"
-            screen="Cleanup"
-            alt="SweepLoom Cleanup screen listing Docker, simulator and cache items"
-            caption="Docker, iOS Simulator, package caches and AI models, itemised with the consequence of removal."
+            screen="Cleanup · iOS & Xcode"
+            alt="SweepLoom Cleanup, iOS & Xcode tab: simulator runtimes and devices with Keep, Review and Suggested verdicts"
+            caption="Runtimes and simulators with Keep / Review / Suggested reasons from last boot, installed apps and Git."
+          />
+          <Screenshot
+            file="projects.png"
+            screen="Projects"
+            alt="SweepLoom Projects: hundreds of projects grouped by folder with size, change and artifacts"
+            caption="Every project under your developer folders, with full size, change since the last scan and artifacts."
+            height={1004}
+            frame
           />
           <Screenshot
             file="ai.png"
             screen="AI"
-            alt="SweepLoom AI screen showing AI stores and token estimates"
-            caption="AI stores split into Context, History, Cache and Secret, with the always-on token estimate."
+            alt="SweepLoom AI screen: a Codex store split into History, SQLite, Cache and Context rows with policies"
+            caption="AI stores by class and policy: only caches and logs are cleanable; credentials and databases stay protected."
           />
+        </div>
+        <div className="mt-8">
+          <Link href="/app/" className="link inline-flex items-center gap-1.5 text-sm font-medium">
+            Take the full tour <icons.arrow size={14} />
+          </Link>
         </div>
       </Section>
 

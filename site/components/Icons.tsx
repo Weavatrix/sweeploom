@@ -119,4 +119,30 @@ export const icons = {
       <circle cx="6" cy="18" r="1.2" fill="currentColor" />
     </Stroke>
   ),
+  grid: (p: IconProps) => (
+    <Stroke {...p}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+    </Stroke>
+  ),
+  clock: (p: IconProps) => (
+    <Stroke {...p}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </Stroke>
+  ),
+  search: (p: IconProps) => (
+    <Stroke {...p}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4.5 4.5" />
+    </Stroke>
+  ),
+  gear: (p: IconProps) => (
+    <Stroke {...p}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" />
+    </Stroke>
+  ),
 };

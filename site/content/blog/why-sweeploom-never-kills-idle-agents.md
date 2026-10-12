@@ -93,7 +93,7 @@ If you want a dry-run plan of Optional helpers only:
   sweeploom sessions --quiet
 ```
 
-The Codex plugin ships a `live-sessions` skill that spells this out for the agent: list, keep live agents and their attached MCP, never terminate. The refusal does not depend on the model's mood.
+The Codex plugin ships a `live-sessions` skill that spells this out for the agent: list, keep live agents and their attached MCP, never terminate. The refusal does not depend on the model's mood. Setup for Claude Code, Cursor, Claude Desktop and Codex is on the [MCP page](/mcp/).
 
 ## When a human decides
 

@@ -7,7 +7,7 @@ tags: ["macos", "xcode", "ios-simulator", "disk"]
 
 Every iOS developer eventually opens the macOS storage settings, sees "Developer" taking a frightening share of the disk, and goes looking in `~/Library/Developer`. The usual advice is a one-liner that deletes several folders at once.
 
-Some of those folders are pure cache. Some are objects owned by a tool that expects to manage them. Some are the only copy of something you will want during your next crash investigation. SweepLoom's desktop **Cleanup** screen treats them as three different things, and this post walks through each.
+Some of those folders are pure cache. Some are objects owned by a tool that expects to manage them. Some are the only copy of something you will want during your next crash investigation. SweepLoom's desktop **Cleanup** tab treats them as three different things, and this post walks through each. Caches such as DerivedData live under *Build & packages*; simulators and runtimes have their own *iOS & Xcode* source; archives and backups are under *Archives & large data*.
 
 ## Three kinds of "Developer" data
 
@@ -17,7 +17,8 @@ Some of those folders are pure cache. Some are objects owned by a tool that expe
 | Device support | `Library/Developer/Xcode/iOS DeviceSupport` (and watchOS, tvOS) | Regenerable cache, listed per OS version | Confirmed generated cleanup |
 | Xcode downloads | `Library/Developer/DVTDownloads` | Regenerable cache | Confirmed generated cleanup |
 | SwiftPM cache | `Library/Caches/org.swift.swiftpm` | Regenerable cache | Confirmed generated cleanup |
-| Simulator devices | managed by `simctl` | Native objects, listed per device | `xcrun simctl delete`, shut-down devices only |
+| Simulator devices | `Library/Developer/CoreSimulator/Devices`, plus XCTest, SwiftUI preview and Playground device sets | Native objects, listed per device | `xcrun simctl delete`, shut-down devices only |
+| Leftover device folders, CoreSimulator caches | `Library/Developer/CoreSimulator` | Files no registered device owns | Removed only after a fresh re-check |
 | Simulator runtimes | managed by `simctl` | Native objects | `xcrun simctl runtime delete`, deletable runtimes only |
 | Release archives | `Library/Developer/Xcode/Archives` | User data: builds and dSYMs | Move selected items to Trash |
 | Device backups | `Library/Application Support/MobileSync/Backup` | User data: restore points | Move selected items to Trash |
@@ -48,17 +49,17 @@ Each time you connect a device running an iOS version Xcode has not seen, it cop
 
 SweepLoom lists these per version, with sizes. The consequence it shows is the honest one for every cache: regenerable, but the download or preparation will be needed again. If you plug in a device on that version tomorrow, Xcode prepares it again.
 
-## Simulator devices: ask simctl, not the file system
+## Simulator devices: read the records, then ask simctl
 
 Simulator devices are where the one-liners go wrong. A device is a directory under `CoreSimulator`, but it is also a record that `simctl` and Xcode track. Deleting the directory behind their back leaves a device that still shows up in Xcode and no longer works.
 
-So SweepLoom does not walk those folders. It asks the tool:
+SweepLoom therefore reads and removes them differently. To **list** devices, it first reads each device's own `device.plist` (name, runtime, last boot) straight from disk, in the default set and in the XCTest clone, SwiftUI preview and Playground sets. That matters because `simctl` can take 40 to 80 seconds to answer, or time out, while CoreSimulator is booting or migrating devices; reading the records means rows appear immediately. Then it confirms state with the tool:
 
 ```text
 xcrun simctl list devices --json
 ```
 
-Each device becomes a row with its name, runtime, state and data size. Devices get verdicts too, built from what is actually installed on them: a running simulator is Keep; one holding an app from a project you are actively working on is Keep; one whose runtime is gone, or that has not been booted in a long time, or that only holds apps from deleted or stale projects, is Suggested. Only devices in the **Shutdown** state can be selected. When you confirm, SweepLoom lists the devices again before acting. If the device has disappeared, it reports that. If it has been booted since you looked, it refuses:
+Each device becomes a row with its name, runtime, state and data size. A folder whose record is marked deleted, or that `simctl` no longer lists, becomes a separate leftover row. To **remove** a device, SweepLoom only ever goes through `simctl`. Devices get verdicts too, built from what is actually installed on them: a running simulator is Keep; one holding an app from a project you are actively working on is Keep; one whose runtime is gone, or that has not been booted in a long time, or that only holds apps from deleted or stale projects, is Suggested. Only devices in the **Shutdown** state can be selected. When you confirm, SweepLoom lists the devices again before acting. If the device has disappeared, it reports that. If it has been booted since you looked, it refuses:
 
 ```text
 Device is running; shut it down explicitly first.
@@ -79,6 +80,8 @@ xcrun simctl runtime list --json
 `simctl` reports whether each runtime is deletable. SweepLoom follows that flag exactly. A runtime that is not deletable is shown, with its size, and the row says `Runtime is managed by Xcode; cannot remove`. A deletable one says who depends on it: either that no simulators use it and when it was last used, or how many simulators use it and that removing it makes them unavailable.
 
 Removal is refused while **any** simulator is running, not only one of that runtime, because removing a runtime under a live simulator is the kind of thing that ends with a restart. Stop the simulators, confirm, and SweepLoom runs `xcrun simctl runtime delete <id>`.
+
+Next to the runtimes you will also see CoreSimulator's dyld shared caches, one folder per runtime build. The ones in your home folder are files SweepLoom can remove once no simulator is running. The system copies under `/Library/Developer/CoreSimulator` are root-owned, so they are listed read-only with a note: they go away with their runtime, or with `xcrun simctl runtime dyld_shared_cache remove`.
 
 ## Archives and backups are not cache
 
@@ -112,8 +115,8 @@ The script builds, assembles and signs the whole bundle with a code-signing iden
 
 ## A sane order of operations
 
-1. Open **Cleanup → Build & packages** and clear DerivedData for projects you are not actively building.
+1. Open **Cleanup → Build & packages** and clear DerivedData for projects you are not actively building. The Keep / Review / Suggested reason on each row tells you which those are.
 2. Clear device support folders for OS versions none of your devices run.
-3. Open **iOS Simulator**, shut down what you are not using, and delete devices you do not need. Remove old runtimes last, with every simulator stopped.
+3. Open **Cleanup → iOS & Xcode**, shut down what you are not using, and delete devices you do not need. Remove old runtimes last, with every simulator stopped.
 4. Look at archives and backups separately, as data rather than cache. Keep the archives for anything still in users' hands.
 5. Empty the Trash when you are sure. That last step is yours.

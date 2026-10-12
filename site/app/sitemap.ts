@@ -7,6 +7,8 @@ export const dynamic = "force-static";
 const PAGES: { path: string; priority: number; changeFrequency: "weekly" | "monthly" | "yearly" }[] = [
   { path: "/", priority: 1, changeFrequency: "weekly" },
   { path: "/features/", priority: 0.9, changeFrequency: "monthly" },
+  { path: "/app/", priority: 0.85, changeFrequency: "monthly" },
+  { path: "/mcp/", priority: 0.85, changeFrequency: "monthly" },
   { path: "/download/", priority: 0.9, changeFrequency: "monthly" },
   { path: "/docs/", priority: 0.8, changeFrequency: "monthly" },
   { path: "/blog/", priority: 0.7, changeFrequency: "weekly" },
@@ -19,11 +21,11 @@ const PAGES: { path: string; priority: number; changeFrequency: "weekly" | "mont
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const posts = getAllPosts();
-  const latest = posts[0]?.date ?? "2026-10-10";
+  const latest = posts[0]?.date ?? "2026-10-12";
   return [
     ...PAGES.map((page) => ({
       url: `${SITE.url}${page.path}`,
-      lastModified: page.path === "/" || page.path === "/blog/" ? latest : "2026-10-10",
+      lastModified: page.path === "/" || page.path === "/blog/" ? latest : "2026-10-12",
       changeFrequency: page.changeFrequency,
       priority: page.priority,
     })),

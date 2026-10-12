@@ -1,10 +1,50 @@
 {
-  "generated": "2026-10-11",
+  "generated": "2026-10-12",
   "commits": [
     {
-      "hash": "31d75b7",
+      "hash": "c3f3447",
+      "date": "2026-10-12",
+      "subject": "Document the live AAAA records for sweeploom.com"
+    },
+    {
+      "hash": "6a9b40d",
+      "date": "2026-10-12",
+      "subject": "Keep certbot's TLS config when re-running site setup"
+    },
+    {
+      "hash": "74aa372",
+      "date": "2026-10-12",
+      "subject": "Compare canonical paths without the Windows verbatim prefix; host the site on Hetzner"
+    },
+    {
+      "hash": "08d3c39",
+      "date": "2026-10-12",
+      "subject": "Give discovered roots the same Windows path shape as inventory paths"
+    },
+    {
+      "hash": "8e1b350",
       "date": "2026-10-11",
-      "subject": "WIP: redesign GUI, full iOS/Xcode discovery, project roots, site, docs"
+      "subject": "Run Xcode and iOS Simulator tests only on macOS"
+    },
+    {
+      "hash": "5112a9e",
+      "date": "2026-10-11",
+      "subject": "Open test directories with backup semantics on Windows"
+    },
+    {
+      "hash": "1b79b16",
+      "date": "2026-10-11",
+      "subject": "Keep CI green on current stable and Windows"
+    },
+    {
+      "hash": "472bf4b",
+      "date": "2026-10-11",
+      "subject": "Redesign the GUI around nine tabs and find every project, simulator and cache"
+    },
+    {
+      "hash": "cf9dac1",
+      "date": "2026-10-04",
+      "subject": "Add bounded staging build scanner for Hostwatch"
     },
     {
       "hash": "236a93d",

@@ -17,25 +17,50 @@ const RELEASE_HASH = "236a93d"; // "Ship SweepLoom CLI, MCP, GUI, and verified b
 
 const UNRELEASED: { title: string; body: React.ReactNode }[] = [
   {
-    title: "Desktop Cleanup screen",
+    title: "Desktop app redesigned around nine tabs",
     body: (
       <>
-        Docker, iOS Simulator, build and package caches, app and browser caches, AI models, and archives and large data,
-        each itemised with its consequence. See{" "}
-        <a href={docsUrl("CLEANUP.md")} className="link">
-          docs/CLEANUP.md
-        </a>
+        A design system (spacing scale, cards, segmented controls, status pills, stacked bars and sparklines) in light and
+        dark. Generated project output moved under Cleanup and saved disk scans under History, so the sidebar is Overview,
+        Sessions, History, Cleanup, Projects, Explorer, Browser, AI and Settings. Deep links and the tray follow.{" "}
+        <Link href="/app/" className="link">
+          Tour the app
+        </Link>
         .
       </>
     ),
   },
-  { title: "Scan history", body: "Completed measurements are recorded so you can see which folders grow back." },
+  { title: "Per-core CPU", body: "Overview and Sessions chart every core, with the performance / efficiency split on Apple Silicon." },
   {
-    title: "Signed macOS app bundle",
+    title: "iOS & Xcode discovery from disk",
+    body: "Simulators are read from their device records first (simctl could take 40–80 s and time out), then confirmed. Orphan device folders, dyld caches, unused runtimes and DerivedData matched to projects, with Git-aware Keep / Review / Suggested verdicts. Removing unavailable devices deletes exact UDIDs only.",
+  },
+  {
+    title: "Projects across all developer folders",
+    body: "Discovery covers every developer folder instead of the launch directory, with fair per-folder budgets and Xcode, Swift, JVM and .NET markers.",
+  },
+  {
+    title: "Parallel, streaming scans",
+    body: "Discovery, Project output, project sizes and Explorer run on bounded worker pools and stream rows. Results survive tab switches and refreshes until replaced.",
+  },
+  {
+    title: "Crash resilience",
+    body: "A release abort in redaction of non-ASCII process arguments is fixed. Panics are logged (on macOS to ~/Library/Logs/SweepLoom/panic.log) and release builds unwind, so a failed background scan no longer closes the app. Session detail no longer runs git on the UI thread.",
+  },
+  {
+    title: "Windows paths",
+    body: "Canonical paths drop the \\\\?\\ verbatim prefix everywhere, so project lookups, Explorer and discovery agree and one project no longer appears under two paths.",
+  },
+  {
+    title: "Docs, terms and this website",
     body: (
       <>
-        <code className="inline-code">scripts/macos-app.py</code> builds and signs <code className="inline-code">SweepLoom.app</code>{" "}
-        so folder permissions survive updates. See{" "}
+        The README now points to focused documents in docs/, TERMS.md was added, and sweeploom.com is built from the
+        repository&apos;s site/ folder and served by nginx at Hetzner. Desktop Cleanup sources are in{" "}
+        <a href={docsUrl("CLEANUP.md")} className="link">
+          docs/CLEANUP.md
+        </a>
+        ; the signed macOS bundle is in{" "}
         <a href={docsUrl("MACOS.md")} className="link">
           docs/MACOS.md
         </a>
@@ -43,8 +68,6 @@ const UNRELEASED: { title: string; body: React.ReactNode }[] = [
       </>
     ),
   },
-  { title: "Documentation split", body: "The README now points to focused documents for install, CLI, MCP, safety, browser, benchmarks and FAQ." },
-  { title: "Terms of Use and this website", body: "TERMS.md, and sweeploom.com built from the repository's site/ folder." },
 ];
 
 function groupByDate(commits: Commit[]) {
@@ -108,7 +131,7 @@ export default function ChangelogPage() {
               <h2 className="font-display text-2xl font-semibold">Unreleased</h2>
               <span className="chip chip-gold">in development</span>
             </div>
-            <p className="mt-2 text-sm text-muted">Work on main since 0.1.0 that is not yet part of a release.</p>
+            <p className="mt-2 text-sm text-muted">Work on main since 0.1.0, not yet tagged as a release. The workspace version is still {SITE.version}.</p>
             <ul className="mt-5 grid gap-3">
               {UNRELEASED.map((item) => (
                 <li key={item.title} className="card p-4">

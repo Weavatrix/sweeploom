@@ -48,7 +48,9 @@ publish() {
   local ip="${HOST#*@}"
   for path in / /blog/ /terms/ /rss.xml; do
     printf '%-10s %s\n' "$path" \
-      "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: sweeploom.com' "http://$ip$path")"
+      "$(curl -s -o /dev/null -w '%{http_code}' --resolve "sweeploom.com:443:$ip" \
+        "https://sweeploom.com$path" || curl -s -o /dev/null -w '%{http_code}' \
+        -H 'Host: sweeploom.com' "http://$ip$path")"
   done
 }
 

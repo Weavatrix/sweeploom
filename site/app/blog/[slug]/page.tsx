@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CodeCopy } from "@/components/CodeCopy";
 import { formatDate, getAllPosts, getPost } from "@/lib/blog";
 import { pageMeta } from "@/lib/meta";
 import { SITE } from "@/lib/site";
@@ -97,7 +98,8 @@ export default async function BlogPost({ params }: { params: Promise<Params> }) 
       </header>
 
       <div className="wrap py-12 sm:py-16">
-        <div className="prose mx-auto" dangerouslySetInnerHTML={{ __html: post.html }} />
+        <div id="post-body" className="prose mx-auto" dangerouslySetInnerHTML={{ __html: post.html }} />
+        <CodeCopy rootId="post-body" />
 
         <aside className="mx-auto mt-16 max-w-[42.5rem] rounded-2xl border border-line bg-panel p-6">
           <p className="font-display text-lg font-semibold">Try it on your own machine</p>

@@ -98,8 +98,13 @@ export default function DownloadPage() {
 
           <Step n="2" title="Desktop app" id="desktop">
             <p>
-              The desktop app is a native Rust (egui) reviewer for Windows, macOS and Linux, with a tray icon on Windows and
-              macOS. It needs Rust 1.95 or newer and is optional; the CLI and MCP server do not need it.
+              The desktop app is a native Rust (egui) reviewer for Windows, macOS and Linux with nine tabs, from Overview and
+              Sessions to Cleanup, Projects and AI, and a tray icon on Windows and macOS. It needs Rust 1.95 or newer and is
+              optional; the CLI and MCP server do not need it.{" "}
+              <Link href="/app/" className="link">
+                Tour the tabs
+              </Link>
+              .
             </p>
             <CodeBlock code={`$ ${INSTALL.guiClone}\n$ cd sweeploom\n$ ${INSTALL.guiRun}`} title="build and run from a clone" />
             <CodeBlock code={`$ ${INSTALL.gui}`} title="or install it as a sweeploom-gui binary" wrap />
@@ -130,7 +135,12 @@ export default function DownloadPage() {
 
           <Step n="3" title="Connect your coding agent" id="agents">
             <p>
-              Add SweepLoom as an MCP server in Cursor (<C>~/.cursor/mcp.json</C>), Claude Desktop, or any MCP host:
+              Add SweepLoom as an MCP server in Cursor (<C>~/.cursor/mcp.json</C>), Claude Desktop, or any MCP host that
+              launches stdio servers. Every host, with its config path:{" "}
+              <Link href="/mcp/#hosts" className="link">
+                MCP setup
+              </Link>
+              .
             </p>
             <CodeBlock code={MCP_JSON} title="mcp.json" />
             <CodeBlock code="$ claude mcp add -s user sweeploom -- sweeploom mcp" title="Claude Code" />
@@ -139,8 +149,8 @@ export default function DownloadPage() {
               Reload the host, then ask: <em>“Use SweepLoom to list cleanup_candidates for this repo. Do not apply yet.”</em>{" "}
               If a host started from the Dock or Start menu cannot find <C>sweeploom</C>, use the absolute path to the
               binary. The Codex plugin adds review skills on top; see{" "}
-              <Link href="/docs/#codex" className="link">
-                Docs → Codex plugin
+              <Link href="/mcp/#codex" className="link">
+                MCP → Codex plugin
               </Link>
               .
             </p>
@@ -177,7 +187,12 @@ export default function DownloadPage() {
           </div>
           <div className="card p-5 text-sm leading-relaxed text-muted">
             <p className="font-medium text-text">Something broke?</p>
-            <p className="mt-2">Open an issue with your OS, Rust version and the command you ran.</p>
+            <p className="mt-2">
+              Open an issue with your OS, Rust version and the command you ran. If the desktop app crashed, attach{" "}
+              <code className="inline-code">~/Library/Logs/SweepLoom/panic.log</code> (macOS) or{" "}
+              <code className="inline-code">SweepLoom/panic.log</code> under <code className="inline-code">%LOCALAPPDATA%</code>{" "}
+              or <code className="inline-code">~/.local/state</code>.
+            </p>
             <a href={SITE.newIssue} className="link mt-3 inline-flex items-center gap-1.5">
               New issue <icons.external size={14} />
             </a>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CodeBlock } from "@/components/CodeBlock";
 import { icons } from "@/components/Icons";
 import { PageHeader, Section } from "@/components/Section";
-import { BENCH_TRANSCRIPT, CLASSES, CLEAN_TRANSCRIPT, HARD_LINES, MCP_TOOLS } from "@/lib/content";
+import { BENCH_TRANSCRIPT, CLASSES, CLEAN_TRANSCRIPT, GUI_SCREENS, HARD_LINES, MCP_TOOLS } from "@/lib/content";
 import { pageMeta } from "@/lib/meta";
 import { docsUrl } from "@/lib/site";
 
@@ -17,6 +17,7 @@ const JUMP = [
   { id: "sessions", label: "Live sessions" },
   { id: "disk", label: "Disk & projects" },
   { id: "cleanup", label: "Desktop Cleanup" },
+  { id: "app", label: "Desktop app" },
   { id: "ai", label: "AI context" },
   { id: "browser", label: "Browser" },
   { id: "safety", label: "Safety model" },
@@ -34,9 +35,10 @@ const SESSION_COLUMNS = [
 ];
 
 const CLEANUP_SECTIONS = [
+  ["Project output", "Generated builds, dependencies and temp files across every discovered project, with rebuild cost and blockers such as uncommitted Git changes", "Plan, revalidate, execute, receipt; or move selected paths to Trash"],
   ["Docker", "Individual images, stopped containers, unused volumes and old build cache", "Native Docker operations; in-use objects are protected"],
-  ["iOS Simulator", "Individual devices and removable runtimes", "Native simctl delete or erase, with running-device checks"],
-  ["Build & packages", "DerivedData by project; iOS, watchOS and tvOS device support by version; npm/npx, pnpm, Yarn, Bun, Python, Cargo, Gradle, NuGet, Go, Homebrew, Playwright/Puppeteer, SwiftPM and other download caches", "Confirmed generated cleanup, or move selected paths to Trash"],
+  ["iOS & Xcode", "Simulator devices read from disk (including XCTest, SwiftUI preview and Playground device sets), runtimes with the devices that use them, leftover device folders, CoreSimulator and dyld caches; Keep / Review / Suggested from last boot, installed apps and their projects' Git state", "Native simctl delete or erase with running-device checks; unavailable devices by exact UDID only; root-owned caches read-only"],
+  ["Build & packages", "DerivedData by project with a Git-aware verdict; iOS, watchOS, tvOS, visionOS and macOS device support by version; npm/npx, pnpm, Yarn, Bun, Python, Cargo, Gradle, NuGet, Go, Homebrew, Playwright/Puppeteer, SwiftPM and other download caches", "Confirmed generated cleanup, or move selected paths to Trash"],
   ["App & browser caches", "User application caches and exact cache subdirectories in browser, IDE and Electron profiles", "Generated cleanup for recognised cache paths; Trash for other application caches"],
   ["AI models", "Ollama by model, Hugging Face by repository or dataset, LM Studio, PyTorch, Whisper and Core ML downloads", "Ollama's local API, or Trash for individual downloaded model files"],
   ["Archives & large data", "Xcode release archives, device backups, large downloads and installers, logs, Maven artifacts, Rust toolchains and Node versions", "Trash for user data; rustup uninstall for inactive, non-default compilers"],
@@ -45,14 +47,15 @@ const CLEANUP_SECTIONS = [
 const SURFACE_GATES = [
   ["CLI", "sweeploom clean . (dry run)", "--apply is consent; only pre-selected SAFE rows", "receipt=1 deleted=2 skipped_changed=0 failed=0"],
   ["MCP", "cleanup_candidates, explain_candidate", "apply_cleanup with confirm: true and the agreed ids", "{ ok, deleted, skipped_changed, failed, receipt }"],
-  ["Desktop app", "Cleanup tables, from Project output to iOS & Xcode", "A confirmation that lists exactly the eligible selected rows", "Result line per action, scan history updated"],
+  ["Desktop app", "Cleanup tabs, from Project output to iOS & Xcode", "A confirmation that lists exactly the eligible selected rows", "Result line per action; History → Disk scans updated"],
 ];
 
 const PLATFORMS = [
   ["CLI, MCP server, Rust library", "yes", "yes", "yes", "CI matrix: Ubuntu, Windows, macOS"],
   ["Desktop app (egui)", "yes", "yes", "yes", "Follows light/dark and interface scale"],
   ["Tray icon", "yes", "yes", "no", "Hide to tray; scans keep running"],
-  ["Xcode & iOS Simulator cleanup", "no", "yes", "no", "Uses xcrun simctl"],
+  ["Xcode & iOS Simulator cleanup", "no", "yes", "no", "Device records from disk, then xcrun simctl"],
+  ["Per-core CPU with P/E split", "no", "yes", "no", "Apple Silicon; other machines show every core in OS order"],
   ["Browser companion", "yes", "yes", "yes", "Chromium and Firefox extensions, native messaging"],
 ];
 
@@ -180,7 +183,7 @@ export default function FeaturesPage() {
         id="cleanup"
         eyebrow="Desktop Cleanup"
         title="Docker, iOS Simulator, caches and models, itemised."
-        lead="The desktop app's Cleanup screen discovers known locations and streams full measurements in the background. Every row shows its origin path or native object ID, size, file count when known, change since the last scan, and the consequence of removing it."
+        lead="The desktop app's Cleanup tab has seven sources. It discovers known locations and streams full measurements in the background, and each source keeps its rows, selection and scroll position while you work elsewhere. Every row shows its origin path or native object ID, size, file count when known, change since the last scan, and the consequence of removing it."
         className="border-t border-line"
       >
         <div className="table-wrap">
@@ -229,6 +232,50 @@ export default function FeaturesPage() {
           </Link>
           .
         </p>
+      </Section>
+
+      <Section
+        id="app"
+        eyebrow="Desktop app"
+        title="Nine tabs: live, disk, workspace, app."
+        lead="The desktop app is the reviewer for everything the CLI and MCP cannot touch: native tool storage, user data and explicit session stops. Scans run on bounded worker pools, stream rows as they finish, and survive tab switches."
+        className="border-t border-line"
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {GUI_SCREENS.map((group) => (
+            <div key={group.section} className="card p-5">
+              <p className="eyebrow !text-faint">{group.section}</p>
+              <ul className="mt-3 grid gap-3">
+                {group.items.map((item) => (
+                  <li key={item.id}>
+                    <Link href={`/app/#${item.id}`} className="text-sm font-medium hover:text-accent">
+                      {item.name}
+                    </Link>
+                    <span className="mt-0.5 block text-xs leading-snug text-muted">{item.does}</span>
+                    {item.sub ? (
+                      <span className="mt-1 block font-mono text-[0.66rem] leading-relaxed text-faint">{item.sub.join(" · ")}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          {[
+            ["Per-core CPU", "Overview and Sessions chart every core; on Apple Silicon, performance and efficiency cores are shown as separate groups."],
+            ["Every project", "Discovery covers all your developer folders with fair per-folder budgets, not just the folder the app was launched from."],
+            ["Crash log", "Release builds unwind and log panics, so a failed background scan no longer takes the window down."],
+          ].map(([t, b]) => (
+            <div key={t} className="rounded-xl border border-line bg-panel p-5">
+              <p className="font-medium">{t}</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{b}</p>
+            </div>
+          ))}
+        </div>
+        <Link href="/app/" className="link mt-6 inline-flex items-center gap-1.5 text-sm font-medium">
+          Tour the desktop app <icons.arrow size={14} />
+        </Link>
       </Section>
 
       <Section
@@ -408,8 +455,8 @@ export default function FeaturesPage() {
               <code className="inline-code">readOnlyHint</code>. Empty <code className="inline-code">root</code> means your home
               directory, so agents should always pass the workspace path.
             </p>
-            <Link href="/docs/#mcp" className="link mt-4 inline-flex items-center gap-1.5 text-sm font-medium">
-              Set up MCP in Cursor, Claude Code, Claude Desktop or Codex <icons.arrow size={14} />
+            <Link href="/mcp/" className="link mt-4 inline-flex items-center gap-1.5 text-sm font-medium">
+              Set up MCP in Claude Code, Cursor, Claude Desktop or Codex <icons.arrow size={14} />
             </Link>
           </div>
         </div>

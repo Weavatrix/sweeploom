@@ -7,6 +7,8 @@ const COLUMNS = [
     title: "Product",
     links: [
       { href: "/features/", label: "Features" },
+      { href: "/app/", label: "Desktop app" },
+      { href: "/mcp/", label: "MCP & agents" },
       { href: "/download/", label: "Download" },
       { href: "/docs/", label: "Docs" },
       { href: "/changelog/", label: "Changelog" },

@@ -41,7 +41,7 @@ export function SiteHeader() {
         </Link>
 
         <nav aria-label="Primary" className="hidden lg:block">
-          <ul className="flex items-center gap-1">
+          <ul className="flex items-center gap-0.5 xl:gap-1">
             {NAV.map((item) => {
               const active = isActive(pathname, item.href);
               return (
@@ -50,7 +50,7 @@ export function SiteHeader() {
                     href={item.href}
                     aria-current={active ? "page" : undefined}
                     className={
-                      "rounded-lg px-3 py-2 text-[0.92rem] transition-colors " +
+                      "rounded-lg px-2 py-2 text-[0.9rem] whitespace-nowrap transition-colors xl:px-3 " +
                       (active ? "text-text" : "text-muted hover:text-text")
                     }
                   >

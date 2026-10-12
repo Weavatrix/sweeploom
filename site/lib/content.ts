@@ -106,16 +106,100 @@ export const FINDINGS: Finding[] = [
   },
 ];
 
-export const MCP_TOOLS: { name: string; args: string; writes: string; does: string }[] = [
-  { name: "list_sessions", args: "none", writes: "no", does: "Live session trees with Keep / Optional recommendations" },
-  { name: "disk_inventory", args: "root? string", writes: "no", does: "What is on disk under a root, with categories" },
-  { name: "list_projects", args: "root? string", writes: "no", does: "Project kinds, source and artifact heat, Git state" },
-  { name: "list_ai_stores", args: "none", writes: "no", does: "AI tool stores, classes and always-on token estimates" },
-  { name: "advise_context", args: "relative string", writes: "no", does: "keep / park? / leave-alone advice for one leaf" },
-  { name: "cleanup_candidates", args: "root? string", writes: "no", does: "Reviewable cleanup rows; SAFE generated rows pre-selected" },
-  { name: "explain_candidate", args: "id u64, root? string", writes: "no", does: "One row in detail before anyone agrees to it" },
-  { name: "list_browser", args: "none", writes: "no", does: "Browser pressure; tabs null when unknown" },
-  { name: "apply_cleanup", args: "confirm bool, root?, ids? u64[]", writes: "yes, if confirm", does: "Revalidate and delete the agreed ids; returns a receipt" },
+/* The MCP catalog, from crates/sweeploom-cli/src/mcp.rs and surface.rs.
+   `readOnly` mirrors the readOnlyHint the server publishes in tools/list. */
+export type McpTool = {
+  name: string;
+  args: string;
+  writes: string;
+  readOnly: boolean;
+  cli: string;
+  does: string;
+  returns: string;
+};
+
+export const MCP_TOOLS: McpTool[] = [
+  {
+    name: "list_sessions",
+    args: "none",
+    writes: "no",
+    readOnly: true,
+    cli: "sessions",
+    does: "Live session trees with Keep / Optional recommendations",
+    returns: "kind, processes, rss_bytes, cpu_percent, recommendation, activity, project, planned",
+  },
+  {
+    name: "disk_inventory",
+    args: "root? string",
+    writes: "no",
+    readOnly: true,
+    cli: "scan",
+    does: "What is on disk under a root, with categories (metadata only)",
+    returns: "root, entries, projects, capped, logical_bytes, children[path, logical_bytes, category]",
+  },
+  {
+    name: "list_projects",
+    args: "root? string",
+    writes: "no",
+    readOnly: true,
+    cli: "projects",
+    does: "Project kinds, source and artifact heat, Git state",
+    returns: "path, kind, source, artifact, git",
+  },
+  {
+    name: "list_ai_stores",
+    args: "none",
+    writes: "no",
+    readOnly: true,
+    cli: "ai",
+    does: "AI tool stores, classes and always-on token estimates; never opens secrets or SQLite",
+    returns: "title, path, logical_bytes, capped, entries[id, class, relative, prompt_tokens, advice, can_clean]",
+  },
+  {
+    name: "advise_context",
+    args: "relative string",
+    writes: "no",
+    readOnly: true,
+    cli: "—",
+    does: "Advice for one leaf name: keep for Context such as AGENTS.md, empty for History; never writes",
+    returns: "relative, class, advice (park? needs file age, so it comes from list_ai_stores)",
+  },
+  {
+    name: "cleanup_candidates",
+    args: "root? string",
+    writes: "no",
+    readOnly: true,
+    cli: "clean",
+    does: "Reviewable cleanup rows (dry run); SAFE generated rows pre-selected",
+    returns: "id, title, path, logical_bytes, selected, blocked, deletion",
+  },
+  {
+    name: "explain_candidate",
+    args: "id u64, root? string",
+    writes: "no",
+    readOnly: true,
+    cli: "—",
+    does: "One row in detail before anyone agrees to it",
+    returns: "the same row, or the error unknown candidate <id>",
+  },
+  {
+    name: "list_browser",
+    args: "none",
+    writes: "no",
+    readOnly: true,
+    cli: "browser",
+    does: "Browser pressure; tabs null when unknown",
+    returns: "companion, hosts, rss_bytes, tabs (null without a fresh companion)",
+  },
+  {
+    name: "apply_cleanup",
+    args: "confirm bool, root?, ids? u64[]",
+    writes: "yes, if confirm",
+    readOnly: false,
+    cli: "clean --apply",
+    does: "Revalidate and delete the agreed ids; returns a receipt",
+    returns: "ok, error, deleted, skipped_changed, failed, receipt",
+  },
 ];
 
 export const CLASSES: { leaf: string; cls: string; clean: string; tokens: string }[] = [
@@ -168,28 +252,48 @@ apply confirm=false           refused=true deleted=0
 idle 2GB agents               WITHOUT would-kill=6  WITH Keep=6
 AGENTS.md                     keep`;
 
-export const GUI_SCREENS: { section: string; items: { name: string; does: string }[] }[] = [
+export type GuiTab = { name: string; id: string; does: string; sub?: string[] };
+
+/* The desktop app's sidebar, in order (apps/sweeploom-gui/src/nav.rs). */
+export const GUI_SCREENS: { section: string; items: GuiTab[] }[] = [
   {
     section: "Live",
     items: [
-      { name: "Overview", does: "Machine pressure cards that open the right screen" },
-      { name: "Sessions", does: "Session trees, member processes, observed CPU, dry-run plans" },
-      { name: "History", does: "Process activity over time, plus saved disk scans" },
+      { name: "Overview", id: "overview", does: "Memory, per-core CPU and disk pressure; every tile opens the screen that explains it" },
+      { name: "Sessions", id: "sessions", does: "Session trees, member processes, observed CPU, dry-run plans" },
+      { name: "History", id: "history", does: "Observed process activity, plus saved disk scans", sub: ["Process activity", "Disk scans"] },
     ],
   },
   {
     section: "Disk",
     items: [
-      { name: "Cleanup", does: "Project output, Docker, iOS & Xcode, caches, AI models, archives" },
-      { name: "Projects", does: "Every project under your dev folders: heat, Git state, artifacts" },
-      { name: "Explorer", does: "Folder inspector, off the UI thread" },
+      {
+        name: "Cleanup",
+        id: "cleanup",
+        does: "Everything reclaimable, by source, with the consequence of removal",
+        sub: [
+          "Project output",
+          "Docker",
+          "iOS & Xcode",
+          "Build & packages",
+          "App & browser caches",
+          "AI models",
+          "Archives & large data",
+        ],
+      },
+      { name: "Projects", id: "projects", does: "Every project under your developer folders: size, change, Git, artifacts" },
+      { name: "Explorer", id: "explorer", does: "Folder inspector, off the UI thread; collapsing never re-walks the disk" },
     ],
   },
   {
     section: "Workspace",
     items: [
-      { name: "Browser", does: "Browser trees, companion tab snapshots, Later list" },
-      { name: "AI", does: "AI stores, classes and always-on token tax" },
+      { name: "Browser", id: "browser", does: "Browser trees, companion tabs, the Later shelf", sub: ["Process trees", "Tabs", "Later"] },
+      { name: "AI", id: "ai", does: "AI stores, classes and always-on token tax" },
     ],
+  },
+  {
+    section: "App",
+    items: [{ name: "Settings", id: "settings", does: "Theme, interface size, tray; telemetry stays off" }],
   },
 ];

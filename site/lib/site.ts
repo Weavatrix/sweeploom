@@ -41,8 +41,28 @@ export const CODEX_TOML = `[mcp_servers.sweeploom]
 command = "sweeploom"
 args = ["mcp"]`;
 
+/* Absolute-path variant for GUI hosts that do not inherit the shell PATH
+   (docs/MCP.md). */
+export const MCP_JSON_WINDOWS = `{
+  "mcpServers": {
+    "sweeploom": {
+      "command": "C:\\\\Users\\\\you\\\\.cargo\\\\bin\\\\sweeploom.exe",
+      "args": ["mcp"]
+    }
+  }
+}`;
+
+export const CLAUDE_CODE_ADD = "claude mcp add -s user sweeploom -- sweeploom mcp";
+
+export const CODEX_PLUGIN = {
+  marketplace: "codex plugin marketplace add Weavatrix/sweeploom",
+  add: "codex plugin add sweeploom@weavatrix",
+} as const;
+
 export const NAV = [
   { href: "/features/", label: "Features" },
+  { href: "/app/", label: "Desktop app" },
+  { href: "/mcp/", label: "MCP" },
   { href: "/docs/", label: "Docs" },
   { href: "/download/", label: "Download" },
   { href: "/blog/", label: "Blog" },

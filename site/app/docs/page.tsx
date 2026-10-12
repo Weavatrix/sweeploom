@@ -2,14 +2,14 @@ import Link from "next/link";
 import { CodeBlock } from "@/components/CodeBlock";
 import { icons } from "@/components/Icons";
 import { PageHeader } from "@/components/Section";
-import { MCP_TOOLS } from "@/lib/content";
+import { GUI_SCREENS, MCP_TOOLS } from "@/lib/content";
 import { pageMeta } from "@/lib/meta";
 import { CODEX_TOML, INSTALL, MCP_JSON, SITE, docsUrl, repoFile } from "@/lib/site";
 
 export const metadata = pageMeta({
   title: "Docs",
   description:
-    "Install SweepLoom from source, run the CLI, connect the MCP server to Cursor, Claude Code, Claude Desktop or Codex, use the Rust library, and find the full reference docs on GitHub.",
+    "Install SweepLoom from source, run the CLI, connect the MCP server to Claude Code, Cursor, Claude Desktop or Codex, run the nine-tab desktop app, use the Rust library, and find the full reference docs on GitHub.",
   path: "/docs/",
 });
 
@@ -195,6 +195,15 @@ export default function DocsPage() {
           </DocSection>
 
           <DocSection id="mcp" title="MCP setup">
+            <Link href="/mcp/" className="card card-hover flex items-center justify-between gap-4 p-4 text-text">
+              <span>
+                <span className="block font-medium">The full MCP guide</span>
+                <span className="mt-0.5 block text-sm text-muted">
+                  Per-host tabs, every tool&apos;s arguments and return fields, the apply gate, example chats, troubleshooting.
+                </span>
+              </span>
+              <icons.arrow size={18} className="shrink-0 text-accent" />
+            </Link>
             <p>
               SweepLoom speaks MCP over stdio. Server id: <C>{SITE.mcpName}</C>. Your host launches{" "}
               <C>sweeploom mcp</C>; you never type it into a terminal yourself. SweepLoom is an MCP server, not a Cursor
@@ -251,7 +260,7 @@ export default function DocsPage() {
                   <tr>
                     <th scope="col">Tool</th>
                     <th scope="col">Arguments</th>
-                    <th scope="col">Writes</th>
+                    <th scope="col">Access</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -261,7 +270,9 @@ export default function DocsPage() {
                         <code>{tool.name}</code>
                       </td>
                       <td className="font-mono text-xs text-muted">{tool.args}</td>
-                      <td className={tool.writes === "no" ? "text-muted" : "font-medium text-warn"}>{tool.writes}</td>
+                      <td>
+                        {tool.readOnly ? <span className="chip chip-ok">read-only</span> : <span className="chip chip-warn">confirm=true</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -308,6 +319,41 @@ export default function DocsPage() {
           </DocSection>
 
           <DocSection id="desktop" title="Desktop app">
+            <p>
+              Nine tabs in four groups. Cleanup has seven sources and History has two views; scans run in the background and
+              keep their results when you switch tabs. The <Link href="/app/" className="link">desktop app tour</Link> walks
+              through every tab with screenshots.
+            </p>
+            <div className="table-wrap">
+              <table>
+                <caption className="sr-only">Desktop app tabs</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Group</th>
+                    <th scope="col">Tab</th>
+                    <th scope="col">What it shows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {GUI_SCREENS.flatMap((group) =>
+                    group.items.map((item, index) => (
+                      <tr key={item.id}>
+                        <td className="font-mono text-xs whitespace-nowrap text-faint uppercase">{index === 0 ? group.section : ""}</td>
+                        <td className="font-medium whitespace-nowrap text-text">
+                          <Link href={`/app/#${item.id}`} className="hover:text-accent">
+                            {item.name}
+                          </Link>
+                        </td>
+                        <td className="text-muted">
+                          {item.does}
+                          {item.sub ? <span className="mt-1 block font-mono text-[0.7rem] text-faint">{item.sub.join(" · ")}</span> : null}
+                        </td>
+                      </tr>
+                    )),
+                  )}
+                </tbody>
+              </table>
+            </div>
             <p>Needs Rust 1.95 or newer. Either run it from a clone, or install it as a <C>sweeploom-gui</C> binary:</p>
             <CodeBlock
               code={`$ ${INSTALL.guiClone}\n$ cd sweeploom\n$ ${INSTALL.guiRun}`}
@@ -316,7 +362,14 @@ export default function DocsPage() {
             <CodeBlock code={`$ ${INSTALL.gui}`} title="or install the binary" />
             <p>
               On macOS, build the signed bundle so folder permissions survive updates. It needs a code-signing identity in
-              your keychain; see <Link href="/download/#macos" className="link">Download → macOS</Link>.
+              your keychain; see <Link href="/download/#macos" className="link">Download → macOS</Link>. On Windows and
+              macOS the app can keep running in the tray; <C>sweeploom-gui --tray</C> starts it hidden.
+            </p>
+            <p>
+              If the app ever panics, the message and source location are appended to{" "}
+              <C>~/Library/Logs/SweepLoom/panic.log</C> on macOS, <C>%LOCALAPPDATA%\SweepLoom\panic.log</C> on Windows, and{" "}
+              <C>$XDG_STATE_HOME/SweepLoom/panic.log</C> (or <C>~/.local/state/SweepLoom/panic.log</C>) on Linux. Attach it to
+              the issue.
             </p>
           </DocSection>
 
